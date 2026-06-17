@@ -1,0 +1,29 @@
+# Dependencias de Node
+node_modules/
+.next/
+out/
+build/
+dist/
+
+# Entornos virtuales de Python
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+
+# Bases de datos locales
+*.db
+*.db-journal
+
+# Variables de entorno y configuraciones sensibles
+.env
+.env*.local
+
+# Archivos del sistema operativo
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.tsbuildinfo

@@ -1,0 +1,76 @@
+services:
+  db:
+    image: pgvector/pgvector:pg15
+    container_name: iqmx-db
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
+      - POSTGRES_DB=${DB_NAME:-iqmx}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  webhook:
+    build:
+      context: ./webhook
+      dockerfile: Dockerfile
+    container_name: iqmx-webhook
+    restart: always
+    ports:
+      - "8000:8000"
+    depends_on:
+      - api
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - ENVIRONMENT=development
+      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
+      - RATE_LIMIT_PER_SECOND=${RATE_LIMIT_PER_SECOND:-35}
+      - WHATSAPP_VERIFY_TOKEN=${WHATSAPP_VERIFY_TOKEN:-mi_token_de_verificacion_secreto_123}
+      - META_APP_SECRET=${META_APP_SECRET}
+      - API_URL=http://api:8000
+
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: iqmx-api
+    restart: always
+    ports:
+      - "8001:8000"
+    depends_on:
+      - db
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - ENVIRONMENT=development
+      - DATABASE_TYPE=${DATABASE_TYPE:-sqlite}
+      - SQLITE_DB_PATH=/app/data/whatsapp_events.db
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_NAME=${DB_NAME:-iqmx}
+    volumes:
+      - sqlite_data:/app/data
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: iqmx-web
+    restart: always
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    environment:
+      - PORT=3000
+      - HOSTNAME=0.0.0.0
+      - API_URL=http://api:8000
+
+volumes:
+  postgres_data:
+  sqlite_data:
