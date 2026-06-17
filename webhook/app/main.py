@@ -7,8 +7,6 @@ from app.limiter import limiter
 from app.api import whatsapp
 
 # Inicializar FastAPI
-
-
 app = FastAPI(
     title="Webhook Microservice",
     description="Microservicio dedicado a la recepción y validación de webhooks y notificaciones externas.",
@@ -20,9 +18,11 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Configuración de CORS dinámica
+# Soporta orígenes fijos (ej: localhost) y regex para subdominios de iqissmexico.com
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
+    allow_origin_regex=r"^https?://([a-zA-Z0-9-_]+\.)?iqissmexico\.com$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
