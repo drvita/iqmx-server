@@ -3,7 +3,6 @@ services:
     build:
       context: ./webhook
       dockerfile: Dockerfile
-    container_name: iqmx-webhook
     restart: always
     networks:
       - default
@@ -24,7 +23,6 @@ services:
     build:
       context: ./api
       dockerfile: Dockerfile
-    container_name: iqmx-api
     restart: always
     networks:
       - default
@@ -45,7 +43,6 @@ services:
     build:
       context: ./web
       dockerfile: Dockerfile
-    container_name: iqmx-web
     restart: always
     networks:
       - default
