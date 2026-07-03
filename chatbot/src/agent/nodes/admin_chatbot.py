@@ -4,13 +4,25 @@ from langchain_core.messages import SystemMessage
 from src.agent.state import AdminAgentState
 from src.agent.utils.llm import get_llm
 from src.agent.utils.api_client import get_user_by_channel
-from src.agent.tools.admin_tools import link_admin_account
+from src.agent.tools.admin_tools import (
+    link_admin_account,
+    list_all_campaigns,
+    create_new_campaign,
+    edit_existing_campaign,
+    delete_existing_campaign,
+    list_campaign_participants
+)
 
 logger = logging.getLogger(__name__)
 
 # Register tools for the admin chatbot
 admin_tools = [
-    link_admin_account
+    link_admin_account,
+    list_all_campaigns,
+    create_new_campaign,
+    edit_existing_campaign,
+    delete_existing_campaign,
+    list_campaign_participants
 ]
 
 ADMIN_SYSTEM_PROMPT = (
@@ -22,7 +34,13 @@ ADMIN_SYSTEM_PROMPT = (
     "2. Sé formal y profesional.\n"
     "3. Si el usuario aún no está vinculado (no autenticado): debes solicitarle de manera amable su correo electrónico registrado para realizar la vinculación utilizando la herramienta `link_admin_account`.\n"
     "4. No realices ni expongas ninguna otra acción administrativa hasta que el usuario esté correctamente vinculado.\n"
-    "5. Si el usuario ya está vinculado, salúdalo brevemente por su nombre y pregúntale en qué tarea administrativa le puedes asistir hoy."
+    "5. Si el usuario ya está vinculado, tienes a tu disposición las siguientes capacidades de administración de campañas y participación:\n"
+    "   - Listar todas las campañas (activas e inactivas) usando `list_all_campaigns`.\n"
+    "   - Crear campañas usando `create_new_campaign`.\n"
+    "   - Editar campañas usando `edit_existing_campaign`.\n"
+    "   - Eliminar campañas usando `delete_existing_campaign`.\n"
+    "   - Listar y contar los participantes de una campaña usando `list_campaign_participants`.\n"
+    "   Pregúntale brevemente en qué le puedes asistir hoy."
 )
 
 TELEGRAM_FORMATTING_GUIDELINES = (

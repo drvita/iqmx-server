@@ -63,6 +63,33 @@ class CampaignResponse(BaseModel):
     class Config:
         from_attributes = True
 
+class CampaignCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+    type: str
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    active: bool = True
+
+class CampaignUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    type: Optional[str] = None
+    start_date: Optional[datetime] = None
+    end_date: Optional[datetime] = None
+    active: Optional[bool] = None
+
+class ParticipationDetailResponse(BaseModel):
+    id: int
+    chatbot_user_id: int
+    campaign_id: int
+    extra_data: Optional[dict]
+    created_at: datetime
+    chatbot_user: ChatbotUserResponse
+
+    class Config:
+        from_attributes = True
+
 class CampaignParticipationCreate(BaseModel):
     channel: str
     channel_user_id: str
@@ -220,14 +247,17 @@ def validate_partner(company: str, db: Session = Depends(get_db)):
     return {"is_partner": False, "partner_name": None}
 
 @router.get("/campaigns", response_model=List[CampaignResponse])
-def get_campaigns(db: Session = Depends(get_db)):
-    """Lista las campañas de marketing y soporte que se encuentran activas y vigentes."""
-    now = datetime.utcnow()
-    campaigns = db.query(Campaign).filter(
-        Campaign.active == True,
-        (Campaign.start_date == None) | (Campaign.start_date <= now),
-        (Campaign.end_date == None) | (Campaign.end_date >= now)
-    ).all()
+def get_campaigns(active_only: bool = True, db: Session = Depends(get_db)):
+    """Lista las campañas de marketing y soporte."""
+    if active_only:
+        now = datetime.utcnow()
+        campaigns = db.query(Campaign).filter(
+            Campaign.active == True,
+            (Campaign.start_date == None) | (Campaign.start_date <= now),
+            (Campaign.end_date == None) | (Campaign.end_date >= now)
+        ).all()
+    else:
+        campaigns = db.query(Campaign).all()
     return campaigns
 
 @router.post("/campaigns/participate", response_model=CampaignParticipationResponse, status_code=status.HTTP_201_CREATED)
@@ -303,3 +333,71 @@ def get_campaign_participation(channel: str, channel_user_id: str, campaign_id: 
         CampaignParticipation.campaign_id == campaign_id
     ).first()
     return participation
+
+@router.post("/campaigns", response_model=CampaignResponse, status_code=status.HTTP_201_CREATED)
+def create_campaign(campaign_data: CampaignCreate, db: Session = Depends(get_db)):
+    """Crea una nueva campaña en la base de datos."""
+    new_campaign = Campaign(
+        name=campaign_data.name,
+        description=campaign_data.description,
+        type=campaign_data.type,
+        start_date=campaign_data.start_date,
+        end_date=campaign_data.end_date,
+        active=campaign_data.active
+    )
+    db.add(new_campaign)
+    db.commit()
+    db.refresh(new_campaign)
+    return new_campaign
+
+@router.put("/campaigns/{campaign_id}", response_model=CampaignResponse)
+def update_campaign(campaign_id: int, campaign_data: CampaignUpdate, db: Session = Depends(get_db)):
+    """Actualiza una campaña existente."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Campaign not found"
+        )
+    
+    for field, value in campaign_data.model_dump(exclude_unset=True).items():
+        setattr(campaign, field, value)
+        
+    db.commit()
+    db.refresh(campaign)
+    return campaign
+
+@router.delete("/campaigns/{campaign_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_campaign(campaign_id: int, db: Session = Depends(get_db)):
+    """Elimina una campaña de la base de datos."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Campaign not found"
+        )
+    db.delete(campaign)
+    db.commit()
+    return
+
+@router.get("/campaigns/{campaign_id}/participations", response_model=List[ParticipationDetailResponse])
+def get_campaign_participations(campaign_id: int, db: Session = Depends(get_db)):
+    """Lista todos los registros de participación de usuarios en una campaña específica."""
+    campaign = db.query(Campaign).filter(Campaign.id == campaign_id).first()
+    if not campaign:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Campaign not found"
+        )
+    
+    participations = db.query(CampaignParticipation).filter(
+        CampaignParticipation.campaign_id == campaign_id
+    ).all()
+    return participations
+
+@router.get("/campaigns/participations/all", response_model=List[ParticipationDetailResponse])
+def get_all_campaign_participations(db: Session = Depends(get_db)):
+    """Lista todos los registros de participación de usuarios en todas las campañas."""
+    participations = db.query(CampaignParticipation).all()
+    return participations
+

@@ -89,13 +89,18 @@ def validate_partner(company_name: str) -> bool:
         logger.error(f"API partner validation request failed: {str(e)}")
         return False
 
-def list_campaigns() -> List[Dict[str, Any]]:
-    """Calls GET /api/campaigns to retrieve a list of active marketing/operational campaigns."""
-    url = f"{API_URL}/campaigns"
+def list_campaigns(active_only: bool = True) -> List[Dict[str, Any]]:
+    """Calls GET /api/campaigns to retrieve a list of marketing/operational campaigns.
     
-    logger.info(f"API Client: GET request to {url}")
+    Args:
+        active_only: If True, only lists active and valid campaigns.
+    """
+    url = f"{API_URL}/campaigns"
+    params = {"active_only": active_only}
+    
+    logger.info(f"API Client: GET request to {url} with params {params}")
     try:
-        response = requests.get(url, timeout=5)
+        response = requests.get(url, params=params, timeout=5)
         if response.status_code == 200:
             return response.json()
         return []
@@ -208,5 +213,118 @@ def link_admin_user(channel: str, channel_user_id: str, email: str) -> Dict[str,
     except Exception as e:
         logger.error(f"API link-admin request failed: {str(e)}")
         return {"error": f"Fallo de conexión de red: {str(e)}"}
+
+def create_campaign(
+    name: str,
+    description: Optional[str],
+    type: str,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    active: bool = True
+) -> Dict[str, Any]:
+    """Calls POST /api/campaigns to create a new campaign."""
+    url = f"{API_URL}/campaigns"
+    payload = {
+        "name": name,
+        "description": description,
+        "type": type,
+        "start_date": start_date,
+        "end_date": end_date,
+        "active": active
+    }
+    
+    logger.info(f"API Client: POST request to {url} with payload {payload}")
+    try:
+        response = requests.post(url, json=payload, timeout=5)
+        if response.status_code in (200, 201):
+            return response.json()
+        else:
+            logger.error(f"API create_campaign error: {response.status_code} | response: {response.text}")
+            try:
+                err_detail = response.json().get("detail", "Error al crear la campaña.")
+            except Exception:
+                err_detail = response.text
+            return {"error": err_detail}
+    except Exception as e:
+        logger.error(f"API create_campaign request failed: {str(e)}")
+        return {"error": f"Error de red: {str(e)}"}
+
+def update_campaign(
+    campaign_id: int,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    type: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    active: Optional[bool] = None
+) -> Dict[str, Any]:
+    """Calls PUT /api/campaigns/{campaign_id} to update an existing campaign."""
+    url = f"{API_URL}/campaigns/{campaign_id}"
+    payload = {}
+    if name is not None:
+        payload["name"] = name
+    if description is not None:
+        payload["description"] = description
+    if type is not None:
+        payload["type"] = type
+    if start_date is not None:
+        payload["start_date"] = start_date
+    if end_date is not None:
+        payload["end_date"] = end_date
+    if active is not None:
+        payload["active"] = active
+        
+    logger.info(f"API Client: PUT request to {url} with payload {payload}")
+    try:
+        response = requests.put(url, json=payload, timeout=5)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            logger.error(f"API update_campaign error: {response.status_code} | response: {response.text}")
+            try:
+                err_detail = response.json().get("detail", "Error al actualizar la campaña.")
+            except Exception:
+                err_detail = response.text
+            return {"error": err_detail}
+    except Exception as e:
+        logger.error(f"API update_campaign request failed: {str(e)}")
+        return {"error": f"Error de red: {str(e)}"}
+
+def delete_campaign(campaign_id: int) -> Dict[str, Any]:
+    """Calls DELETE /api/campaigns/{campaign_id} to delete an existing campaign."""
+    url = f"{API_URL}/campaigns/{campaign_id}"
+    
+    logger.info(f"API Client: DELETE request to {url}")
+    try:
+        response = requests.delete(url, timeout=5)
+        if response.status_code in (200, 204):
+            return {"status": "success"}
+        else:
+            logger.error(f"API delete_campaign error: {response.status_code} | response: {response.text}")
+            try:
+                err_detail = response.json().get("detail", "Error al eliminar la campaña.")
+            except Exception:
+                err_detail = response.text
+            return {"error": err_detail}
+    except Exception as e:
+        logger.error(f"API delete_campaign request failed: {str(e)}")
+        return {"error": f"Error de red: {str(e)}"}
+
+def get_campaign_participations(campaign_id: int) -> List[Dict[str, Any]]:
+    """Calls GET /api/campaigns/{campaign_id}/participations to retrieve all participants of a campaign."""
+    url = f"{API_URL}/campaigns/{campaign_id}/participations"
+    
+    logger.info(f"API Client: GET request to {url}")
+    try:
+        response = requests.get(url, timeout=5)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            logger.error(f"API get_campaign_participations error: {response.status_code} | response: {response.text}")
+            return []
+    except Exception as e:
+        logger.error(f"API get_campaign_participations request failed: {str(e)}")
+        return []
+
 
 

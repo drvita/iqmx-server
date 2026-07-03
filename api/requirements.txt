@@ -3,3 +3,4 @@ uvicorn[standard]>=0.28.0
 pydantic-settings>=2.2.1
 sqlalchemy>=2.0.28
 psycopg2-binary>=2.9.9
+sentry-sdk>=2.0.0
