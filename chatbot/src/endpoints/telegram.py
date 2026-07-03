@@ -27,6 +27,9 @@ ADMIN_TELEGRAM_IDS = [
     if id_str.strip()
 ]
 
+# Load Telegram Webhook Secret from environment
+TELEGRAM_WEBHOOK_SECRET = os.getenv("TELEGRAM_WEBHOOK_SECRET", "")
+
 # List of 10 rejection messages in Spanish
 REJECTION_MESSAGES = [
     "Lo sentimos, este bot no está disponible para su usuario.",
@@ -45,9 +48,20 @@ REJECTION_MESSAGES = [
 async def telegram_webhook(request: Request):
     """Webhook endpoint to receive text messages from Telegram.
     
+    Validates request authenticity using a secret token if configured.
     Validates if the user is in the authorized admin list. If not, sends a random rejection message.
     If authorized, processes the message with the LangGraph admin agent.
     """
+    # 1. Validate Telegram Secret Token if configured
+    if TELEGRAM_WEBHOOK_SECRET:
+        token_header = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+        if token_header != TELEGRAM_WEBHOOK_SECRET:
+            logger.warning("Invalid Telegram Secret Token received.")
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={"status": "error", "message": "Invalid webhook secret token"}
+            )
+
     try:
         payload = await request.json()
     except Exception:
