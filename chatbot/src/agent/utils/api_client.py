@@ -178,4 +178,35 @@ def register_campaign_participation(channel: str, channel_user_id: str, campaign
         logger.error(f"API register campaign participation request failed: {str(e)}")
         return False
 
+def link_admin_user(channel: str, channel_user_id: str, email: str) -> Dict[str, Any]:
+    """Calls POST /api/users/link-admin to link a chatbot user with an admin system user.
+    
+    Args:
+        channel: The communication channel (telegram).
+        channel_user_id: The specific user identifier on that channel.
+        email: The admin user's registered email in the system.
+    """
+    url = f"{API_URL}/users/link-admin"
+    payload = {
+        "channel": channel,
+        "channel_user_id": str(channel_user_id),
+        "email": email
+    }
+    
+    logger.info(f"API Client: POST request to {url} with payload {payload}")
+    try:
+        response = requests.post(url, json=payload, timeout=5)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            logger.error(f"API link-admin error: status code {response.status_code} | response: {response.text}")
+            try:
+                err_detail = response.json().get("detail", "Error en el servidor central.")
+            except Exception:
+                err_detail = response.text
+            return {"error": err_detail}
+    except Exception as e:
+        logger.error(f"API link-admin request failed: {str(e)}")
+        return {"error": f"Fallo de conexión de red: {str(e)}"}
+
 

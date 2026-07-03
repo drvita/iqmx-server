@@ -3,7 +3,8 @@
     "./requirements.txt"
   ],
   "graphs": {
-    "chat_restaurante": "src/agent/graph.py:graph"
+    "chat_wa": "src/agent/graph.py:graph",
+    "chat_telegram": "src/agent/admin_graph.py:admin_graph"
   },
   "env": ".env"
 }

@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, ForeignKey, event
 from sqlalchemy.orm import relationship
 from app.models.base import Base
 from app.models.role import Role
+from sqlalchemy.orm import object_session
 
 class User(Base):
     __tablename__ = "users"
@@ -17,11 +18,14 @@ class User(Base):
     role = relationship("Role", back_populates="users")
     partner = relationship("Partner", back_populates="users")
 
+    @property
+    def role_name(self) -> str:
+        return self.role.name if self.role else ""
+
 # Validación de relación obligatoria antes de persistir en base de datos
 @event.listens_for(User, 'before_insert')
 @event.listens_for(User, 'before_update')
 def validate_user_partner_relation(mapper, connection, target):
-    from sqlalchemy.orm import object_session
     session = object_session(target)
     if session:
         role = session.get(Role, target.role_id)

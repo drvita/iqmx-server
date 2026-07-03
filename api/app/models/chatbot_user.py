@@ -13,7 +13,9 @@ class ChatbotUser(Base):
     phone = Column(String(50), nullable=True)  # Store the actual physical phone number if available (e.g. +521...)
     company_name = Column(String(100), nullable=False)
     partner_id = Column(Integer, ForeignKey("partners.id"), nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     request_human = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     partner = relationship("Partner")
+    user = relationship("User")

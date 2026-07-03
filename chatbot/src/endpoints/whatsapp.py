@@ -149,7 +149,7 @@ async def whatsapp_webhook(request: Request):
         return {
             "status": "success",
             "recipient": sender_phone,
-            "response": clean_response
+            # "response": clean_response
         }
     except Exception as e:
         logger.error(f"Agent processing failed for WhatsApp request: {str(e)}")

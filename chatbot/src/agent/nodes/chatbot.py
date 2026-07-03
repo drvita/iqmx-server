@@ -90,14 +90,7 @@ def chatbot_node(state: AgentState) -> dict:
         platform = platform.lower()
         
     formatting_guidelines = ""
-    if platform == "telegram":
-        formatting_guidelines = (
-            "\n\nREGLAS DE FORMATO PARA TELEGRAM:\n"
-            "- Utiliza Markdown simple para dar formato (ej: *negrita* para resaltar títulos o totales, - para listas).\n"
-            "- NO uses encabezados de Markdown (como '#', '##'), tablas complejas ni bloques de código.\n"
-            "- Evita caracteres especiales innecesarios que rompan el parseador de Telegram."
-        )
-    elif platform == "whatsapp":
+    if platform == "whatsapp":
         formatting_guidelines = (
             "\n\nREGLAS DE FORMATO PARA WHATSAPP:\n"
             "- WhatsApp NO soporta Markdown estándar completo. Solo soporta: *negrita*, _cursiva_, ~tachado~ y listas con guiones (-).\n"

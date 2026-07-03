@@ -5,11 +5,20 @@ from typing import Optional, List
 from datetime import datetime
 
 from app.db.database import get_db
-from app.models import ChatbotUser, Partner, Campaign, CampaignParticipation
+from app.models import ChatbotUser, Partner, Campaign, CampaignParticipation, User
 
 router = APIRouter(prefix="/api", tags=["chatbot"])
 
 # Pydantic Schemas
+class LinkedUserResponse(BaseModel):
+    id: int
+    name: str
+    email: str
+    role_name: str
+
+    class Config:
+        from_attributes = True
+
 class ChatbotUserResponse(BaseModel):
     id: int
     name: str
@@ -20,6 +29,8 @@ class ChatbotUserResponse(BaseModel):
     partner_id: Optional[int]
     request_human: bool
     created_at: datetime
+    user_id: Optional[int] = None
+    user: Optional[LinkedUserResponse] = None
 
     class Config:
         from_attributes = True
@@ -30,6 +41,7 @@ class ChatbotUserCreate(BaseModel):
     channel_user_id: str
     phone: Optional[str] = None
     company_name: str
+    user_id: Optional[int] = None
 
 class UserEscalateRequest(BaseModel):
     channel: str
@@ -101,6 +113,8 @@ def create_chatbot_user(user_data: ChatbotUserCreate, db: Session = Depends(get_
         existing_user.partner_id = partner_id
         if user_data.phone:
             existing_user.phone = user_data.phone
+        if user_data.user_id is not None:
+            existing_user.user_id = user_data.user_id
         db.commit()
         db.refresh(existing_user)
         return existing_user
@@ -113,12 +127,69 @@ def create_chatbot_user(user_data: ChatbotUserCreate, db: Session = Depends(get_
         phone=user_data.phone,
         company_name=user_data.company_name,
         partner_id=partner_id,
-        request_human=False
+        request_human=False,
+        user_id=user_data.user_id
     )
     db.add(new_user)
     db.commit()
     db.refresh(new_user)
     return new_user
+
+class LinkAdminUserRequest(BaseModel):
+    channel: str
+    channel_user_id: str
+    email: str
+
+@router.post("/users/link-admin", response_model=ChatbotUserResponse)
+def link_admin_user(req: LinkAdminUserRequest, db: Session = Depends(get_db)):
+    """Vincula un usuario de chatbot con un usuario de la base de datos con rol 'admin'."""
+    # Buscar usuario de sistema por email
+    user = db.query(User).filter(User.email == req.email).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario de sistema no encontrado con el correo provisto."
+        )
+    
+    if user.role.name != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="El usuario del sistema no tiene el rol de administrador (admin)."
+        )
+
+    # Verificar si este usuario del sistema ya está vinculado a algún chatbot
+    existing_link = db.query(ChatbotUser).filter(ChatbotUser.user_id == user.id).first()
+    if existing_link:
+        if existing_link.channel == req.channel and existing_link.channel_user_id == req.channel_user_id:
+            # Ya está vinculado a esta misma cuenta
+            return existing_link
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El usuario administrador ya tiene un enlace previo con otro canal. Por favor, comuníquese con el administrador para quitar ese enlace."
+            )
+
+    # Buscar o crear ChatbotUser
+    chatbot_user = db.query(ChatbotUser).filter(
+        ChatbotUser.channel == req.channel,
+        ChatbotUser.channel_user_id == req.channel_user_id
+    ).first()
+
+    if not chatbot_user:
+        chatbot_user = ChatbotUser(
+            name=user.name,
+            channel=req.channel,
+            channel_user_id=req.channel_user_id,
+            company_name="IQISSMexico",
+            user_id=user.id
+        )
+        db.add(chatbot_user)
+    else:
+        chatbot_user.user_id = user.id
+
+    db.commit()
+    db.refresh(chatbot_user)
+    return chatbot_user
 
 @router.post("/users/escalate", status_code=status.HTTP_200_OK)
 def escalate_chatbot_user(req: UserEscalateRequest, db: Session = Depends(get_db)):

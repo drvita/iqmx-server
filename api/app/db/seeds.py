@@ -43,21 +43,33 @@ def seed_database():
 
         # 2. Common seeds for all environments (Administrator)
         admin_role = roles_map["admin"]
-        admin_user = db.query(User).filter_by(role_id=admin_role.id).first()
+        admin_user = db.query(User).filter_by(email="chava.galindo.82@gmail.com").first()
         if not admin_user:
             admin_user = User(
-                name="Admin Principal",
-                email="admin@iqissmexico.com",
+                name="Salvador Glez",
+                email="chava.galindo.82@gmail.com",
                 password_hash=hash_password("Password.01#"),
                 role_id=admin_role.id,
                 partner_id=None
             )
             db.add(admin_user)
             db.commit()
-            logger.info("Seed: Created default admin user 'admin@iqissmexico.com'")
+            logger.info("Seed: Created default admin user 'chava.galindo.82@gmail.com'")
 
         # 3. Environment-specific seeds (Development)
         if settings.ENVIRONMENT != "production":
+            admin2_user = db.query(User).filter_by(email="admin2@iqissmexico.com").first()
+            if not admin2_user:
+                admin2_user = User(
+                    name="Admin Secundario",
+                    email="admin2@iqissmexico.com",
+                    password_hash=hash_password("Password.01#"),
+                    role_id=admin_role.id,
+                    partner_id=None
+                )
+                db.add(admin2_user)
+                db.commit()
+                logger.info("Seed: Created secondary admin user 'admin2@iqissmexico.com'")
             # Create partners if they do not exist
             partners_to_create = ["Socio Alpha", "Socio Beta", "IQISSMexico", "TecnoSoluciones S.A."]
             partners_map = {}

@@ -11,3 +11,10 @@ class AgentState(MessagesState):
     bot_id: str
     user_phone: Optional[str]
     user_info: Optional[Dict[str, Any]]
+
+
+class AdminAgentState(MessagesState):
+    """Defines the state specifically for the administrative agent."""
+    user_id: str
+    user_info: Optional[Dict[str, Any]]
+
