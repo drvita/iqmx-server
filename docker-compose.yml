@@ -1,59 +1,90 @@
 services:
+  db:
+    image: pgvector/pgvector:pg15
+    container_name: iqmx-db
+    restart: always
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=${DB_USER:-postgres}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
+      - POSTGRES_DB=${DB_NAME:-iqmx}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   webhook:
+    platform: linux/amd64
     build:
       context: ./webhook
       dockerfile: Dockerfile
+    container_name: iqmx-webhook
     restart: always
-    networks:
-      - default
-      - coolify
+    ports:
+      - "8000:8000"
     depends_on:
       - api
-    environment:
-      - HOST=0.0.0.0
-      - PORT=8000
-      - ENVIRONMENT=production
-      - ALLOWED_ORIGINS=${ALLOWED_ORIGINS:-*}
-      - RATE_LIMIT_PER_SECOND=${RATE_LIMIT_PER_SECOND:-35}
-      - WHATSAPP_VERIFY_TOKEN=${WHATSAPP_VERIFY_TOKEN}
-      - META_APP_SECRET=${META_APP_SECRET}
-      - API_URL=http://api:8000
+    env_file:
+      - ./webhook/.env
+    volumes:
+      - ./webhook/app:/app/app
+      - ./webhook/run.py:/app/run.py
 
   api:
+    platform: linux/amd64
     build:
       context: ./api
       dockerfile: Dockerfile
+    container_name: iqmx-api
     restart: always
-    networks:
-      - default
-      - coolify
-    environment:
-      - HOST=0.0.0.0
-      - PORT=8000
-      - ENVIRONMENT=production
-      - DATABASE_TYPE=${DATABASE_TYPE:-sqlite}
-      - SQLITE_DB_PATH=${SQLITE_DB_PATH:-./whatsapp_events.db}
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT:-5432}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=${DB_NAME}
+    ports:
+      - "8001:8000"
+    depends_on:
+      - db
+    env_file:
+      - ./api/.env
+    volumes:
+      - sqlite_data:/app/data
+      - ./api/app:/app/app
+      - ./api/run.py:/app/run.py
+
+  chatbot:
+    platform: linux/amd64
+    build:
+      context: ./chatbot
+      dockerfile: Dockerfile
+    container_name: iqmx-chatbot
+    restart: always
+    ports:
+      - "8002:8000"
+    depends_on:
+      - api
+    env_file:
+      - ./chatbot/.env
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./chatbot/storage:/app/storage
+      - ./chatbot/src:/app/src
 
   web:
+    platform: linux/amd64
     build:
       context: ./web
       dockerfile: Dockerfile
+      target: base
+    container_name: iqmx-web
     restart: always
-    networks:
-      - default
-      - coolify
+    ports:
+      - "3000:3000"
     depends_on:
       - api
-    environment:
-      - PORT=3000
-      - HOSTNAME=0.0.0.0
-      - API_URL=http://api:8000
+    command: npm run dev
+    env_file:
+      - ./web/.env
+    volumes:
+      - ./web:/app
+      - /app/node_modules
+      - /app/.next
 
-networks:
-  coolify:
-    external: true
+volumes:
+  postgres_data:
+  sqlite_data:

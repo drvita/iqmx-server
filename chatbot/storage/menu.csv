@@ -1,0 +1,72 @@
+id,name,category,description,availability,price
+1,Tempura Camarón,Tempura,Verduras capeadas (calabaza zanahoria cebolla brócoli coliflor plátano morrón champiñón),true,155.00
+2,Tempura Mixto,Tempura,Verduras capeadas (calabaza zanahoria cebolla brócoli coliflor plátano morrón champiñón),true,155.00
+3,Tempura Pollo,Tempura,Verduras capeadas (calabaza zanahoria cebolla brócoli coliflor plátano morrón champiñón),true,135.00
+4,Tempura Pescado,Tempura,Verduras capeadas (calabaza zanahoria cebolla brócoli coliflor plátano morrón champiñón),true,150.00
+5,Tempura Verduras,Tempura,Verduras capeadas (calabaza zanahoria cebolla brócoli coliflor plátano morrón champiñón),true,99.00
+6,Tepanyaki Camarón,Tepanyaki,Verduras a la plancha marinadas con salsa de soya (calabaza zanahoria cebolla brócoli coliflor morrón champiñón y germinado),true,150.00
+7,Tepanyaki Mixto,Tepanyaki,Verduras a la plancha marinadas con salsa de soya (calabaza zanahoria cebolla brócoli coliflor morrón champiñón y germinado),true,150.00
+8,Tepanyaki Pollo,Tepanyaki,Verduras a la plancha marinadas con salsa de soya (calabaza zanahoria cebolla brócoli coliflor morrón champiñón y germinado),true,135.00
+9,Tepanyaki Res,Tepanyaki,Verduras a la plancha marinadas con salsa de soya (calabaza zanahoria cebolla brócoli coliflor morrón champiñón y germinado),true,150.00
+10,Tepanyaki Verduras,Tepanyaki,Verduras a la plancha marinadas con salsa de soya (calabaza zanahoria cebolla brócoli coliflor morrón champiñón y germinado),true,99.00
+11,Chop-Suey Pollo,Comida China,Verduras y arroz al vapor (germinado zanahoria cebolla y apio),true,130.00
+12,Chop-Suey Camarón,Comida China,Verduras y arroz al vapor (germinado zanahoria cebolla y apio),true,145.00
+13,Chop-Suey Res,Comida China,Verduras y arroz al vapor (germinado zanahoria cebolla y apio),true,145.00
+14,Chop-Suey Mixto,Comida China,Verduras y arroz al vapor (germinado zanahoria cebolla y apio),true,145.00
+15,Pollo Agridulce,Comida China,Zanahoria cebolla morrón piña trocitos de pollo capeados en salsa agridulce con arroz blanco,true,130.00
+16,Res con Brócoli,Comida China,Res brócoli champiñón y cebolla con arroz blanco,true,145.00
+17,Pollo con Brócoli,Comida China,Pollo brócoli champiñón y cebolla con arroz blanco,true,130.00
+18,Chow-Mein Pollo,Comida China,Tallarines y verduras (zanahoria morrón cebolla apio y brócoli),true,130.00
+19,Chow-Mein Camarón,Comida China,Tallarines y verduras (zanahoria morrón cebolla apio y brócoli),true,145.00
+20,Chow-Mein Res,Comida China,Tallarines y verduras (zanahoria morrón cebolla apio y brócoli),true,145.00
+21,Chow-Mein Mixto,Comida China,Tallarines y verduras (zanahoria morrón cebolla apio y brócoli),true,145.00
+22,Midori Especial,Especialidades,Por dentro salmón pulpo y queso crema. Por fuera aguacate y pepino,true,140.00
+23,Banana Ebi,Especialidades,Por dentro zanahoria dulce pepino queso crema y camarón. Por fuera plátano frito salsa de anguila y ajonjolí,true,120.00
+24,Banana Especial,Especialidades,Por dentro camarón pepino y cangrejo. Por fuera queso crema plátano capeado con salsa de anguila y ajonjolí,true,135.00
+25,Ebi Especial,Especialidades,Por dentro salmón y aguacate. Por fuera queso crema y camarón,true,139.00
+26,Tempura Maki,Especialidades,Por dentro camarón capeado espinaca massago pepino aguacate y queso crema. Alga por fuera,true,130.00
+27,Eclipse,Especialidades,Por dentro camarón aguacate y massago. Por fuera queso crema y pepino,true,125.00
+28,California c/Massago,Especialidades,Por dentro camarón aguacate queso crema y pepino. Por fuera massago,true,125.00
+29,Chizu Roll,Especialidades,Por dentro aguacate pollo y brocheta de queso. Por fuera queso crema y cebollín,true,125.00
+30,Chipotle,Especialidades,Por dentro camarón empanizado y pepino. Por fuera queso crema aguacate massago y salsa chipotle,true,135.00
+31,Tako Especial,Especialidades,Por dentro camarón y aguacate. Por fuera queso crema y pulpo,true,135.00
+32,Tampico Especial,Especialidades,Por dentro ensalada de cangrejo cangrejo y massago. Alga por fuera,true,120.00
+33,Kani Roll,Especialidades,Por dentro camarón aguacate pepino y queso crema. Por fuera cangrejo,true,135.00
+34,Unagui,Especialidades,Por dentro camarón aguacate y queso crema. Por fuera anguila salsa de anguila y ajonjolí,true,175.00
+35,Origami,Especialidades,Por dentro camarón empanizado y tampico. Por fuera queso crema aguacate y cangrejo,true,135.00
+36,Sake,Especialidades,Por dentro queso crema pepino aguacate y cangrejo. Por fuera salmón,true,140.00
+37,Spice Roll,Especialidades,Por dentro cangrejo pepino queso crema y aguacate. Por fuera ensalada Spice,true,125.00
+38,Avocado,Especialidades,Por dentro salmón cangrejo pepino y queso crema. Por fuera aguacate con tampico y massago,true,135.00
+39,Arcoiris,Especialidades,Por dentro anguila y queso crema. Por fuera cangrejo aguacate pulpo massago camarón y salmón,true,150.00
+40,Massago,Especialidades,Por dentro aguacate salmón y cangrejo. Por fuera queso crema con masago,true,145.00
+41,Shirashi,Especialidades,Cama de arroz blanco con mariscos mixtos (camarón cangrejo salmón pulpo pescado massago y furikake),true,145.00
+42,Sunomono,Especialidades,Pepino fideos y mariscos mixtos (camarón cangrejo salmón pulpo pescado massago y furikake),true,145.00
+43,Miso Mar,Sopas,Mariscos mixtos champiñones cebollita y fideos,true,145.00
+44,Miso Especial,Sopas,Pasta udon filete de res germen de soya zanahoria brócoli coliflor cebollín y salsa especial,true,140.00
+45,Miso-Shiro,Sopas,Champiñones cebollita pasta miso fideos y wakame,true,80.00
+46,Tori-Tamago,Sopas,Consomé con verduras rayadas pollo y huevo,true,80.00
+47,Yakimeshi Natural,Yakimeshi,Arroz frito con verduras y cebollín,true,60.00
+48,Yakimeshi Camarón,Yakimeshi,Arroz frito con verduras y cebollín,true,99.00
+49,Yakimeshi Mixto,Yakimeshi,Arroz frito con verduras y cebollín,true,99.00
+50,Yakimeshi Pollo,Yakimeshi,Arroz frito con verduras y cebollín,true,95.00
+51,Yakimeshi Res,Yakimeshi,Arroz frito con verduras y cebollín,true,99.00
+52,Yakimeshi Especial Natural,Yakimeshi,Arroz frito con verduras aguacate queso crema y tampico,true,80.00
+53,Yakimeshi Especial Camarón,Yakimeshi,Arroz frito con verduras aguacate queso crema y tampico,true,110.00
+54,Yakimeshi Especial Mixto,Yakimeshi,Arroz frito con verduras aguacate queso crema y tampico,true,110.00
+55,Yakimeshi Especial Pollo,Yakimeshi,Arroz frito con verduras aguacate queso crema y tampico,true,105.00
+56,Yakimeshi Especial Res,Yakimeshi,Arroz frito con verduras aguacate queso crema y tampico,true,110.00
+57,Sakana,De la Cocina,Filete de pescado empanizado acompañado de arroz frito con ensalada de verduras,true,130.00
+58,Tepanyaki Especial,De la Cocina,Cama de yakimeshi natural verduras a la plancha carnes mixtas bañadas en salsa teriyaki,true,145.00
+59,Costillitas BBQ,De la Cocina,Costillas de cerdo bañadas con salsa BBQ arroz blanco y verdura,true,145.00
+60,Teriyaki,De la Cocina,Verduras rayadas a la plancha arroz blanco y pollo en salsa teriyaki,true,135.00
+61,Teriyaki Ebi,De la Cocina,Verduras rayadas a la plancha arroz blanco y camarón en salsa teriyaki,true,145.00
+62,Yakiudon,De la Cocina,Udon verduras rayadas pollo res y camarón a la plancha,true,145.00
+63,Refresco,Bebidas,,true,35.00
+64,Limonada,Bebidas,,true,40.00
+65,Naranjada,Bebidas,,true,40.00
+66,Agua Natural,Bebidas,,true,12.00
+67,Té Helado,Bebidas,Rellenable solo en vaso individual,true,35.00
+68,Calpico,Bebidas,Rellenable solo en vaso individual,true,40.00
+69,Helado,Postres,Bola de helado de vainilla con jarabe de fresa o chocolate,true,40.00
+70,Plátano Frito,Postres,Plátano capeado relleno de queso crema con lechera,true,45.00
+71,Tempura Helado,Postres,Helado de vainilla frito con jarabe de fresa o chocolate,true,50.00

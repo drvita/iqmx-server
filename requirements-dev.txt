@@ -1,0 +1,3 @@
+-r api/requirements.txt
+-r webhook/requirements.txt
+-r chatbot/requirements.txt

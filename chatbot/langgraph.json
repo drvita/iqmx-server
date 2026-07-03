@@ -1,0 +1,9 @@
+{
+  "dependencies": [
+    "./requirements.txt"
+  ],
+  "graphs": {
+    "chat_restaurante": "src/agent/graph.py:graph"
+  },
+  "env": ".env"
+}

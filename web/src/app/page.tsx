@@ -40,6 +40,7 @@ export default function Home() {
                 src="/wa-solution.png" 
                 alt="Automatización de WhatsApp" 
                 fill 
+                sizes="(max-width: 768px) 100vw, 50vw"
                 className="object-cover transition-transform duration-500 group-hover:scale-105"
               />
               <div className="absolute inset-0 bg-linear-to-t from-green-900/80 to-transparent flex flex-col justify-end p-6">
@@ -63,6 +64,7 @@ export default function Home() {
                 src="/medical-hero.png" 
                 alt="Clínica Inteligente" 
                 fill 
+                sizes="(max-width: 768px) 100vw, 50vw"
                 className="object-cover transition-transform duration-500 group-hover:scale-105"
               />
               <div className="absolute inset-0 bg-linear-to-t from-teal-900/80 to-transparent flex flex-col justify-end p-6">

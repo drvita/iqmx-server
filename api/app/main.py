@@ -2,14 +2,10 @@ from fastapi import FastAPI
 from app.config import settings
 from app.db.database import engine
 from app.models import Base
-from app.db.seeds import seed_database
-from app.api import events
+from app.api import events, chatbot
 
 # Crear tablas si no existen ( SQLAlchemy usará Base.metadata que ya tiene registrados todos los modelos )
 Base.metadata.create_all(bind=engine)
-
-# Ejecutar semillas condicionales
-seed_database()
 
 # Inicializar FastAPI
 app = FastAPI(
@@ -20,6 +16,8 @@ app = FastAPI(
 
 # Registrar rutas
 app.include_router(events.router)
+app.include_router(chatbot.router)
+
 
 @app.get("/health")
 async def health_check():
