@@ -20,7 +20,6 @@ EXPOSE 8000
 
 # Set environment defaults
 ENV PORT=8000
-ENV DATABASE_TYPE=sqlite
 
-# Run app using uvicorn
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Run app using python run.py
+CMD ["python", "run.py"]
