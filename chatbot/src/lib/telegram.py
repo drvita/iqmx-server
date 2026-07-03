@@ -1,4 +1,5 @@
 import logging
+from typing import Optional
 import httpx
 
 logger = logging.getLogger(__name__)
@@ -13,12 +14,13 @@ class TelegramClient:
         self.token = token
         self.base_url = f"https://api.telegram.org/bot{token}"
 
-    def send_message(self, chat_id: int or str, text: str) -> dict:
+    def send_message(self, chat_id: int or str, text: str, parse_mode: Optional[str] = "Markdown") -> dict:
         """Sends a text message to a specific Telegram chat.
         
         Args:
             chat_id: Unique identifier for the target chat or username.
             text: Text of the message to be sent.
+            parse_mode: Parsing mode for formatting (e.g. 'Markdown', 'MarkdownV2', 'HTML'). Defaults to 'Markdown'.
         """
         if not self.token:
             logger.warning("TELEGRAM_BOT_TOKEN is not set. Skipping send_message.")
@@ -29,6 +31,8 @@ class TelegramClient:
             "chat_id": chat_id,
             "text": text
         }
+        if parse_mode:
+            payload["parse_mode"] = parse_mode
         
         try:
             with httpx.Client() as client:
