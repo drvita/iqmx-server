@@ -104,6 +104,7 @@ def chatbot_node(state: AgentState) -> dict:
         
     # Dynamic prompt building based on user registration
     user_info = state.get("user_info") or {}
+    user_phone = state.get("user_phone")
     dynamic_directives = ""
     
     if user_info.get("registered"):
@@ -130,7 +131,20 @@ def chatbot_node(state: AgentState) -> dict:
             "- Cuando te los proporcione, usa la herramienta `register_user` inmediatamente para registrarlo."
         )
         
-    dynamic_prompt = SYSTEM_PROMPT + formatting_guidelines + dynamic_directives
+    # Append phone number availability directive
+    phone_directive = ""
+    if user_phone:
+        phone_directive = (
+            f"\n- NOTA DE TELÉFONO: El número de teléfono del usuario ya está disponible en la sesión: {user_phone}. "
+            f"Si alguna campaña o registro requiere el número de teléfono, NO se lo preguntes; utiliza directamente {user_phone}."
+        )
+    else:
+        phone_directive = (
+            "\n- NOTA DE TELÉFONO: El número de teléfono del usuario NO está disponible en la sesión. "
+            "Si alguna campaña o registro requiere su teléfono, pídeselo amablemente."
+        )
+        
+    dynamic_prompt = SYSTEM_PROMPT + formatting_guidelines + dynamic_directives + phone_directive
     
     # Prepend System Prompt to the chat messages history
     messages = [SystemMessage(content=dynamic_prompt)] + state["messages"]
