@@ -40,8 +40,12 @@ class TelegramClient:
                 response.raise_for_status()
                 return response.json()
         except httpx.HTTPStatusError as e:
-            logger.error(f"Telegram API HTTP error: {e.response.status_code} - {e.response.text}")
-            raise RuntimeError(f"Telegram API failed with status code {e.response.status_code}: {e.response.text}") from e
+            status_code = e.response.status_code
+            if status_code in (400, 403):
+                logger.warning(f"Telegram API client error: {status_code} - {e.response.text}")
+            else:
+                logger.error(f"Telegram API HTTP error: {status_code} - {e.response.text}")
+            raise RuntimeError(f"Telegram API failed with status code {status_code}: {e.response.text}") from e
         except Exception as e:
             logger.error(f"Unexpected error sending message to Telegram: {str(e)}")
             raise e

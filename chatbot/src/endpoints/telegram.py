@@ -99,7 +99,7 @@ async def telegram_webhook(request: Request):
         try:
             telegram_client.send_message(chat_id=chat_id, text=rejection_text)
         except Exception as api_err:
-            logger.error(f"Failed to send rejection message to Telegram: {str(api_err)}")
+            logger.warning(f"Failed to send rejection message to Telegram (chat_id={chat_id}, user_id={user_id}): {str(api_err)}")
         return {
             "status": "ignored",
             "reason": "User not in allowed admin Telegram list",
@@ -138,7 +138,7 @@ async def telegram_webhook(request: Request):
         try:
             telegram_client.send_message(chat_id=chat_id, text=clean_response)
         except Exception as api_err:
-            logger.error(f"Failed to send message to Telegram API: {str(api_err)}")
+            logger.warning(f"Failed to send response message to Telegram API (chat_id={chat_id}): {str(api_err)}")
             
         return {
             "status": "success",
