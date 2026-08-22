@@ -1,25 +1,19 @@
-FROM python:3.11-slim
-
-# Install system dependencies required for building psycopg/pg libraries
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+# Imagen base precompilada en Docker Hub
+FROM drvita1982/iqmx-python-base:latest AS runner
 
 WORKDIR /app
 
-# Copy dependency requirements and install
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+ENV PATH="/opt/venv/bin:$PATH"
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
-# Copy application source code
-COPY . .
+# Copiar únicamente el código fuente de la aplicación
+COPY src/ /app/src/
+COPY run.py /app/run.py
+COPY langgraph.json /app/langgraph.json
 
-# Expose target port for FastAPI Webhook service
 EXPOSE 8000
 
-# Set environment defaults
 ENV PORT=8000
 
-# Run app using python run.py
 CMD ["python", "run.py"]

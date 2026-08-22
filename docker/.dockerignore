@@ -1,0 +1,12 @@
+**/.git
+**/.DS_Store
+**/node_modules
+**/.next
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+**/.venv
+**/storage
+**/*.db
+**/*.sqlite3

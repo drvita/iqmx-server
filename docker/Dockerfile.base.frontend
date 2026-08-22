@@ -1,0 +1,18 @@
+# ==============================================================================
+# IQISSMexico - Frontend Base Image
+# Pre-installed Node.js dependencies for Next.js
+# ==============================================================================
+FROM node:22-alpine
+
+# Install build dependencies for native node modules
+RUN apk add --no-cache libc6-compat python3 make g++
+
+WORKDIR /app
+
+# Copy package descriptors
+COPY web/package.json web/package-lock.json* ./
+
+# Install all production and dev dependencies cleanly
+RUN npm ci --prefer-offline --no-audit
+
+CMD ["node"]

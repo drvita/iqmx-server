@@ -1,8 +1,28 @@
+# ==============================================================================
+# IQISSMexico - Docker Compose Orchestration
+# Pattern inspired by omadero / icefrut with log rotation & zero anonymous volumes
+# ==============================================================================
+
+x-base-common:
+  &base-common # Local platform for Apple Silicon M3 (comment out in x86 production)
+  platform: linux/arm64
+  restart: unless-stopped
+  networks:
+    - iqmx-network
+  logging:
+    driver: "json-file"
+    options:
+      max-size: "10m"
+      max-file: "3"
+
 services:
+  # ----------------------------------------------------------------------------
+  # DATABASE (PostgreSQL / pgvector)
+  # ----------------------------------------------------------------------------
   db:
+    <<: *base-common
     image: pgvector/pgvector:pg15
     container_name: iqmx-db
-    restart: always
     ports:
       - "5432:5432"
     environment:
@@ -10,80 +30,123 @@ services:
       - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
       - POSTGRES_DB=${DB_NAME:-iqmx}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres} -d ${DB_NAME:-iqmx}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # ----------------------------------------------------------------------------
+  # BACKEND API (FastAPI)
+  # ----------------------------------------------------------------------------
+  api:
+    <<: *base-common
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: iqmx-api
+    ports:
+      - "8001:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - ./api/.env
+    volumes:
+      - sqlite-data:/app/data
+      - ./api/app:/app/app
+      - ./api/run.py:/app/run.py
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------------------------------
+  # WEBHOOK DISPATCHER (FastAPI)
+  # ----------------------------------------------------------------------------
   webhook:
-    platform: linux/amd64
+    <<: *base-common
     build:
       context: ./webhook
       dockerfile: Dockerfile
     container_name: iqmx-webhook
-    restart: always
     ports:
       - "8000:8000"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     env_file:
       - ./webhook/.env
     volumes:
       - ./webhook/app:/app/app
       - ./webhook/run.py:/app/run.py
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  api:
-    platform: linux/amd64
-    build:
-      context: ./api
-      dockerfile: Dockerfile
-    container_name: iqmx-api
-    restart: always
-    ports:
-      - "8001:8000"
-    depends_on:
-      - db
-    env_file:
-      - ./api/.env
-    volumes:
-      - sqlite_data:/app/data
-      - ./api/app:/app/app
-      - ./api/run.py:/app/run.py
-
+  # ----------------------------------------------------------------------------
+  # CHATBOT AGENT (LangGraph + FastAPI)
+  # ----------------------------------------------------------------------------
   chatbot:
-    platform: linux/amd64
+    <<: *base-common
     build:
       context: ./chatbot
       dockerfile: Dockerfile
     container_name: iqmx-chatbot
-    restart: always
     ports:
       - "8002:8000"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     env_file:
       - ./chatbot/.env
     volumes:
       - ./chatbot/storage:/app/storage
       - ./chatbot/src:/app/src
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
+  # ----------------------------------------------------------------------------
+  # FRONTEND (Next.js)
+  # ----------------------------------------------------------------------------
   web:
-    platform: linux/amd64
+    <<: *base-common
     build:
       context: ./web
       dockerfile: Dockerfile
-      target: base
+      target: deps
     container_name: iqmx-web
-    restart: always
     ports:
       - "3000:3000"
     depends_on:
-      - api
+      api:
+        condition: service_healthy
     command: npm run dev
     env_file:
       - ./web/.env
     volumes:
       - ./web:/app
-      - /app/node_modules
-      - /app/.next
+      - web-node-modules:/app/node_modules
+      - web-next:/app/.next
+
+networks:
+  iqmx-network:
+    name: iqmx-network
+    driver: bridge
 
 volumes:
-  postgres_data:
-  sqlite_data:
+  postgres-data:
+    name: iqmx-postgres-data
+  sqlite-data:
+    name: iqmx-sqlite-data
+  web-node-modules:
+    name: iqmx-web-node-modules
+  web-next:
+    name: iqmx-web-next

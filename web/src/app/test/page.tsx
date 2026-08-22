@@ -3,38 +3,38 @@
 import React, { useEffect, useState } from "react";
 
 // Declaración de tipos para el SDK de Facebook en window
+export interface FBAuthResponse {
+  authResponse?: {
+    code: string;
+    accessToken?: string;
+    userID?: string;
+  };
+  status?: string;
+}
+
+export interface FacebookSDK {
+  init: (params: {
+    appId: string;
+    autoLogAppEvents: boolean;
+    xfbml: boolean;
+    version: string;
+  }) => void;
+  login: (
+    callback: (response: FBAuthResponse) => void,
+    params: Record<string, unknown>,
+  ) => void;
+}
+
 declare global {
   interface Window {
-    FB: {
-      init: (params: {
-        appId: string;
-        cookie: boolean;
-        xfbml: boolean;
-        version: string;
-      }) => void;
-      login: (
-        callback: (response: fb.AuthResponse) => void,
-        params: Record<string, unknown>,
-      ) => void;
-    };
-    fbAsyncInit: () => void;
-  }
-
-  namespace fb {
-    interface AuthResponse {
-      authResponse?: {
-        code: string;
-        accessToken?: string;
-        userID?: string;
-      };
-      status?: string;
-    }
+    FB?: FacebookSDK;
+    fbAsyncInit?: () => void;
   }
 }
 
 const WhatsAppSignup = () => {
-  const [sessionInfo, setSessionInfo] = useState<any>(null);
-  const [sdkResponse, setSdkResponse] = useState<any>(null);
+  const [sessionInfo, setSessionInfo] = useState<string | null>(null);
+  const [sdkResponse, setSdkResponse] = useState<FBAuthResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
 
   useEffect(() => {
@@ -42,11 +42,11 @@ const WhatsAppSignup = () => {
     if (window.FB) return;
 
     window.fbAsyncInit = function () {
-      window.FB.init({
+      window.FB?.init({
         appId: "1560064249064360",
-        cookie: true,
-        xfbml: false,
-        version: "v25.0",
+        autoLogAppEvents: true,
+        xfbml: true,
+        version: "v26.0",
       });
       console.log("Facebook SDK initialized");
     };
@@ -67,7 +67,7 @@ const WhatsAppSignup = () => {
     loadSDK();
   }, []);
 
-  const fbLoginCallback = (response: fb.AuthResponse) => {
+  const fbLoginCallback = (response: FBAuthResponse) => {
     setLoading(false);
 
     if (response.authResponse) {
@@ -97,7 +97,7 @@ const WhatsAppSignup = () => {
       override_default_response_type: true,
       extras: {
         version: "v4",
-        featureType: "whatsapp_business_app_onboarding",
+        setup: {},
       },
     });
   };

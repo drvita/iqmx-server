@@ -31,3 +31,7 @@ app.include_router(whatsapp_router, prefix="/api/webhooks")
 @app.get("/")
 def read_root():
     return {"message": "IQISSMexico Webhook service is running."}
+
+@app.get("/health")
+def health_check():
+    return {"status": "ok", "service": "chatbot"}

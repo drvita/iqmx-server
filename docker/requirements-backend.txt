@@ -1,0 +1,26 @@
+# ==============================================================================
+# IQISSMexico - Consolidated Backend Dependencies for Base Image
+# ==============================================================================
+
+# Core Framework & Server
+fastapi>=0.110.0
+uvicorn[standard]>=0.28.0
+pydantic-settings>=2.2.1
+python-dotenv>=1.0.1
+
+# Database & ORM
+sqlalchemy>=2.0.28
+psycopg2-binary>=2.9.9
+psycopg[binary]>=3.1.8
+
+# AI & Agentic Workflows (LangGraph / LangChain)
+langgraph>=0.2.60
+langgraph-cli[inmem]>=0.1.55
+langgraph-checkpoint-sqlite>=2.0.0
+langgraph-checkpoint-postgres>=2.0.0
+langchain-google-genai>=1.0.0
+
+# HTTP Client, Rate Limiting & Monitoring
+httpx>=0.27.0
+slowapi>=0.1.9
+sentry-sdk>=2.0.0
