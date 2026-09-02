@@ -15,8 +15,10 @@ from app.api.webhooks.dispatcher import dispatch_webhook_with_retries
 logger = logging.getLogger("uvicorn.error")
 
 router = APIRouter(prefix="/api/webhooks/whatsapp", tags=["whatsapp-webhook"])
+legacy_router = APIRouter(prefix="/whatsapp", tags=["whatsapp-webhook"])
 
 @router.get("", response_class=PlainTextResponse)
+@legacy_router.get("", response_class=PlainTextResponse)
 @limiter.limit(f"{settings.RATE_LIMIT_PER_SECOND}/second")
 async def verify_webhook(
     request: Request,
@@ -27,6 +29,7 @@ async def verify_webhook(
     """
     Endpoint para que Meta valide la URL del Webhook.
     Compara el hub.verify_token configurado con el valor local esperado.
+    Soporta tanto /api/webhooks/whatsapp como /whatsapp.
     """
     if mode and verify_token:
         if mode == "subscribe" and verify_token == settings.WHATSAPP_VERIFY_TOKEN:
@@ -44,6 +47,7 @@ async def verify_webhook(
     )
 
 @router.post("", dependencies=[Depends(verify_whatsapp_signature)])
+@legacy_router.post("", dependencies=[Depends(verify_whatsapp_signature)])
 @limiter.limit(f"{settings.RATE_LIMIT_PER_SECOND}/second")
 async def receive_webhook(
     request: Request,

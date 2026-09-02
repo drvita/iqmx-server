@@ -10,7 +10,7 @@ from app.limiter import limiter
 from app.db.database import engine
 from app.models import Base
 from app.api import events, chatbot, portal_auth, portal_whatsapp, portal_webhook
-from app.api.webhooks import whatsapp_router
+from app.api.webhooks import whatsapp_router, whatsapp_legacy_router
 
 # Crear tablas si no existen ( SQLAlchemy usará Base.metadata que ya tiene registrados todos los modelos )
 Base.metadata.create_all(bind=engine)
@@ -47,8 +47,9 @@ else:
 
 app.add_middleware(CORSMiddleware, **cors_kwargs)
 
-# Registrar rutas de Webhook Gateway
+# Registrar rutas de Webhook Gateway (doble path: /api/webhooks/whatsapp y /whatsapp)
 app.include_router(whatsapp_router)
+app.include_router(whatsapp_legacy_router)
 
 # Registrar rutas del Portal de Clientes
 app.include_router(portal_auth.router)

@@ -25,7 +25,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
   - Soporte de coexistencia para que el cliente continúe usando la aplicación de WhatsApp Business en su celular en paralelo con la API.
   - Mecanismo dual de autenticación: ejecución nativa con `FB.login` sobre HTTPS y ventana emergente directa oficial OAuth `v26.0` como respaldo.
 - **Gateway Despachador de Webhooks a CRMs Externos**:
-  - Recepción unificada de eventos de WhatsApp (`/api/webhooks/whatsapp`).
+  - Recepción unificada de eventos de WhatsApp con soporte de doble ruta para máxima compatibilidad: `/api/webhooks/whatsapp` y ruta directa `/whatsapp`.
   - Identificación automática de clientes por número telefónico (`phone_number_id`).
   - Almacenamiento persistente en base de datos (`events`) para depuración y trazabilidad.
   - Despacho asíncrono hacia la URL del CRM del cliente con firmas criptográficas `X-Signature: sha256=...`.

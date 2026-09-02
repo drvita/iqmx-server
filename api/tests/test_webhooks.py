@@ -93,6 +93,15 @@ class TestWebhooks(unittest.TestCase):
         )
         self.assertEqual(res.status_code, 403)
 
+    def test_legacy_path_whatsapp_get_handshake(self):
+        challenge = "legacy_challenge_999"
+        token_encoded = urllib.parse.quote_plus(settings.WHATSAPP_VERIFY_TOKEN)
+        res = self.client.get(
+            f"/whatsapp?hub.mode=subscribe&hub.challenge={challenge}&hub.verify_token={token_encoded}"
+        )
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.text, challenge)
+
     def test_webhook_unregistered_number_saved_for_debugging(self):
         payload = {
             "object": "whatsapp_business_account",
