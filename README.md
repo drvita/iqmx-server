@@ -58,6 +58,23 @@ docker exec iqmx-api python tests/run_tests.py
 
 ---
 
+## 📦 Migraciones de Base de Datos (Alembic)
+
+El proyecto utiliza **Alembic** para el versionado y control de cambios en la base de datos PostgreSQL.
+
+### Comando Post-Deploy en Coolify / Producción:
+En la configuración del servicio de la API dentro de Coolify, en la sección **Post-deployment Command**, configure:
+```bash
+alembic upgrade head
+```
+*(O desde el host del servidor: `docker exec iqmx-api alembic upgrade head`)*.
+
+### Generar una nueva migración (Desarrollo):
+Si añade o modifica columnas o modelos en `api/app/models/`:
+```bash
+docker exec -w /app iqmx-api alembic revision --autogenerate -m "nombre_de_la_migracion"
+```
+
 ## 🐳 Producción
 
 El archivo `docker-compose.yml` en la raíz se encarga de empaquetar y enlazar los servicios.

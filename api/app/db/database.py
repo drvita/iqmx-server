@@ -1,7 +1,6 @@
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from app.config import settings
-from app.models.base import Base
 
 connect_args = {}
 if settings.DATABASE_TYPE == "sqlite":

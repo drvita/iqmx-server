@@ -36,6 +36,10 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
   - Tabla pivote `user_has_role` y tabla `Role` con soporte de roles granulares (`customer`, `admin`, etc.).
   - Modelo `WhatsAppNumber` para el inventario de líneas vinculadas y tokens cifrados.
   - Modelo `CustomerWebhook` para registrar la URL de destino, clave secreta y métricas de entrega.
+  - **Sistema de Migraciones con Alembic**:
+    - Inicialización de `alembic` integrado con `settings.db_url` y `Base.metadata`.
+    - Primera migración versionada (`3cc3ae5bc5c3_create_portal_models_and_events_tracking.py`) para crear tablas del portal y extender la tabla `events` de forma segura.
+    - Soporte de ejecución automatizada mediante post-deploy en Coolify (`alembic upgrade head`).
 - **Suite de Pruebas Automatizadas del Backend**:
   - 14 pruebas unitarias y de integración en `api/tests/`: criptografía AES-GCM, HMAC-SHA256, validador anti-SSRF, registro y login del portal, handshake de Meta y flujo de entrega de webhooks.
 

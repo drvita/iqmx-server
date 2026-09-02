@@ -7,13 +7,8 @@ import os
 
 from app.config import settings
 from app.limiter import limiter
-from app.db.database import engine
-from app.models import Base
 from app.api import events, chatbot, portal_auth, portal_whatsapp, portal_webhook
 from app.api.webhooks import whatsapp_router, whatsapp_legacy_router
-
-# Crear tablas si no existen ( SQLAlchemy usará Base.metadata que ya tiene registrados todos los modelos )
-Base.metadata.create_all(bind=engine)
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 

@@ -58,6 +58,8 @@ services:
       - ./api/app:/app/app
       - ./api/tests:/app/tests
       - ./api/run.py:/app/run.py
+      - ./api/alembic:/app/alembic
+      - ./api/alembic.ini:/app/alembic.ini
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
