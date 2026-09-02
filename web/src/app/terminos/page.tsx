@@ -13,10 +13,10 @@ export default function TermsOfService() {
                     {/* Introducción */}
                     <div className="space-y-4">
                         <p className="text-gray-700">
-                            Los presentes Términos y Condiciones de Servicio (en adelante "Términos") rigen el uso
+                            Los presentes Términos y Condiciones de Servicio (en adelante &ldquo;Términos&rdquo;) rigen el uso
                             del servicio de automatización de WhatsApp proporcionado por IQISS Mexico (en adelante
-                            "la empresa", "nosotros" o "nuestro"). Al contratar nuestro servicio, usted (en adelante
-                            "el cliente" o "usted") acepta estar sujeto a estos Términos.
+                            &ldquo;la empresa&rdquo;, &ldquo;nosotros&rdquo; o &ldquo;nuestro&rdquo;). Al contratar nuestro servicio, usted (en adelante
+                            &ldquo;el cliente&rdquo; o &ldquo;usted&rdquo;) acepta estar sujeto a estos Términos.
                         </p>
                         <p className="text-gray-700">
                             Le recomendamos leer cuidadosamente estos Términos antes de contratar nuestros servicios.

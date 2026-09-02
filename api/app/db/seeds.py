@@ -29,7 +29,7 @@ def seed_database():
     db = SessionLocal()
     try:
         # 1. Create default roles if they do not exist
-        roles_to_create = ["admin", "partner", "contact"]
+        roles_to_create = ["admin", "partner", "contact", "customer"]
         roles_map = {}
         for role_name in roles_to_create:
             role = db.query(Role).filter_by(name=role_name).first()
@@ -54,7 +54,15 @@ def seed_database():
             )
             db.add(admin_user)
             db.commit()
+            db.refresh(admin_user)
+            if admin_role not in admin_user.roles:
+                admin_user.roles.append(admin_role)
+                db.commit()
             logger.info("Seed: Created default admin user 'chava.galindo.82@gmail.com'")
+        else:
+            if admin_role not in admin_user.roles:
+                admin_user.roles.append(admin_role)
+                db.commit()
 
         # 3. Environment-specific seeds (Development)
         if settings.ENVIRONMENT != "production":
@@ -69,7 +77,16 @@ def seed_database():
                 )
                 db.add(admin2_user)
                 db.commit()
+                db.refresh(admin2_user)
+                if admin_role not in admin2_user.roles:
+                    admin2_user.roles.append(admin_role)
+                    db.commit()
                 logger.info("Seed: Created secondary admin user 'admin2@iqissmexico.com'")
+            else:
+                if admin_role not in admin2_user.roles:
+                    admin2_user.roles.append(admin_role)
+                    db.commit()
+
             # Create partners if they do not exist
             partners_to_create = ["Socio Alpha", "Socio Beta", "IQISSMexico", "TecnoSoluciones S.A."]
             partners_map = {}
@@ -99,7 +116,15 @@ def seed_database():
                 )
                 db.add(partner_user)
                 db.commit()
+                db.refresh(partner_user)
+                if partner_role not in partner_user.roles:
+                    partner_user.roles.append(partner_role)
+                    db.commit()
                 logger.info("Dev Seed: Created user partner@iqissmexico.com")
+            else:
+                if partner_role not in partner_user.roles:
+                    partner_user.roles.append(partner_role)
+                    db.commit()
 
             # Create linked contact user if not exists
             contact_user = db.query(User).filter_by(email="contact@iqissmexico.com").first()
@@ -113,7 +138,15 @@ def seed_database():
                 )
                 db.add(contact_user)
                 db.commit()
+                db.refresh(contact_user)
+                if contact_role not in contact_user.roles:
+                    contact_user.roles.append(contact_role)
+                    db.commit()
                 logger.info("Dev Seed: Created user contact@iqissmexico.com")
+            else:
+                if contact_role not in contact_user.roles:
+                    contact_user.roles.append(contact_role)
+                    db.commit()
 
             # 4. Create active campaigns
             campaigns_to_create = [

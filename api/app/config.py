@@ -23,6 +23,24 @@ class Settings(BaseSettings):
     DB_PASSWORD: str | None = None
     DB_NAME: str | None = None
 
+    # Meta Graph API y WhatsApp Webhooks
+    WHATSAPP_VERIFY_TOKEN: str = "iqmx_webhook_verify_token_default"
+    META_APP_ID: str = "1560064249064360"
+    META_APP_SECRET: str | None = None
+    META_CONFIG_ID: str = "968187492720390"
+    GRAPH_API_VERSION: str = "v26.0"
+    
+    # Rate Limiting
+    RATE_LIMIT_PER_SECOND: int = 35
+
+    # Cifrado de Tokens en Reposo (AES-256-GCM clave de 32 bytes o string)
+    TOKEN_ENCRYPTION_KEY: str = "super_secure_token_encryption_key_32_bytes_long_iqmx"
+
+    # Autenticación JWT para Clientes del Portal
+    JWT_SECRET_KEY: str = "portal_jwt_secret_key_change_in_production_iqmx_2026"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 días
+
     @property
     def db_url(self) -> str:
         if self.DATABASE_TYPE == "postgresql":

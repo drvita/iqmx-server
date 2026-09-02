@@ -17,8 +17,16 @@ import {
 
 
 export default function ConsultoriosClient() {
-  const [isDarkMode, setIsDarkMode] = useState(false);
-  const [waitTime, setWaitTime] = useState(15);
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const hour = new Date().getHours();
+    return hour >= 20 || hour < 8;
+  });
+  const [waitTime] = useState(() => {
+    const hours = new Date().getHours();
+    if (hours >= 10 && hours <= 14) return 45; // Hora pico mañana
+    if (hours >= 16 && hours <= 19) return 30; // Hora pico tarde
+    return 15;
+  });
   const phoneNumber = '5213141560219';
 
   // Modo Oscuro Adaptativo (8 PM a 8 AM)
@@ -27,18 +35,8 @@ export default function ConsultoriosClient() {
       const hour = new Date().getHours();
       setIsDarkMode(hour >= 20 || hour < 8);
     };
-    checkTime();
     const interval = setInterval(checkTime, 60000);
     return () => clearInterval(interval);
-  }, []);
-
-  // Simulación de widget de tiempo de espera
-  useEffect(() => {
-    const hours = new Date().getHours();
-    let time = 15;
-    if (hours >= 10 && hours <= 14) time = 45; // Hora pico mañana
-    if (hours >= 16 && hours <= 19) time = 30; // Hora pico tarde
-    setWaitTime(time);
   }, []);
 
   const themeClasses = isDarkMode 

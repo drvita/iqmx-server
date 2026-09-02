@@ -21,6 +21,7 @@ export default function Hero({
         <div className={`relative ${backgroundColorClass} overflow-hidden`}>
             {backgroundImage && (
                 <div className="absolute inset-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                         className="w-full h-full object-cover opacity-30"
                         src={backgroundImage}

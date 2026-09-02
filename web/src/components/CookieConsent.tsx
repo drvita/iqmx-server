@@ -9,7 +9,8 @@ export default function CookieConsent() {
         // Verificar si el usuario ya aceptó las cookies
         const cookieConsent = localStorage.getItem('cookieConsent');
         if (!cookieConsent) {
-            setIsVisible(true);
+            const timer = setTimeout(() => setIsVisible(true), 0);
+            return () => clearTimeout(timer);
         }
     }, []);
 

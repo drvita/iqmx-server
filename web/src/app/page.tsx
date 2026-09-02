@@ -5,7 +5,6 @@ import Section from '@/components/Section';
 import Image from 'next/image';
 
 export default function Home() {
-  const subtitlesColor = 'text-blue-600';
   const number = '5213141560219';
 
   return (

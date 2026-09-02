@@ -12,6 +12,18 @@ export default function ClientLayout({
 }) {
     const pathname = usePathname();
     const isLandingPage = pathname?.startsWith('/landingpage');
+    const isPortal = pathname?.startsWith('/portal');
+
+    if (isPortal) {
+        return (
+            <>
+                <main className="flex-grow min-h-screen">
+                    {children}
+                </main>
+                <CookieConsent />
+            </>
+        );
+    }
 
     return (
         <>

@@ -13,7 +13,7 @@ export default function PrivacyPolicy() {
                     {/* Introducción */}
                     <div className="space-y-4">
                         <p className="text-gray-700">
-                            IQISS Mexico (en adelante "nosotros" o "la empresa") se compromete a proteger
+                            IQISS Mexico (en adelante &ldquo;nosotros&rdquo; o &ldquo;la empresa&rdquo;) se compromete a proteger
                             la privacidad de los usuarios que visitan nuestro sitio web. Este Aviso de
                             Privacidad describe cómo recopilamos, usamos, almacenamos y protegemos su
                             información personal.
@@ -234,7 +234,7 @@ export default function PrivacyPolicy() {
                         </h2>
                         <p className="text-gray-700">
                             Nos reservamos el derecho de actualizar este Aviso de Privacidad en cualquier momento.
-                            Cuando realicemos cambios significativos, actualizaremos la fecha de "última actualización"
+                            Cuando realicemos cambios significativos, actualizaremos la fecha de &ldquo;última actualización&rdquo;
                             en la parte superior de esta página. Le recomendamos revisar periódicamente este aviso
                             para mantenerse informado sobre cómo protegemos su información.
                         </p>

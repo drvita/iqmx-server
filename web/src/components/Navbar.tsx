@@ -57,7 +57,13 @@ export default function Navbar({ showMenu = true }: NavbarProps) {
             )}
           </div>
           {showMenu && (
-            <div className="hidden sm:ml-6 sm:flex sm:items-center">
+            <div className="hidden sm:ml-6 sm:flex sm:items-center sm:space-x-4">
+              <Link
+                href="/portal/login"
+                className="text-gray-600 hover:text-blue-600 px-3 py-2 rounded-md text-sm font-medium transition-colors"
+              >
+                Portal Clientes
+              </Link>
               <ActionButton
                 text="Contactanos"
                 id="nav_btn_contact"
