@@ -21,11 +21,20 @@ export interface WhatsAppNumber {
 
 export interface CustomerWebhookConfig {
   url: string | null;
+  provision_url?: string | null;
   secret_token: string | null;
   is_active: boolean;
   last_delivery_status: string | null;
   last_delivery_code: number | null;
   last_delivery_at: string | null;
+}
+
+export interface WhatsAppCredentials {
+  waba_id: string;
+  phone_number_id: string;
+  token: string;
+  display_phone_number?: string | null;
+  verified_name?: string | null;
 }
 
 export interface FeedbackMessage {

@@ -17,6 +17,7 @@ export default function WebhookConfigSection({
   onFeedback,
 }: WebhookConfigSectionProps) {
   const [webhookUrlInput, setWebhookUrlInput] = useState('');
+  const [provisionUrlInput, setProvisionUrlInput] = useState('');
   const [webhookSecretInput, setWebhookSecretInput] = useState('');
   const [webhookActiveInput, setWebhookActiveInput] = useState(true);
   const [savingWebhook, setSavingWebhook] = useState(false);
@@ -29,6 +30,7 @@ export default function WebhookConfigSection({
     if (webhookConfig) {
       const timer = setTimeout(() => {
         setWebhookUrlInput(webhookConfig.url || '');
+        setProvisionUrlInput(webhookConfig.provision_url || '');
         setWebhookSecretInput(webhookConfig.secret_token || '');
         setWebhookActiveInput(webhookConfig.is_active ?? true);
       }, 0);
@@ -64,6 +66,7 @@ export default function WebhookConfigSection({
         headers: getHeaders(),
         body: JSON.stringify({
           url: webhookUrlInput.trim() || null,
+          provision_url: provisionUrlInput.trim() || null,
           secret_token: webhookSecretInput.trim() || '',
           is_active: webhookActiveInput,
         }),
@@ -158,6 +161,31 @@ export default function WebhookConfigSection({
             </div>
             <p className="mt-1.5 text-xs text-gray-500">
               Las notificaciones de cada evento se despachan mediante peticiones HTTP POST con carga útil en formato JSON. Se requiere certificado seguro HTTPS.
+            </p>
+          </div>
+
+          {/* Campo Dirección Web de Aprovisionamiento con Prefijo POST / DELETE */}
+          <div className="sm:col-span-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                Dirección Web de Aprovisionamiento (Altas y Bajas)
+              </label>
+              <span className="text-[11px] text-gray-500 font-medium">Opcional</span>
+            </div>
+            <div className="mt-1.5 flex rounded-lg shadow-xs">
+              <span className="inline-flex items-center px-3.5 rounded-l-lg border border-r-0 border-gray-300 bg-gray-50 text-gray-700 font-mono text-xs font-bold tracking-wider select-none whitespace-nowrap">
+                POST / DELETE
+              </span>
+              <input
+                type="url"
+                value={provisionUrlInput}
+                onChange={(e) => setProvisionUrlInput(e.target.value)}
+                placeholder="https://crm.tuempresa.com/api/settings/whatsapp/provision"
+                className="block w-full rounded-r-lg border border-gray-300 px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 text-sm font-mono transition-colors"
+              />
+            </div>
+            <p className="mt-1.5 text-xs text-gray-500">
+              Permite sincronizar automáticamente las credenciales de WhatsApp cuando vinculas o desvinculas una línea en este panel.
             </p>
           </div>
 

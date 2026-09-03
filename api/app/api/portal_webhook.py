@@ -23,6 +23,7 @@ router = APIRouter(prefix="/api/portal/webhook", tags=["portal-webhook"])
 
 class WebhookConfigResponse(BaseModel):
     url: Optional[str]
+    provision_url: Optional[str] = None
     secret_token: Optional[str] = ""
     is_active: bool
     last_delivery_status: Optional[str]
@@ -31,6 +32,7 @@ class WebhookConfigResponse(BaseModel):
 
 class WebhookConfigUpdateRequest(BaseModel):
     url: Optional[str] = None
+    provision_url: Optional[str] = None
     secret_token: Optional[str] = None
     is_active: bool = True
 
@@ -48,7 +50,7 @@ async def get_webhook_config(
     db: Session = Depends(get_db)
 ):
     """
-    Obtiene la configuración de webhook de destino del cliente autenticado.
+    Obtiene la configuración de webhook y aprovisionamiento del cliente autenticado.
     """
     webhook = db.query(CustomerWebhook).filter(
         CustomerWebhook.customer_id == current_customer.id
@@ -58,6 +60,7 @@ async def get_webhook_config(
         webhook = CustomerWebhook(
             customer_id=current_customer.id,
             url=None,
+            provision_url=None,
             secret_token=generate_secure_secret(32),
             is_active=True
         )
@@ -67,6 +70,7 @@ async def get_webhook_config(
 
     return WebhookConfigResponse(
         url=webhook.url,
+        provision_url=webhook.provision_url,
         secret_token=webhook.secret_token,
         is_active=webhook.is_active,
         last_delivery_status=webhook.last_delivery_status,
@@ -81,8 +85,8 @@ async def update_webhook_config(
     db: Session = Depends(get_db)
 ):
     """
-    Actualiza la URL del webhook y el estado de activación del cliente.
-    Aplica validación estricta anti-SSRF para garantizar que la URL no apunte a direcciones internas.
+    Actualiza la URL del webhook, la URL de aprovisionamiento y el estado de activación del cliente.
+    Aplica validación estricta anti-SSRF para garantizar que las URLs no apunten a direcciones internas.
     """
     webhook = db.query(CustomerWebhook).filter(
         CustomerWebhook.customer_id == current_customer.id
@@ -96,9 +100,7 @@ async def update_webhook_config(
         db.add(webhook)
 
     clean_url = req.url.strip() if req.url else None
-
     if clean_url:
-        # Validar rigurosamente con anti-SSRF
         is_valid, error_msg = validate_webhook_url(clean_url)
         if not is_valid:
             raise HTTPException(
@@ -109,6 +111,18 @@ async def update_webhook_config(
     else:
         webhook.url = None
 
+    clean_prov_url = req.provision_url.strip() if req.provision_url else None
+    if clean_prov_url:
+        is_valid, error_msg = validate_webhook_url(clean_prov_url)
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"URL de aprovisionamiento no válida: {error_msg}"
+            )
+        webhook.provision_url = clean_prov_url
+    else:
+        webhook.provision_url = None
+
     if req.secret_token is not None:
         webhook.secret_token = req.secret_token.strip()
 
@@ -117,10 +131,11 @@ async def update_webhook_config(
     db.commit()
     db.refresh(webhook)
 
-    logger.info(f"Webhook actualizado para cliente #{current_customer.id}: URL={webhook.url}, Activo={webhook.is_active}")
+    logger.info(f"Webhook y aprovisionamiento actualizados para cliente #{current_customer.id}")
 
     return WebhookConfigResponse(
         url=webhook.url,
+        provision_url=webhook.provision_url,
         secret_token=webhook.secret_token,
         is_active=webhook.is_active,
         last_delivery_status=webhook.last_delivery_status,

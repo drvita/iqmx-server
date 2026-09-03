@@ -32,6 +32,12 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
   - Firma condicional HMAC-SHA256 (`X-Signature: sha256=...`) y cabecera estándar `Authorization: Bearer <token>` cuando se define una clave secreta.
   - Handshake de verificación de Webhooks con método GET estilo Meta (`hub.mode=subscribe`, `hub.challenge`, `hub.verify_token`) en el botón "Probar Conexión", con fallback a POST.
   - Prefijo visual descriptivo `POST` en el campo de dirección web del portal de clientes.
+  - **Aprovisionamiento y Sincronización de Líneas con el CRM**:
+    - Almacenamiento de URL de aprovisionamiento (`provision_url`) en `customer_webhooks` con migración versionada de Alembic.
+    - Sincronización manual desde la tabla de líneas con el botón **"Enviar al CRM"** (`POST /api/portal/whatsapp/numbers/{id}/provision`).
+    - Modal de visualización de **Credenciales de Conexión** con token permanente desencriptado y botones de copiado para configuración manual.
+    - Aprovisionamiento automático en segundo plano al conectar nuevas líneas vía Embedded Signup (`POST {provision_url}`).
+    - Notificación de baja en segundo plano al desvincular una línea telefónica (`DELETE {provision_url}?phoneNumberId=...`), con diseño resiliente que no bloquea la experiencia del usuario si el CRM está inaccesible.
   - Despacho asíncrono hacia la URL del CRM del cliente con firmas criptográficas `X-Signature: sha256=...`.
   - Política de reintentos automáticos ante errores 4xx o 5xx en intervalos escalonados de 15, 30 y 60 segundos (máximo 3 intentos).
   - Marcado automático de estado como `sent` cuando el cliente no tiene una URL configurada.
