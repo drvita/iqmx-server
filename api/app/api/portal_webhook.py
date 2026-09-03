@@ -170,8 +170,11 @@ async def test_webhook_ping(
     db: Session = Depends(get_db)
 ):
     """
-    Envía un evento de prueba (ping) firmado a la URL de webhook configurada por el cliente
-    para comprobar conectividad, latencia y respuesta HTTP 200 OK de su instancia CRM.
+    Comprueba la conectividad y validez de la URL del webhook del CRM realizando un
+    Handshake de verificación con método GET (estilo Meta) conforme al estándar de endpoints.md:
+    1. Envía GET con hub.mode=subscribe, hub.challenge=<cadena_aleatoria> y hub.verify_token=<clave>.
+    2. Envía cabecera Authorization: Bearer <clave> si se configuró una clave secreta.
+    3. Si el servidor destino requiere POST como fallback, lo prueba automáticamente.
     """
     webhook = db.query(CustomerWebhook).filter(
         CustomerWebhook.customer_id == current_customer.id
@@ -191,37 +194,71 @@ async def test_webhook_ping(
             detail=f"La URL configurada no es segura: {error_msg}"
         )
 
-    test_payload = {
-        "event": "ping",
-        "timestamp": datetime.utcnow().isoformat() + "Z",
-        "message": "IQMX WhatsApp Gateway: Prueba de conectividad de Webhook",
-        "customer_id": current_customer.id,
-        "company_name": current_customer.company_name
-    }
+    clean_url = webhook.url.strip()
+    secret = webhook.secret_token.strip() if webhook.secret_token else ""
+    challenge = f"iqmx_challenge_{generate_secure_secret(12)}"
 
-    payload_json = json.dumps(test_payload, separators=(',', ':'))
-    payload_bytes = payload_json.encode("utf-8")
+    params = {
+        "hub.mode": "subscribe",
+        "hub.challenge": challenge,
+    }
+    if secret:
+        params["hub.verify_token"] = secret
 
     headers = {
-        "Content-Type": "application/json",
         "User-Agent": "IQMX-WhatsApp-Gateway-Tester/1.0",
-        "X-IQMX-Test-Ping": "true"
+        "Accept": "text/plain, application/json, */*",
     }
-
-    # Firmar con HMAC únicamente si se ha configurado una clave secreta
-    if webhook.secret_token and webhook.secret_token.strip():
-        signature = calculate_hmac_sha256(webhook.secret_token.strip(), payload_bytes)
-        headers["X-Signature"] = f"sha256={signature}"
+    if secret:
+        headers["Authorization"] = f"Bearer {secret}"
 
     start_time = time.perf_counter()
     try:
         async with httpx.AsyncClient(timeout=8.0) as client:
-            response = await client.post(webhook.url, content=payload_bytes, headers=headers)
+            # 1. Intentar Handshake GET estándar (estilo Meta documentado en endpoints.md)
+            response = await client.get(clean_url, params=params, headers=headers)
             elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
-            
+
+            # Si el servidor responde 405 (Method Not Allowed), intentar POST fallback
+            if response.status_code == 405:
+                test_payload = {
+                    "event": "ping",
+                    "timestamp": datetime.utcnow().isoformat() + "Z",
+                    "message": "IQMX WhatsApp Gateway: Prueba de conectividad de Webhook",
+                    "customer_id": current_customer.id,
+                    "company_name": current_customer.company_name
+                }
+                payload_bytes = json.dumps(test_payload, separators=(',', ':')).encode("utf-8")
+                post_headers = {
+                    "Content-Type": "application/json",
+                    "User-Agent": "IQMX-WhatsApp-Gateway-Tester/1.0",
+                    "X-IQMX-Test-Ping": "true"
+                }
+                if secret:
+                    post_headers["Authorization"] = f"Bearer {secret}"
+                    sig = calculate_hmac_sha256(secret, payload_bytes)
+                    post_headers["X-Signature"] = f"sha256={sig}"
+                response = await client.post(clean_url, content=payload_bytes, headers=post_headers)
+                elapsed_ms = round((time.perf_counter() - start_time) * 1000, 2)
+
             is_success = (200 <= response.status_code < 300)
-            msg = "El servidor CRM respondió satisfactoriamente." if is_success else f"El CRM respondió con error HTTP {response.status_code}."
-            
+
+            # Mensajes orientados al usuario según la respuesta del CRM
+            if is_success:
+                resp_text = response.text.strip()
+                if challenge in resp_text:
+                    msg = "El webhook del CRM verificó exitosamente el handshake y devolvió el challenge esperado."
+                else:
+                    msg = "El CRM respondió satisfactoriamente (HTTP 200 OK)."
+            elif response.status_code == 404:
+                msg = "No se encontró el webhook en el CRM (HTTP 404). Verifica que la ruta o el token de la URL sean correctos."
+            elif response.status_code == 403:
+                msg = "El CRM rechazó la verificación (HTTP 403 Forbidden). Verifica que la clave secreta o token coincidan."
+            elif response.status_code == 401:
+                msg = "El CRM requiere autenticación (HTTP 401 Unauthorized). Ingresa la clave de integración en el campo secreto."
+            else:
+                msg = f"El CRM respondió con código HTTP {response.status_code}."
+
             # Guardar último estado
             webhook.last_delivery_status = "delivered" if is_success else "failed"
             webhook.last_delivery_code = response.status_code

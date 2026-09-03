@@ -35,7 +35,9 @@ async def dispatch_webhook_with_retries(
     }
 
     if secret_token and secret_token.strip():
-        signature = calculate_hmac_sha256(secret_token.strip(), payload_bytes)
+        token = secret_token.strip()
+        headers["Authorization"] = f"Bearer {token}"
+        signature = calculate_hmac_sha256(token, payload_bytes)
         headers["X-Signature"] = f"sha256={signature}"
 
     max_attempts = len(RETRY_DELAYS) + 1  # Intento 0 + 3 reintentos = 4 intentos en total

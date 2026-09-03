@@ -29,7 +29,8 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
   - Identificación automática de clientes por número telefónico (`phone_number_id`).
   - Almacenamiento persistente en base de datos (`events`) para depuración y trazabilidad.
   - Soporte de clave secreta flexible: editable manualmente por el usuario, generable aleatoriamente desde la interfaz, u opcional (vacía) para pruebas de integración rápidas sin firma criptográfica.
-  - Firma condicional HMAC-SHA256 (`X-Signature: sha256=...`): solo se genera si se definió una clave secreta.
+  - Firma condicional HMAC-SHA256 (`X-Signature: sha256=...`) y cabecera estándar `Authorization: Bearer <token>` cuando se define una clave secreta.
+  - Handshake de verificación de Webhooks con método GET estilo Meta (`hub.mode=subscribe`, `hub.challenge`, `hub.verify_token`) en el botón "Probar Conexión", con fallback a POST.
   - Prefijo visual descriptivo `POST` en el campo de dirección web del portal de clientes.
   - Despacho asíncrono hacia la URL del CRM del cliente con firmas criptográficas `X-Signature: sha256=...`.
   - Política de reintentos automáticos ante errores 4xx o 5xx en intervalos escalonados de 15, 30 y 60 segundos (máximo 3 intentos).

@@ -196,7 +196,7 @@ export default function WebhookConfigSection({
               )}
             </div>
             <p className="mt-1.5 text-xs text-gray-500">
-              Puedes ingresar la clave de tu CRM, generar una nueva con el botón, o dejarla vacía para realizar pruebas rápidas sin validación de firma.
+              Si tu CRM ya incluye el token de verificación en la dirección web, puedes dejar este campo vacío. Si tu CRM solicita autenticación, ingresa la clave aquí y se enviará como token de autorización.
             </p>
           </div>
 
