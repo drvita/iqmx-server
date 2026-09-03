@@ -17,6 +17,7 @@ export default function WebhookConfigSection({
   onFeedback,
 }: WebhookConfigSectionProps) {
   const [webhookUrlInput, setWebhookUrlInput] = useState('');
+  const [webhookSecretInput, setWebhookSecretInput] = useState('');
   const [webhookActiveInput, setWebhookActiveInput] = useState(true);
   const [savingWebhook, setSavingWebhook] = useState(false);
   const [testingPing, setTestingPing] = useState(false);
@@ -28,11 +29,28 @@ export default function WebhookConfigSection({
     if (webhookConfig) {
       const timer = setTimeout(() => {
         setWebhookUrlInput(webhookConfig.url || '');
+        setWebhookSecretInput(webhookConfig.secret_token || '');
         setWebhookActiveInput(webhookConfig.is_active ?? true);
       }, 0);
       return () => clearTimeout(timer);
     }
   }, [webhookConfig]);
+
+  // Generar clave secreta aleatoria segura directamente en el cliente
+  const handleGenerateRandomSecret = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    const randomValues = new Uint8Array(32);
+    window.crypto.getRandomValues(randomValues);
+    for (let i = 0; i < 32; i++) {
+      result += chars[randomValues[i] % chars.length];
+    }
+    setWebhookSecretInput(result);
+    onFeedback({
+      type: 'success',
+      text: 'Nueva clave generada en el campo. Haz clic en "Guardar Configuración" para aplicarla.',
+    });
+  };
 
   // Guardar configuración del webhook
   const handleSaveWebhook = async (e: React.FormEvent) => {
@@ -46,6 +64,7 @@ export default function WebhookConfigSection({
         headers: getHeaders(),
         body: JSON.stringify({
           url: webhookUrlInput.trim() || null,
+          secret_token: webhookSecretInput.trim() || '',
           is_active: webhookActiveInput,
         }),
       });
@@ -67,40 +86,6 @@ export default function WebhookConfigSection({
       });
     } finally {
       setSavingWebhook(false);
-    }
-  };
-
-  // Regenerar Clave Secreta
-  const handleRegenerateSecret = async () => {
-    if (
-      !confirm(
-        '¿Deseas generar una nueva clave secreta de seguridad? Recuerda actualizarla en tu sistema para seguir validando los mensajes.'
-      )
-    ) {
-      return;
-    }
-
-    try {
-      const res = await fetch('/api/portal/webhook/regenerate-secret', {
-        method: 'POST',
-        headers: getHeaders(),
-      });
-
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.detail || 'Error al renovar la clave secreta.');
-      }
-
-      onFeedback({
-        type: 'success',
-        text: 'Se generó una nueva clave secreta de seguridad exitosamente.',
-      });
-      await onRefreshData();
-    } catch (err: unknown) {
-      onFeedback({
-        type: 'error',
-        text: err instanceof Error ? err.message : 'Error al renovar la clave secreta.',
-      });
     }
   };
 
@@ -134,8 +119,8 @@ export default function WebhookConfigSection({
 
   // Copiar clave al portapapeles
   const copySecretToClipboard = () => {
-    if (!webhookConfig?.secret_token) return;
-    navigator.clipboard.writeText(webhookConfig.secret_token);
+    if (!webhookSecretInput) return;
+    navigator.clipboard.writeText(webhookSecretInput);
     setCopiedSecret(true);
     setTimeout(() => setCopiedSecret(false), 2500);
   };
@@ -153,54 +138,69 @@ export default function WebhookConfigSection({
 
       <form onSubmit={handleSaveWebhook} className="mt-6 space-y-6">
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+          {/* Campo Dirección Web con Prefijo POST */}
           <div className="sm:col-span-2">
             <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider">
               Dirección Web de Recepción
             </label>
-            <input
-              type="url"
-              required
-              value={webhookUrlInput}
-              onChange={(e) => setWebhookUrlInput(e.target.value)}
-              placeholder="https://crm.tuempresa.com/api/webhooks/whatsapp"
-              className="mt-1.5 block w-full rounded-lg bg-white border border-gray-300 px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 text-sm font-mono transition-colors"
-            />
+            <div className="mt-1.5 flex rounded-lg shadow-xs">
+              <span className="inline-flex items-center px-3.5 rounded-l-lg border border-r-0 border-gray-300 bg-gray-50 text-gray-700 font-mono text-xs font-bold tracking-wider select-none">
+                POST
+              </span>
+              <input
+                type="url"
+                required
+                value={webhookUrlInput}
+                onChange={(e) => setWebhookUrlInput(e.target.value)}
+                placeholder="https://crm.tuempresa.com/api/webhooks/whatsapp"
+                className="block w-full rounded-r-lg border border-gray-300 px-4 py-2.5 text-gray-900 placeholder-gray-400 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 text-sm font-mono transition-colors"
+              />
+            </div>
             <p className="mt-1.5 text-xs text-gray-500">
-              Por seguridad de la información, la dirección debe contar con certificado seguro HTTPS.
+              Las notificaciones de cada evento se despachan mediante peticiones HTTP POST con carga útil en formato JSON. Se requiere certificado seguro HTTPS.
             </p>
           </div>
 
+          {/* Campo Clave Secreta Editable y Opcional */}
           <div>
-            <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider">
-              Clave Secreta de Seguridad
-            </label>
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                Clave Secreta de Seguridad
+              </label>
+              <span className="text-[11px] text-gray-500 font-medium">Opcional</span>
+            </div>
             <div className="mt-1.5 flex items-center space-x-2">
               <input
                 type="text"
-                readOnly
-                value={webhookConfig?.secret_token || ''}
-                className="block w-full rounded-lg bg-gray-50 border border-gray-300 px-3.5 py-2 text-gray-700 text-xs font-mono select-all"
+                value={webhookSecretInput}
+                onChange={(e) => setWebhookSecretInput(e.target.value)}
+                placeholder="Pega la clave de tu CRM o déjala vacía"
+                className="block w-full rounded-lg bg-white border border-gray-300 px-3.5 py-2 text-gray-900 placeholder-gray-400 text-xs font-mono focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 transition-colors"
               />
               <button
                 type="button"
-                onClick={copySecretToClipboard}
-                className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-2 rounded-lg text-xs font-medium border border-gray-300 transition-colors whitespace-nowrap cursor-pointer"
-              >
-                {copiedSecret ? '¡Copiado!' : 'Copiar'}
-              </button>
-              <button
-                type="button"
-                onClick={handleRegenerateSecret}
+                onClick={handleGenerateRandomSecret}
                 className="bg-gray-100 hover:bg-gray-200 text-gray-700 hover:text-gray-900 px-3 py-2 rounded-lg text-xs font-medium border border-gray-300 transition-colors whitespace-nowrap cursor-pointer"
+                title="Generar clave aleatoria automáticamente"
               >
-                Renovar
+                Generar
               </button>
+              {webhookSecretInput && (
+                <button
+                  type="button"
+                  onClick={copySecretToClipboard}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-3 py-2 rounded-lg text-xs font-medium border border-gray-300 transition-colors whitespace-nowrap cursor-pointer"
+                >
+                  {copiedSecret ? '¡Copiado!' : 'Copiar'}
+                </button>
+              )}
             </div>
             <p className="mt-1.5 text-xs text-gray-500">
-              Permite a tu sistema autenticar que cada mensaje recibido proviene de forma legítima de este portal.
+              Puedes ingresar la clave de tu CRM, generar una nueva con el botón, o dejarla vacía para realizar pruebas rápidas sin validación de firma.
             </p>
           </div>
 
+          {/* Interruptor de Reenvío */}
           <div>
             <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wider">
               Reenvío de Notificaciones
@@ -234,7 +234,7 @@ export default function WebhookConfigSection({
           <button
             type="button"
             onClick={handleTestPing}
-            disabled={testingPing || !webhookConfig?.url}
+            disabled={testingPing || !webhookUrlInput}
             className="bg-gray-100 hover:bg-gray-200 text-gray-800 px-5 py-2.5 rounded-lg text-sm font-semibold border border-gray-300 transition-colors disabled:opacity-40 cursor-pointer"
           >
             {testingPing ? 'Comprobando conexión...' : 'Probar Conexión'}

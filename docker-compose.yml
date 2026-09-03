@@ -24,7 +24,7 @@ services:
     image: pgvector/pgvector:pg15
     container_name: iqmx-db
     ports:
-      - "5432:5432"
+      - "${HOST_DB_PORT:-5433}:5432"
     environment:
       - POSTGRES_USER=${DB_USER:-postgres}
       - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
@@ -102,7 +102,7 @@ services:
       target: deps
     container_name: iqmx-web
     ports:
-      - "3000:3000"
+      - "${HOST_WEB_PORT:-3001}:3000"
     depends_on:
       api:
         condition: service_healthy

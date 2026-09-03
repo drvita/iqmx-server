@@ -27,14 +27,16 @@ async def dispatch_webhook_with_retries(
     """
     payload_json = json.dumps(payload, separators=(',', ':'))
     payload_bytes = payload_json.encode("utf-8")
-    signature = calculate_hmac_sha256(secret_token, payload_bytes)
     
     headers = {
         "Content-Type": "application/json",
         "User-Agent": "IQMX-WhatsApp-Gateway/1.0",
-        "X-Signature": f"sha256={signature}",
         "X-IQMX-Event-ID": str(event_id)
     }
+
+    if secret_token and secret_token.strip():
+        signature = calculate_hmac_sha256(secret_token.strip(), payload_bytes)
+        headers["X-Signature"] = f"sha256={signature}"
 
     max_attempts = len(RETRY_DELAYS) + 1  # Intento 0 + 3 reintentos = 4 intentos en total
     attempt = 0

@@ -10,7 +10,7 @@ class CustomerWebhook(Base):
     customer_id = Column(Integer, ForeignKey("customers.id", ondelete="CASCADE"), unique=True, nullable=False, index=True)
     
     url = Column(String(500), nullable=True)  # URL de destino del CRM del cliente (HTTPS)
-    secret_token = Column(String(128), nullable=False)  # Clave secreta para firmar con HMAC-SHA256
+    secret_token = Column(String(128), nullable=True, default="")  # Clave secreta para firmar con HMAC-SHA256 (opcional)
     is_active = Column(Boolean, default=True, nullable=False)
     
     last_delivery_status = Column(String(50), nullable=True)  # delivered, sent, failed

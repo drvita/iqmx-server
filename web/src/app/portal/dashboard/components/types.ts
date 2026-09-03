@@ -21,7 +21,7 @@ export interface WhatsAppNumber {
 
 export interface CustomerWebhookConfig {
   url: string | null;
-  secret_token: string;
+  secret_token: string | null;
   is_active: boolean;
   last_delivery_status: string | null;
   last_delivery_code: number | null;

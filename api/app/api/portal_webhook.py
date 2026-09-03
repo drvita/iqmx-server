@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api/portal/webhook", tags=["portal-webhook"])
 
 class WebhookConfigResponse(BaseModel):
     url: Optional[str]
-    secret_token: str
+    secret_token: Optional[str] = ""
     is_active: bool
     last_delivery_status: Optional[str]
     last_delivery_code: Optional[int]
@@ -31,6 +31,7 @@ class WebhookConfigResponse(BaseModel):
 
 class WebhookConfigUpdateRequest(BaseModel):
     url: Optional[str] = None
+    secret_token: Optional[str] = None
     is_active: bool = True
 
 class WebhookPingResponse(BaseModel):
@@ -107,6 +108,9 @@ async def update_webhook_config(
         webhook.url = clean_url
     else:
         webhook.url = None
+
+    if req.secret_token is not None:
+        webhook.secret_token = req.secret_token.strip()
 
     webhook.is_active = req.is_active
     webhook.updated_at = datetime.utcnow()
@@ -197,14 +201,17 @@ async def test_webhook_ping(
 
     payload_json = json.dumps(test_payload, separators=(',', ':'))
     payload_bytes = payload_json.encode("utf-8")
-    signature = calculate_hmac_sha256(webhook.secret_token, payload_bytes)
 
     headers = {
         "Content-Type": "application/json",
         "User-Agent": "IQMX-WhatsApp-Gateway-Tester/1.0",
-        "X-Signature": f"sha256={signature}",
         "X-IQMX-Test-Ping": "true"
     }
+
+    # Firmar con HMAC únicamente si se ha configurado una clave secreta
+    if webhook.secret_token and webhook.secret_token.strip():
+        signature = calculate_hmac_sha256(webhook.secret_token.strip(), payload_bytes)
+        headers["X-Signature"] = f"sha256={signature}"
 
     start_time = time.perf_counter()
     try:

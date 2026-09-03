@@ -28,6 +28,9 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
   - Recepción unificada de eventos de WhatsApp con soporte de doble ruta para máxima compatibilidad: `/api/webhooks/whatsapp` y ruta directa `/whatsapp`.
   - Identificación automática de clientes por número telefónico (`phone_number_id`).
   - Almacenamiento persistente en base de datos (`events`) para depuración y trazabilidad.
+  - Soporte de clave secreta flexible: editable manualmente por el usuario, generable aleatoriamente desde la interfaz, u opcional (vacía) para pruebas de integración rápidas sin firma criptográfica.
+  - Firma condicional HMAC-SHA256 (`X-Signature: sha256=...`): solo se genera si se definió una clave secreta.
+  - Prefijo visual descriptivo `POST` en el campo de dirección web del portal de clientes.
   - Despacho asíncrono hacia la URL del CRM del cliente con firmas criptográficas `X-Signature: sha256=...`.
   - Política de reintentos automáticos ante errores 4xx o 5xx en intervalos escalonados de 15, 30 y 60 segundos (máximo 3 intentos).
   - Marcado automático de estado como `sent` cuando el cliente no tiene una URL configurada.
