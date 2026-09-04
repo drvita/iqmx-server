@@ -29,17 +29,27 @@ class Settings(BaseSettings):
     META_APP_SECRET: str | None = None
     META_CONFIG_ID: str = "968187492720390"
     GRAPH_API_VERSION: str = "v26.0"
-    
+    META_BUSINESS_ID: str = "3649198765130252"
+    META_SYSTEM_USER_TOKEN: str | None = None
     # Rate Limiting
     RATE_LIMIT_PER_SECOND: int = 35
 
     # Cifrado de Tokens en Reposo (AES-256-GCM clave de 32 bytes o string)
     TOKEN_ENCRYPTION_KEY: str = "super_secure_token_encryption_key_32_bytes_long_iqmx"
 
-    # Autenticación JWT para Clientes del Portal
+    # Autenticación JWT para Clientes y Administradores del Portal
     JWT_SECRET_KEY: str = "portal_jwt_secret_key_change_in_production_iqmx_2026"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 días
+
+    # Credenciales de Mercado Pago (Pagos Recurrentes / Suscripciones)
+    MERCADOPAGO_ACCESS_TOKEN: str | None = None
+    MERCADOPAGO_PUBLIC_KEY: str | None = None
+    MERCADOPAGO_WEBHOOK_SECRET: str | None = None
+
+    # Microservicio CRM (Aprovisionamiento y Control M2M)
+    CRM_SERVICE_URL: str = "http://crm:3000"
+    CRM_PROVISION_SECRET: str = "crm_provision_secret_key_iqmx_default"
 
     @property
     def db_url(self) -> str:

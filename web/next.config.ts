@@ -24,6 +24,25 @@ const nextConfig: NextConfig = {
       },
     ];
   },
+  async redirects() {
+    return [
+      {
+        source: "/landingpage/whatsapp",
+        destination: "/landingpage/crm",
+        permanent: true,
+      },
+      {
+        source: "/landingpage/consultorios",
+        destination: "/landingpage/crm/consultorio",
+        permanent: true,
+      },
+      {
+        source: "/landingpage/consultorio",
+        destination: "/landingpage/crm/consultorio",
+        permanent: true,
+      },
+    ];
+  },
 };
 
 export default nextConfig;

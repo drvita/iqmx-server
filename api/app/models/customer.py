@@ -25,3 +25,5 @@ class Customer(Base):
     user = relationship("User", back_populates="customer")
     whatsapp_numbers = relationship("WhatsAppNumber", back_populates="customer", cascade="all, delete-orphan")
     webhook = relationship("CustomerWebhook", uselist=False, back_populates="customer", cascade="all, delete-orphan")
+    subscriptions = relationship("CustomerSubscription", back_populates="customer", cascade="all, delete-orphan", passive_deletes=True)
+

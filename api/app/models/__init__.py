@@ -10,6 +10,9 @@ from app.models.event import Event
 from app.models.chatbot_user import ChatbotUser
 from app.models.campaign import Campaign
 from app.models.campaign_participation import CampaignParticipation
+from app.models.product import Product
+from app.models.membership_plan import MembershipPlan
+from app.models.customer_subscription import CustomerSubscription
 
 # Exponer todos los modelos para registro centralizado en Base.metadata
 __all__ = [
@@ -24,5 +27,8 @@ __all__ = [
     "Event", 
     "ChatbotUser", 
     "Campaign", 
-    "CampaignParticipation"
+    "CampaignParticipation",
+    "Product",
+    "MembershipPlan",
+    "CustomerSubscription"
 ]

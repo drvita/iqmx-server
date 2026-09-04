@@ -19,6 +19,28 @@ def is_ip_private_or_reserved(ip_str: str) -> bool:
     except ValueError:
         return True
 
+
+def is_trusted_internal_url(url: str) -> bool:
+    """
+    Verifica si la URL pertenece a un microservicio interno de confianza (ej. contenedor CRM en Docker).
+    """
+    if not url:
+        return False
+    try:
+        from app.config import settings
+        trusted_hosts = {"crm"}
+        if settings.CRM_SERVICE_URL:
+            parsed_crm = urlparse(settings.CRM_SERVICE_URL)
+            if parsed_crm.hostname:
+                trusted_hosts.add(parsed_crm.hostname.lower())
+
+        parsed = urlparse(url.strip())
+        if parsed.hostname and parsed.hostname.lower() in trusted_hosts:
+            return True
+    except Exception:
+        pass
+    return False
+
 def validate_webhook_url(url: str, allow_http_in_dev: bool = False) -> tuple[bool, str]:
     """
     Valida rigurosamente que una URL sea apta para despacho de webhooks y previene SSRF.
@@ -28,6 +50,9 @@ def validate_webhook_url(url: str, allow_http_in_dev: bool = False) -> tuple[boo
         return False, "La URL no puede estar vacía."
 
     url_trimmed = url.strip()
+    if is_trusted_internal_url(url_trimmed):
+        return True, ""
+
     try:
         parsed = urlparse(url_trimmed)
     except Exception:

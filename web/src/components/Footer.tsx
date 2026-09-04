@@ -26,9 +26,14 @@ export default function Footer() {
                                 </a>
                             </li>
                             <li>
-                                <a href="/landingpage/whatsapp" className="text-gray-400 hover:text-white">
-                                    Automatización de WhatsApp
-                                </a>
+                                <Link href="/landingpage/crm" className="text-gray-400 hover:text-white">
+                                    CRM WhatsApp
+                                </Link>
+                            </li>
+                            <li>
+                                <Link href="/landingpage/crm/consultorio" className="text-gray-400 hover:text-white">
+                                    Agenda para Consultorios
+                                </Link>
                             </li>
                             <li>
                                 <a href="/privacidad" className="text-gray-400 hover:text-white">

@@ -8,21 +8,20 @@ Este repositorio contiene la arquitectura de microservicios para el proyecto de 
 
 ```text
 main-server/
-├── docker-compose.yml        # Orquestador multi-contenedor (PostgreSQL, API Central, Chatbot, Web)
+├── docker-compose.yml        # Orquestador multi-contenedor (PostgreSQL, API Central, CRM, Web)
 ├── CHANGELOG.md              # Registro cronológico estandarizado de cambios (Keep a Changelog)
 ├── README.md                 # Documentación general para humanos y agentes AI
 ├── .gitignore                # Exclusiones de control de versiones raíz
-├── web/                      # Portal de Clientes y Sitio Web Oficial (Next.js 16)
+├── web/                      # Portal de Clientes, Administración Central y Landing (Next.js 16)
 │   ├── Dockerfile            # Empaquetado optimizado standalone para producción
-│   ├── src/app/portal/       # Portal de Clientes con onboarding de WhatsApp y gestión de Webhooks
 │   └── package.json
-├── chatbot/                  # Servicio de Inteligencia Artificial y Chatbot
+├── crm/                      # Microservicio CRM Autónomo (Next.js 15, Drizzle ORM, WhatsApp, IA)
 │   ├── Dockerfile
-│   └── run.py
-└── api/                      # API Central Unificada (FastAPI, Webhooks de WhatsApp, Auth y Despacho)
+│   └── package.json
+└── api/                      # API Central Unificada (FastAPI, Webhooks de WhatsApp, Auth, Catálogo y M2M)
     ├── app/
-    │   ├── api/              # Rutas: Portal Auth, WhatsApp Coexistencia, Webhook Gateway, Chatbot
-    │   ├── db/               # Base de datos, reset (reset.py) y semillas (seeds.py)
+    │   ├── api/              # Rutas: Portal Auth, WhatsApp Coexistencia, Webhook Gateway, Admin CRM, Catálogo
+    │   ├── db/               # Base de datos, reset y semillas
     │   ├── lib/              # Criptografía AES-GCM, HMAC-SHA256, validador anti-SSRF
     │   └── models/           # Modelos centralizados (Customer, User, Roles, WhatsAppNumber, etc.)
     ├── tests/                # Suite de pruebas automatizadas unitarias y de integración
@@ -34,7 +33,7 @@ main-server/
 
 ## 🚀 Desarrollo Local con Docker
 
-Para iniciar todo el entorno local (PostgreSQL, API Central, Chatbot y Web Next.js):
+Para iniciar todo el entorno local (PostgreSQL, API Central, CRM y Web Next.js):
 
 ```bash
 docker compose up --build -d
@@ -42,9 +41,9 @@ docker compose up --build -d
 
 ### Servicios Locales Disponibles
 - **API Central y Webhook Gateway**: Accesible en `http://localhost:8000`
-- **Next.js Web y Portal de Clientes**: Accesible en `http://localhost:3000`
-- **Chatbot Service**: Accesible en `http://localhost:8002`
-- **PostgreSQL (pgvector)**: Accesible en `localhost:5432`
+- **Next.js Web y Portal de Clientes**: Accesible en `http://localhost:3001`
+- **Microservicio CRM**: Accesible en `http://localhost:3000`
+- **PostgreSQL (pgvector)**: Accesible en `localhost:5433` (5432 dentro de la red Docker)
 
 ---
 

@@ -56,8 +56,11 @@ services:
     volumes:
       - sqlite-data:/app/data
       - ./api/app:/app/app
+      - ./api/.env:/app/.env:ro
       - ./api/tests:/app/tests
       - ./api/run.py:/app/run.py
+      - ./api/manage.py:/app/manage.py
+      - ./api/scripts:/app/scripts
       - ./api/alembic:/app/alembic
       - ./api/alembic.ini:/app/alembic.ini
     healthcheck:
@@ -66,30 +69,6 @@ services:
       timeout: 5s
       retries: 5
 
-  # ----------------------------------------------------------------------------
-  # CHATBOT AGENT (LangGraph + FastAPI)
-  # ----------------------------------------------------------------------------
-  chatbot:
-    <<: *base-common
-    build:
-      context: ./chatbot
-      dockerfile: Dockerfile
-    container_name: iqmx-chatbot
-    ports:
-      - "8002:8000"
-    depends_on:
-      api:
-        condition: service_healthy
-    env_file:
-      - ./chatbot/.env
-    volumes:
-      - ./chatbot/storage:/app/storage
-      - ./chatbot/src:/app/src
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   # ----------------------------------------------------------------------------
   # FRONTEND (Next.js)
@@ -114,6 +93,30 @@ services:
       - web-node-modules:/app/node_modules
       - web-next:/app/.next
 
+  # ----------------------------------------------------------------------------
+  # VOCERO CRM (Next.js + Drizzle / Better Auth)
+  # ----------------------------------------------------------------------------
+  crm:
+    <<: *base-common
+    build:
+      context: ./crm
+      dockerfile: Dockerfile
+      target: deps
+    container_name: iqmx-crm
+    ports:
+      - "${HOST_CRM_PORT:-3000}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "node scripts/migrate.mjs && pnpm dev"
+    env_file:
+      - ./crm/.env
+    volumes:
+      - ./crm:/app
+      - crm-node-modules:/app/node_modules
+      - crm-next:/app/.next
+      - crm-media:/data/media
+
 networks:
   iqmx-network:
     name: iqmx-network
@@ -128,3 +131,9 @@ volumes:
     name: iqmx-web-node-modules
   web-next:
     name: iqmx-web-next
+  crm-node-modules:
+    name: iqmx-crm-node-modules
+  crm-next:
+    name: iqmx-crm-next
+  crm-media:
+    name: iqmx-crm-media

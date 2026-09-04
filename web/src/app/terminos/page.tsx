@@ -78,6 +78,24 @@ export default function TermsOfService() {
                             establecido, se entenderá como una <strong>rescisión automática del contrato</strong> por parte
                             del cliente, y el servicio será suspendido.
                         </p>
+
+                        <h3 className="text-xl font-semibold text-gray-800 mt-4">
+                            2.4 Políticas de Cambio de Membresía (Upgrades, Downgrades) y Cómputo de Vigencias
+                        </h3>
+                        <p className="text-gray-700">
+                            Para clientes que cuenten con una membresía activa y decidan contratar un nuevo plan, se aplicarán las siguientes reglas de negocio:
+                        </p>
+                        <ul className="list-disc list-inside text-gray-700 ml-4 space-y-2">
+                            <li>
+                                <strong>Mejora de Membresía (Upgrade):</strong> Si el cliente contrata una membresía de mayor valor que la actual, la membresía previa quedará <strong>cancelada de inmediato</strong> una vez confirmado el pago, y la nueva membresía entrará en vigor de forma instantánea para habilitar sus nuevas características y capacidades operativas.
+                            </li>
+                            <li>
+                                <strong>Membresía de Menor Valor o Renovación Anticipada (Downgrade o Mismo Nivel):</strong> Si el cliente adquiere una membresía de menor costo o renueva su plan actual antes del vencimiento, su membresía activa se mantendrá <strong>vigente hasta concluir su fecha original</strong>. La nueva membresía quedará programada para activarse automáticamente al finalizar el período actual.
+                            </li>
+                            <li>
+                                <strong>Cómputo de Períodos y Conclusión a Medianoche:</strong> Todos los ciclos de facturación concluyen a las 23:59:59 horas (medianoche). Para contrataciones inmediatas, el período de 30 días naturales mensuales se contabiliza a partir del día natural posterior a la confirmación de la transacción. Para membresías programadas, el período se contabiliza a partir del día posterior a la conclusión del plan anterior.
+                            </li>
+                        </ul>
                     </div>
 
                     {/* Garantía y Reembolsos */}

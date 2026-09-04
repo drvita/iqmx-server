@@ -1,2 +1,1 @@
 -r api/requirements.txt
--r chatbot/requirements.txt

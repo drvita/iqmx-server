@@ -56,7 +56,8 @@ async def send_provision_to_crm(
     phone_number_id: str,
     token: str,
     display_phone_number: Optional[str],
-    verified_name: Optional[str]
+    verified_name: Optional[str],
+    organization_id: Optional[str] = None
 ) -> dict:
     """
     Envía solicitud POST para aprovisionar una línea en el CRM según endpoints.md.
@@ -71,6 +72,8 @@ async def send_provision_to_crm(
         "aiEnabled": True,
         "signupMethod": "embedded_signup"
     }
+    if organization_id:
+        payload["organizationId"] = organization_id
 
     headers = {
         "Content-Type": "application/json",
@@ -243,9 +246,11 @@ async def exchange_meta_code(
 
     if existing_number:
         if existing_number.customer_id != current_customer.id:
+            other_c = db.query(Customer).filter(Customer.id == existing_number.customer_id).first()
+            other_name = other_c.company_name if other_c else f"Cliente #{existing_number.customer_id}"
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail="Este número telefónico ya está vinculado a otra cuenta."
+                detail=f"Este número telefónico ya está vinculado a otra cuenta: '{other_name}'. No es posible duplicar una línea entre diferentes empresas."
             )
         existing_number.waba_id = str(waba_id)
         existing_number.display_phone_number = display_phone_number
@@ -257,6 +262,23 @@ async def exchange_meta_code(
         db.refresh(existing_number)
         number_obj = existing_number
     else:
+        if display_phone_number:
+            clean_num = "".join(filter(str.isdigit, display_phone_number))
+            if len(clean_num) >= 10:
+                other_display = db.query(WhatsAppNumber).filter(
+                    WhatsAppNumber.display_phone_number.isnot(None),
+                    WhatsAppNumber.customer_id != current_customer.id
+                ).all()
+                for row in other_display:
+                    if row.display_phone_number:
+                        other_clean = "".join(filter(str.isdigit, row.display_phone_number))
+                        if other_clean and (other_clean == clean_num or other_clean.endswith(clean_num[-10:]) or clean_num.endswith(other_clean[-10:])):
+                            other_c = db.query(Customer).filter(Customer.id == row.customer_id).first()
+                            other_name = other_c.company_name if other_c else f"Cliente #{row.customer_id}"
+                            raise HTTPException(
+                                status_code=status.HTTP_409_CONFLICT,
+                                detail=f"La línea '{display_phone_number}' ya está registrada en la cuenta: '{other_name}'. Cada número sólo puede pertenecer a un cliente."
+                            )
         number_obj = WhatsAppNumber(
             customer_id=current_customer.id,
             phone_number_id=str(phone_number_id),

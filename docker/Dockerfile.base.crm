@@ -1,0 +1,19 @@
+# ==============================================================================
+# IQISSMexico - CRM Base Image
+# Pre-installed Node.js 22 + pnpm dependencies for CRM
+# ==============================================================================
+FROM node:22-alpine
+
+# Install build dependencies for native node modules
+RUN apk add --no-cache libc6-compat python3 make g++
+
+WORKDIR /app
+RUN corepack enable
+
+# Copy package descriptors from crm directory
+COPY crm/package.json crm/pnpm-lock.yaml crm/pnpm-workspace.yaml ./
+
+# Install all production and dev dependencies cleanly with pnpm
+RUN pnpm install --no-frozen-lockfile
+
+CMD ["node"]

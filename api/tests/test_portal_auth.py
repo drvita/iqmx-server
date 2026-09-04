@@ -40,7 +40,12 @@ class TestPortalAuth(unittest.TestCase):
 
         token = data_reg["access_token"]
 
-        # 2. Verificar perfil /me con el token
+        # 2. Verificar que el cliente recién registrado NO tenga membresías automáticas
+        res_subs = self.client.get("/api/portal/subscriptions/my", headers={"Authorization": f"Bearer {token}"})
+        self.assertEqual(res_subs.status_code, 200)
+        self.assertEqual(len(res_subs.json()), 0, "El cliente recién registrado debe iniciar con 0 membresías")
+
+        # 3. Verificar perfil /me con el token
         res_me = self.client.get("/api/portal/auth/me", headers={"Authorization": f"Bearer {token}"})
         self.assertEqual(res_me.status_code, 200)
         data_me = res_me.json()

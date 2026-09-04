@@ -11,8 +11,10 @@ ENV PYTHONUNBUFFERED=1
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar código fuente y configuración de migraciones Alembic
+# Copiar código fuente, utilidades CLI y configuración de migraciones Alembic
 COPY app/ /app/app/
+COPY scripts/ /app/scripts/
+COPY manage.py /app/manage.py
 COPY alembic/ /app/alembic/
 COPY alembic.ini /app/alembic.ini
 COPY run.py /app/run.py

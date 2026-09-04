@@ -13,6 +13,7 @@ DOCKER_USER="drvita1982"
 TAG="latest"
 BUILD_FRONTEND=false
 BUILD_BACKEND=false
+BUILD_CRM=false
 PUSH=true
 PLATFORMS="linux/amd64,linux/arm64"
 
@@ -20,15 +21,17 @@ print_usage() {
     echo "Uso: $0 [OPCIONES]"
     echo ""
     echo "Opciones:"
-    echo "  -a, --all        Compilar y publicar todas las imágenes base (Frontend y Backend)"
+    echo "  -a, --all        Compilar y publicar todas las imágenes base (Frontend, Backend y CRM)"
     echo "  -f, --frontend   Compilar y publicar únicamente la imagen base de Frontend"
     echo "  -b, --backend    Compilar y publicar únicamente la imagen base de Backend"
+    echo "  -c, --crm        Compilar y publicar únicamente la imagen base de CRM"
     echo "  -t, --tag <tag>  Especificar tag de imagen (por defecto: latest)"
     echo "  --no-push        Compilar localmente sin hacer push a Docker Hub"
     echo "  -h, --help       Mostrar esta ayuda"
     echo ""
     echo "Ejemplos:"
     echo "  $0 --all"
+    echo "  $0 -c"
     echo "  $0 -f -t v1.0.0"
     echo "  $0 -b --no-push"
 }
@@ -37,6 +40,7 @@ print_usage() {
 if [ $# -eq 0 ]; then
     BUILD_FRONTEND=true
     BUILD_BACKEND=true
+    BUILD_CRM=true
 fi
 
 while [[ $# -gt 0 ]]; do
@@ -44,6 +48,7 @@ while [[ $# -gt 0 ]]; do
         -a|--all)
             BUILD_FRONTEND=true
             BUILD_BACKEND=true
+            BUILD_CRM=true
             shift
             ;;
         -f|--frontend)
@@ -52,6 +57,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         -b|--backend)
             BUILD_BACKEND=true
+            shift
+            ;;
+        -c|--crm)
+            BUILD_CRM=true
             shift
             ;;
         -t|--tag)
@@ -138,6 +147,32 @@ if [ "$BUILD_BACKEND" = true ]; then
     fi
 
     echo "✅ Backend base compilado exitosamente: $BACKEND_IMAGE"
+fi
+
+# Build CRM Base Image
+if [ "$BUILD_CRM" = true ]; then
+    CRM_IMAGE="$DOCKER_USER/iqmx-crm-base:$TAG"
+    echo "================================================================"
+    echo " Compilando Imagen Base CRM (Node 22 + pnpm): $CRM_IMAGE"
+    echo " Plataformas: $PLATFORMS | Push: $PUSH"
+    echo "================================================================"
+
+    if [ "$PUSH" = true ]; then
+        docker buildx build \
+            --platform "$PLATFORMS" \
+            -t "$CRM_IMAGE" \
+            -f "$REPO_DIR/docker/Dockerfile.base.crm" \
+            --push \
+            "$REPO_DIR"
+    else
+        docker buildx build \
+            -t "$CRM_IMAGE" \
+            -f "$REPO_DIR/docker/Dockerfile.base.crm" \
+            --load \
+            "$REPO_DIR"
+    fi
+
+    echo "✅ CRM base compilado exitosamente: $CRM_IMAGE"
 fi
 
 echo "================================================================"

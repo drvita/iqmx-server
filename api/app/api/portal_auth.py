@@ -11,6 +11,9 @@ from app.models.user import User
 from app.models.role import Role
 from app.models.customer import Customer
 from app.models.customer_webhook import CustomerWebhook
+from app.models.customer_subscription import CustomerSubscription
+from app.models.membership_plan import MembershipPlan
+from app.services.subscription_service import calculate_period_end_for_new
 from app.lib.security import (
     hash_password,
     verify_password,

@@ -13,15 +13,14 @@ export default function ClientLayout({
     const pathname = usePathname();
     const isLandingPage = pathname?.startsWith('/landingpage');
     const isPortal = pathname?.startsWith('/portal');
+    const isAdmin = pathname?.startsWith('/admin');
 
-    if (isPortal) {
+    // El portal de clientes y el panel de administración cuentan con sus propios layouts dedicados
+    if (isPortal || isAdmin) {
         return (
-            <>
-                <main className="flex-grow min-h-screen">
-                    {children}
-                </main>
-                <CookieConsent />
-            </>
+            <main className="flex-grow min-h-screen">
+                {children}
+            </main>
         );
     }
 
