@@ -1,9 +1,19 @@
+import os
+import sys
+import logging
+import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
-import sentry_sdk
-import os
+
+# Configurar logging unificado para Docker y Uvicorn
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+logger = logging.getLogger("uvicorn.error")
 
 from app.config import settings
 from app.limiter import limiter

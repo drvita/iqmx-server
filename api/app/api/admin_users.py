@@ -111,6 +111,7 @@ def list_system_users(
     return [build_system_user_response(u, db) for u in users]
 
 @router.post("", response_model=SystemUserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", response_model=SystemUserResponse, status_code=status.HTTP_201_CREATED, include_in_schema=False)
 def create_system_user(
     req: CreateSystemUserRequest,
     db: Session = Depends(get_db),

@@ -59,6 +59,13 @@ class CreateProductRequest(BaseModel):
     service_url: Optional[str] = None
     provision_endpoint: str = "/api/provision"
 
+class UpdateProductRequest(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    service_url: Optional[str] = None
+    provision_endpoint: Optional[str] = None
+    is_active: Optional[bool] = None
+
 class CreatePlanRequest(BaseModel):
     product_id: int
     name: str = Field(..., min_length=2, max_length=100)
@@ -134,6 +141,43 @@ def create_product(
         provision_endpoint=product.provision_endpoint,
         is_active=product.is_active,
         plans_count=0
+    )
+
+@router.patch("/products/{product_id}", response_model=ProductResponse)
+def update_product(
+    product_id: int,
+    req: UpdateProductRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    """Actualiza la configuración de un producto del catálogo (nombre, descripción, service_url, etc.)."""
+    product = db.query(Product).filter(Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Producto no encontrado.")
+
+    if req.name is not None:
+        product.name = req.name.strip()
+    if req.description is not None:
+        product.description = req.description.strip() if req.description else None
+    if req.service_url is not None:
+        product.service_url = req.service_url.strip() if req.service_url else None
+    if req.provision_endpoint is not None:
+        product.provision_endpoint = req.provision_endpoint.strip() if req.provision_endpoint else None
+    if req.is_active is not None:
+        product.is_active = req.is_active
+
+    db.commit()
+    db.refresh(product)
+
+    return ProductResponse(
+        id=product.id,
+        slug=product.slug,
+        name=product.name,
+        description=product.description,
+        service_url=product.service_url,
+        provision_endpoint=product.provision_endpoint,
+        is_active=product.is_active,
+        plans_count=len(product.plans)
     )
 
 @router.get("/plans", response_model=List[MembershipPlanResponse])

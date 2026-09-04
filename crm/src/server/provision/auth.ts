@@ -8,7 +8,7 @@ export type ProvisionAuthResult =
   | { ok: true }
   | { ok: false; status: number; error: string };
 
-function getClientIp(req: Request): string {
+export function getClientIp(req: Request): string {
   const forwarded = req.headers.get("x-forwarded-for");
   if (forwarded) {
     return forwarded.split(",")[0]?.trim() || "unknown";

@@ -1,7 +1,15 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { PlusIcon, CubeIcon, CodeBracketIcon } from '@heroicons/react/24/outline';
+import {
+  PlusIcon,
+  CubeIcon,
+  CodeBracketIcon,
+  PencilSquareIcon,
+  GlobeAltIcon,
+  ArrowTopRightOnSquareIcon,
+  CheckCircleIcon,
+} from '@heroicons/react/24/outline';
 
 type Product = {
   id: number;
@@ -9,6 +17,7 @@ type Product = {
   name: string;
   description: string | null;
   service_url: string | null;
+  provision_endpoint?: string | null;
   is_active: boolean;
   plans_count: number;
 };
@@ -57,6 +66,18 @@ export default function AdminProductsPage() {
   });
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [savingPlan, setSavingPlan] = useState(false);
+
+  // Modal para Editar Producto (service_url, provision_endpoint, etc.)
+  const [isEditProductModalOpen, setIsEditProductModalOpen] = useState(false);
+  const [editProductForm, setEditProductForm] = useState({
+    name: '',
+    description: '',
+    service_url: '',
+    provision_endpoint: '',
+    is_active: true,
+  });
+  const [productError, setProductError] = useState<string | null>(null);
+  const [savingProduct, setSavingProduct] = useState(false);
 
   const fetchData = useCallback(async () => {
     const token = localStorage.getItem('iqmx_admin_token');
@@ -140,6 +161,60 @@ export default function AdminProductsPage() {
     }
   };
 
+  const handleOpenEditProduct = () => {
+    const prod = products.find((p) => p.id === selectedProductId);
+    if (!prod) return;
+    setEditProductForm({
+      name: prod.name,
+      description: prod.description || '',
+      service_url: prod.service_url || '',
+      provision_endpoint: prod.provision_endpoint || '/api/provision',
+      is_active: prod.is_active,
+    });
+    setProductError(null);
+    setIsEditProductModalOpen(true);
+  };
+
+  const handleUpdateProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedProductId) return;
+    setSavingProduct(true);
+    setProductError(null);
+
+    try {
+      const token = localStorage.getItem('iqmx_admin_token');
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+      const res = await fetch(`${apiUrl}/api/admin/catalog/products/${selectedProductId}`, {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          name: editProductForm.name.trim(),
+          description: editProductForm.description.trim() || null,
+          service_url: editProductForm.service_url.trim() || null,
+          provision_endpoint: editProductForm.provision_endpoint.trim() || null,
+          is_active: editProductForm.is_active,
+        }),
+      });
+
+      if (res.ok) {
+        setIsEditProductModalOpen(false);
+        await fetchData();
+      } else {
+        const d = await res.json();
+        setProductError(d.detail || 'Error al actualizar el producto.');
+      }
+    } catch {
+      setProductError('Error de red al comunicarse con el servidor.');
+    } finally {
+      setSavingProduct(false);
+    }
+  };
+
+  const currentProduct = products.find((p) => p.id === selectedProductId);
+
   const filteredPlans = selectedProductId
     ? plans.filter((p) => p.product_id === selectedProductId)
     : plans;
@@ -185,6 +260,56 @@ export default function AdminProductsPage() {
           </button>
         ))}
       </div>
+
+      {/* Detalle y Configuración del Producto Seleccionado */}
+      {currentProduct && (
+        <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-bold text-gray-900">{currentProduct.name}</span>
+              <span className="rounded bg-gray-100 px-2 py-0.5 text-[11px] font-mono text-gray-600">
+                slug: {currentProduct.slug}
+              </span>
+              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                currentProduct.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'
+              }`}>
+                {currentProduct.is_active ? 'Activo' : 'Inactivo'}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600 border-t sm:border-t-0 sm:border-l sm:border-gray-200 sm:pl-4 pt-2 sm:pt-0">
+              <div className="flex items-center gap-1.5">
+                <GlobeAltIcon className="h-4 w-4 text-gray-400 shrink-0" />
+                <span className="text-gray-500">URL del Servicio (Navegador):</span>
+                {currentProduct.service_url ? (
+                  <a
+                    href={currentProduct.service_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-blue-600 hover:underline inline-flex items-center gap-0.5"
+                  >
+                    <span>{currentProduct.service_url}</span>
+                    <ArrowTopRightOnSquareIcon className="h-3 w-3" />
+                  </a>
+                ) : (
+                  <span className="italic text-gray-400">Sin URL configurada</span>
+                )}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-500">Endpoint M2M:</span>
+                <span className="font-mono text-gray-700">{currentProduct.provision_endpoint || '/api/provision'}</span>
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={handleOpenEditProduct}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-white border border-gray-200 px-3.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 shadow-xs transition-colors shrink-0"
+          >
+            <PencilSquareIcon className="h-4 w-4 text-gray-500" />
+            <span>Editar Producto y URLs</span>
+          </button>
+        </div>
+      )}
 
       {/* Grid Claro de Planes */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -349,6 +474,116 @@ export default function AdminProductsPage() {
                   className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
                   {savingPlan ? 'Guardando…' : 'Crear Plan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para Editar Producto */}
+      {isEditProductModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <PencilSquareIcon className="h-5 w-5 text-blue-600" />
+                <span>Configurar Producto ({currentProduct?.name})</span>
+              </h3>
+              <button
+                onClick={() => setIsEditProductModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 text-lg leading-none"
+              >
+                &times;
+              </button>
+            </div>
+
+            {productError && (
+              <div className="mt-3 rounded-lg bg-red-50 p-3 text-xs text-red-700 border border-red-200">
+                {productError}
+              </div>
+            )}
+
+            <form onSubmit={handleUpdateProduct} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700">Nombre del Producto</label>
+                <input
+                  type="text"
+                  required
+                  value={editProductForm.name}
+                  onChange={(e) => setEditProductForm({ ...editProductForm, name: e.target.value })}
+                  placeholder="IQMX CRM Oficial"
+                  className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700">
+                  URL del Servicio (para Redirección del Navegador / Clientes)
+                </label>
+                <input
+                  type="url"
+                  value={editProductForm.service_url}
+                  onChange={(e) => setEditProductForm({ ...editProductForm, service_url: e.target.value })}
+                  placeholder="https://crm.iqissmexico.com"
+                  className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                />
+                <p className="mt-1 text-[11px] text-gray-500">
+                  Esta es la URL pública que verán los clientes en el portal para ingresar al microservicio.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700">
+                  Endpoint Interno de Aprovisionamiento (M2M)
+                </label>
+                <input
+                  type="text"
+                  value={editProductForm.provision_endpoint}
+                  onChange={(e) => setEditProductForm({ ...editProductForm, provision_endpoint: e.target.value })}
+                  placeholder="/api/provision/tenant"
+                  className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 font-mono focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700">Descripción</label>
+                <textarea
+                  rows={2}
+                  value={editProductForm.description}
+                  onChange={(e) => setEditProductForm({ ...editProductForm, description: e.target.value })}
+                  placeholder="Descripción comercial o técnica..."
+                  className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <input
+                  type="checkbox"
+                  id="product_is_active"
+                  checked={editProductForm.is_active}
+                  onChange={(e) => setEditProductForm({ ...editProductForm, is_active: e.target.checked })}
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+                <label htmlFor="product_is_active" className="text-xs font-medium text-gray-700">
+                  Producto Activo en Catálogo
+                </label>
+              </div>
+
+              <div className="mt-6 flex justify-end gap-2 border-t border-gray-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsEditProductModalOpen(false)}
+                  className="rounded-lg px-3 py-2 text-xs font-semibold text-gray-500 hover:bg-gray-100 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingProduct}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {savingProduct ? 'Guardando…' : 'Guardar Cambios'}
                 </button>
               </div>
             </form>

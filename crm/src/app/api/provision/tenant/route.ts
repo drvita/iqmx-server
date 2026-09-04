@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { authenticateProvisionRequest } from "@/server/provision/auth";
+import { authenticateProvisionRequest, getClientIp } from "@/server/provision/auth";
 import { provisionTenant } from "@/server/provision/tenant";
 
 export const dynamic = "force-dynamic";
@@ -106,7 +106,7 @@ export async function POST(req: Request) {
       { status: statusCode }
     );
   } catch (err) {
-    console.error("[provision/tenant] Error al aprovisionar organización:", err);
+    console.error("[CRM PROVISION ERROR] Error al aprovisionar organización:", err);
     return Response.json(
       { ok: false, error: "Error interno al aprovisionar la organización." },
       { status: 500 }

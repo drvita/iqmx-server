@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { WhatsAppNumber, WhatsAppCredentials, FeedbackMessage } from './types';
+import React, { useState, useEffect, useCallback } from "react";
+import { WhatsAppNumber, WhatsAppCredentials, FeedbackMessage } from "./types";
 
 // Tipos para Facebook SDK
 export interface FBAuthResponse {
@@ -22,7 +22,7 @@ export interface FacebookSDK {
   }) => void;
   login: (
     callback: (response: FBAuthResponse) => void,
-    params: Record<string, unknown>
+    params: Record<string, unknown>,
   ) => void;
 }
 
@@ -50,7 +50,8 @@ export default function WhatsAppAccountsSection({
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [syncingId, setSyncingId] = useState<number | null>(null);
   const [loadingCredsId, setLoadingCredsId] = useState<number | null>(null);
-  const [credentialsModal, setCredentialsModal] = useState<WhatsAppCredentials | null>(null);
+  const [credentialsModal, setCredentialsModal] =
+    useState<WhatsAppCredentials | null>(null);
   const [copiedToken, setCopiedToken] = useState(false);
 
   // Inicializar SDK oficial de Meta v26.0
@@ -59,20 +60,20 @@ export default function WhatsAppAccountsSection({
 
     window.fbAsyncInit = function () {
       window.FB?.init({
-        appId: process.env.NEXT_PUBLIC_META_APP_ID || '1560064249064360',
+        appId: process.env.NEXT_PUBLIC_META_APP_ID || "1560064249064360",
         autoLogAppEvents: true,
         xfbml: true,
-        version: 'v26.0',
+        version: "v26.0",
       });
     };
 
-    if (!document.getElementById('facebook-jssdk')) {
-      const script = document.createElement('script');
-      script.id = 'facebook-jssdk';
-      script.src = 'https://connect.facebook.net/es_LA/sdk.js';
+    if (!document.getElementById("facebook-jssdk")) {
+      const script = document.createElement("script");
+      script.id = "facebook-jssdk";
+      script.src = "https://connect.facebook.net/es_LA/sdk.js";
       script.async = true;
       script.defer = true;
-      script.crossOrigin = 'anonymous';
+      script.crossOrigin = "anonymous";
       document.body.appendChild(script);
     }
   }, []);
@@ -84,8 +85,8 @@ export default function WhatsAppAccountsSection({
       onFeedback(null);
 
       try {
-        const res = await fetch('/api/portal/whatsapp/exchange', {
-          method: 'POST',
+        const res = await fetch("/api/portal/whatsapp/exchange", {
+          method: "POST",
           headers: getHeaders(),
           body: JSON.stringify({
             code,
@@ -96,54 +97,64 @@ export default function WhatsAppAccountsSection({
 
         const data = await res.json();
         if (!res.ok) {
-          throw new Error(data.detail || 'Error al vincular el número con el servidor central.');
+          throw new Error(
+            data.detail ||
+              "Error al vincular el número con el servidor central.",
+          );
         }
 
         onFeedback({
-          type: 'success',
+          type: "success",
           text: `¡Línea ${data.display_phone_number || data.phone_number_id} conectada exitosamente! Si tienes configurada la URL de aprovisionamiento, se sincronizará automáticamente con tu CRM.`,
         });
 
         await onRefreshData();
       } catch (err: unknown) {
         onFeedback({
-          type: 'error',
-          text: err instanceof Error ? err.message : 'Error inesperado durante la vinculación.',
+          type: "error",
+          text:
+            err instanceof Error
+              ? err.message
+              : "Error inesperado durante la vinculación.",
         });
       } finally {
         setConnectingMeta(false);
       }
     },
-    [getHeaders, onRefreshData, onFeedback]
+    [getHeaders, onRefreshData, onFeedback],
   );
 
   // Escuchar mensaje devuelto por ventana emergente
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
-      if (typeof event.data === 'string' && event.data.includes('WA_EMBEDDED_SIGNUP')) {
+      if (
+        typeof event.data === "string" &&
+        event.data.includes("WA_EMBEDDED_SIGNUP")
+      ) {
         try {
           const parsed = JSON.parse(event.data);
-          if (parsed.event === 'WA_EMBEDDED_SIGNUP' && parsed.data?.code) {
+          if (parsed.event === "WA_EMBEDDED_SIGNUP" && parsed.data?.code) {
             void processExchangeCode(
               parsed.data.code,
               parsed.data.waba_id,
-              parsed.data.phone_number_id
+              parsed.data.phone_number_id,
             );
           }
         } catch (e) {
-          console.error('Error parseando mensaje de Meta:', e);
+          console.error("Error parseando mensaje de Meta:", e);
         }
       }
     };
 
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
   }, [processExchangeCode]);
 
   // Lanzar Embedded Signup (SDK FB.login con fallback a OAuth directo)
   const launchWhatsAppSignup = () => {
-    const appId = process.env.NEXT_PUBLIC_META_APP_ID || '1560064249064360';
-    const configId = process.env.NEXT_PUBLIC_META_CONFIG_ID || '1361536738927806';
+    const appId = process.env.NEXT_PUBLIC_META_APP_ID || "1560064249064360";
+    const configId =
+      process.env.NEXT_PUBLIC_META_CONFIG_ID || "968187492720390";
 
     if (window.FB) {
       try {
@@ -152,24 +163,29 @@ export default function WhatsAppAccountsSection({
             if (response.authResponse?.code) {
               void processExchangeCode(response.authResponse.code);
             } else {
-              console.warn('FB.login cancelado o sin código. Abriendo ventana directa...');
+              console.warn(
+                "FB.login cancelado o sin código. Abriendo ventana directa...",
+              );
               launchDirectOAuthPopup(appId, configId);
             }
           },
           {
             config_id: configId,
-            response_type: 'code',
+            response_type: "code",
             override_default_response_type: true,
             extras: {
               setup: {},
-              featureType: '',
-              sessionInfoVersion: '3',
+              featureType: "whatsapp_business_app_onboarding",
+              sessionInfoVersion: "3",
             },
-          }
+          },
         );
         return;
       } catch (sdkErr) {
-        console.warn('Excepción en FB.login, recurriendo a ventana directa:', sdkErr);
+        console.warn(
+          "Excepción en FB.login, recurriendo a ventana directa:",
+          sdkErr,
+        );
       }
     }
 
@@ -194,8 +210,8 @@ export default function WhatsAppAccountsSection({
 
     window.open(
       oauthUrl,
-      'MetaWhatsAppSignup',
-      `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,status=1`
+      "MetaWhatsAppSignup",
+      `width=${width},height=${height},top=${top},left=${left},scrollbars=yes,status=1`,
     );
   };
 
@@ -205,24 +221,36 @@ export default function WhatsAppAccountsSection({
     onFeedback(null);
 
     try {
-      const res = await fetch(`/api/portal/whatsapp/numbers/${numberId}/provision`, {
-        method: 'POST',
-        headers: getHeaders(),
-      });
+      const res = await fetch(
+        `/api/portal/whatsapp/numbers/${numberId}/provision`,
+        {
+          method: "POST",
+          headers: getHeaders(),
+        },
+      );
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.detail || 'Error al aprovisionar la línea en el CRM.');
+        throw new Error(
+          data.detail || "Error al aprovisionar la línea en el CRM.",
+        );
       }
 
       onFeedback({
-        type: data.success ? 'success' : 'error',
-        text: data.message || (data.success ? 'Línea aprovisionada correctamente en tu CRM.' : 'El CRM rechazó la solicitud.'),
+        type: data.success ? "success" : "error",
+        text:
+          data.message ||
+          (data.success
+            ? "Línea aprovisionada correctamente en tu CRM."
+            : "El CRM rechazó la solicitud."),
       });
     } catch (err: unknown) {
       onFeedback({
-        type: 'error',
-        text: err instanceof Error ? err.message : 'Error al contactar con la URL de aprovisionamiento.',
+        type: "error",
+        text:
+          err instanceof Error
+            ? err.message
+            : "Error al contactar con la URL de aprovisionamiento.",
       });
     } finally {
       setSyncingId(null);
@@ -235,20 +263,28 @@ export default function WhatsAppAccountsSection({
     onFeedback(null);
 
     try {
-      const res = await fetch(`/api/portal/whatsapp/numbers/${numberId}/credentials`, {
-        headers: getHeaders(),
-      });
+      const res = await fetch(
+        `/api/portal/whatsapp/numbers/${numberId}/credentials`,
+        {
+          headers: getHeaders(),
+        },
+      );
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.detail || 'Error al obtener credenciales de la línea.');
+        throw new Error(
+          data.detail || "Error al obtener credenciales de la línea.",
+        );
       }
 
       setCredentialsModal(data);
     } catch (err: unknown) {
       onFeedback({
-        type: 'error',
-        text: err instanceof Error ? err.message : 'No fue posible cargar las credenciales.',
+        type: "error",
+        text:
+          err instanceof Error
+            ? err.message
+            : "No fue posible cargar las credenciales.",
       });
     } finally {
       setLoadingCredsId(null);
@@ -265,7 +301,11 @@ export default function WhatsAppAccountsSection({
 
   // Desvincular número
   const handleDeleteNumber = async (id: number) => {
-    if (!confirm('¿Estás seguro de que deseas desvincular esta línea telefónica de WhatsApp?')) {
+    if (
+      !confirm(
+        "¿Estás seguro de que deseas desvincular esta línea telefónica de WhatsApp?",
+      )
+    ) {
       return;
     }
 
@@ -274,25 +314,26 @@ export default function WhatsAppAccountsSection({
 
     try {
       const res = await fetch(`/api/portal/whatsapp/numbers/${id}`, {
-        method: 'DELETE',
+        method: "DELETE",
         headers: getHeaders(),
       });
 
       const data = await res.json();
       if (!res.ok) {
-        throw new Error(data.detail || 'Error al desvincular el número.');
+        throw new Error(data.detail || "Error al desvincular el número.");
       }
 
       onFeedback({
-        type: 'success',
-        text: 'La línea fue desvinculada exitosamente.',
+        type: "success",
+        text: "La línea fue desvinculada exitosamente.",
       });
 
       await onRefreshData();
     } catch (err: unknown) {
       onFeedback({
-        type: 'error',
-        text: err instanceof Error ? err.message : 'Error al desvincular la línea.',
+        type: "error",
+        text:
+          err instanceof Error ? err.message : "Error al desvincular la línea.",
       });
     } finally {
       setDeletingId(null);
@@ -307,7 +348,8 @@ export default function WhatsAppAccountsSection({
             Líneas Telefónicas de WhatsApp
           </h2>
           <p className="text-xs sm:text-sm text-gray-600 mt-1">
-            Conecta tus números de WhatsApp con opción de coexistencia para seguir usando la app en tu teléfono mientras se integran con tu CRM.
+            Conecta tus números de WhatsApp con opción de coexistencia para
+            seguir usando la app en tu teléfono mientras se integran con tu CRM.
           </p>
         </div>
 
@@ -318,7 +360,9 @@ export default function WhatsAppAccountsSection({
           className="inline-flex items-center justify-center space-x-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold shadow-sm transition-colors disabled:opacity-50 cursor-pointer whitespace-nowrap"
         >
           <span>💬</span>
-          <span>{connectingMeta ? 'Vinculando con Meta...' : 'Vincular Nueva Línea'}</span>
+          <span>
+            {connectingMeta ? "Vinculando con Meta..." : "Vincular Nueva Línea"}
+          </span>
         </button>
       </div>
 
@@ -330,7 +374,8 @@ export default function WhatsAppAccountsSection({
               No tienes ninguna línea de WhatsApp vinculada en este momento.
             </p>
             <p className="text-xs text-gray-400 mt-1">
-              Haz clic en "Vincular Nueva Línea" para registrar tu número oficial con Meta.
+              Haz clic en "Vincular Nueva Línea" para registrar tu número
+              oficial con Meta.
             </p>
           </div>
         ) : (
@@ -348,10 +393,13 @@ export default function WhatsAppAccountsSection({
               </thead>
               <tbody className="divide-y divide-gray-200 bg-white">
                 {numbers.map((num) => (
-                  <tr key={num.id} className="hover:bg-gray-50/80 transition-colors">
+                  <tr
+                    key={num.id}
+                    className="hover:bg-gray-50/80 transition-colors"
+                  >
                     <td className="px-4 py-3.5 font-medium text-gray-900">
                       <div>
-                        {num.display_phone_number || 'Línea Principal'}
+                        {num.display_phone_number || "Línea Principal"}
                         {num.verified_name && (
                           <span className="block text-xs font-normal text-gray-500">
                             {num.verified_name}
@@ -383,7 +431,9 @@ export default function WhatsAppAccountsSection({
                           className="text-xs font-semibold text-blue-700 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-lg border border-blue-200 transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
                           title="Aprovisionar y sincronizar esta línea en el CRM"
                         >
-                          {syncingId === num.id ? 'Enviando...' : 'Enviar al CRM'}
+                          {syncingId === num.id
+                            ? "Enviando..."
+                            : "Enviar al CRM"}
                         </button>
 
                         {/* Botón Ver Credenciales */}
@@ -394,7 +444,9 @@ export default function WhatsAppAccountsSection({
                           className="text-xs font-medium text-gray-700 hover:text-gray-900 bg-gray-50 hover:bg-gray-100 px-3 py-1.5 rounded-lg border border-gray-200 transition-colors cursor-pointer whitespace-nowrap"
                           title="Ver datos y token de acceso para configuración manual"
                         >
-                          {loadingCredsId === num.id ? 'Cargando...' : 'Credenciales'}
+                          {loadingCredsId === num.id
+                            ? "Cargando..."
+                            : "Credenciales"}
                         </button>
 
                         {/* Botón Desvincular */}
@@ -404,7 +456,9 @@ export default function WhatsAppAccountsSection({
                           disabled={deletingId === num.id}
                           className="text-xs font-medium text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-lg border border-red-200 transition-colors cursor-pointer disabled:opacity-50 whitespace-nowrap"
                         >
-                          {deletingId === num.id ? 'Desvinculando...' : 'Desvincular'}
+                          {deletingId === num.id
+                            ? "Desvinculando..."
+                            : "Desvincular"}
                         </button>
                       </div>
                     </td>
@@ -426,7 +480,8 @@ export default function WhatsAppAccountsSection({
                   Credenciales de la Línea
                 </h3>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  Utiliza estos datos para configurar manualmente tu CRM si lo requieres.
+                  Utiliza estos datos para configurar manualmente tu CRM si lo
+                  requieres.
                 </p>
               </div>
               <button
@@ -470,7 +525,7 @@ export default function WhatsAppAccountsSection({
                 <input
                   type="text"
                   readOnly
-                  value={`${credentialsModal.verified_name || ''} (${credentialsModal.display_phone_number || ''})`}
+                  value={`${credentialsModal.verified_name || ""} (${credentialsModal.display_phone_number || ""})`}
                   className="w-full bg-gray-50 border border-gray-300 rounded-lg px-3 py-2 text-gray-800 select-all"
                 />
               </div>
@@ -485,7 +540,7 @@ export default function WhatsAppAccountsSection({
                     onClick={handleCopyToken}
                     className="text-[11px] font-sans font-semibold text-blue-600 hover:text-blue-700 cursor-pointer"
                   >
-                    {copiedToken ? '¡Copiado!' : 'Copiar Token'}
+                    {copiedToken ? "¡Copiado!" : "Copiar Token"}
                   </button>
                 </div>
                 <textarea

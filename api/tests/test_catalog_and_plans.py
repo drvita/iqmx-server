@@ -130,5 +130,26 @@ class TestCatalogAndPlans(unittest.TestCase):
         trial = next((p for p in res_with_free.json() if p["slug"] == "crm-trial"), None)
         self.assertIsNotNone(trial, "Con include_free=true debe retornarse el plan crm-trial")
 
+    def test_admin_patch_product_service_url(self):
+        """Verifica que el admin pueda actualizar service_url y metadatos de un producto vía PATCH."""
+        prod = self.db.query(Product).filter(Product.slug == "crm").first()
+        self.assertIsNotNone(prod)
+
+        original_url = prod.service_url
+        new_url = "https://crm.iqissmexico.com"
+
+        res = self.client.patch(f"/api/admin/catalog/products/{prod.id}", headers=self.headers, json={
+            "service_url": new_url,
+            "provision_endpoint": "/api/provision/tenant"
+        })
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertEqual(data["service_url"], new_url)
+        self.assertEqual(data["provision_endpoint"], "/api/provision/tenant")
+
+        # Restaurar url original
+        prod.service_url = original_url
+        self.db.commit()
+
 if __name__ == "__main__":
     unittest.main()

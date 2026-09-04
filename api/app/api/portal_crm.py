@@ -202,17 +202,17 @@ async def register_crm_account(
             }
             res = await client.post(provision_endpoint, json=payload, headers=headers)
             if res.status_code not in (200, 201):
-                logger.error(f"Fallo al aprovisionar tenant en CRM: {res.status_code} {res.text}")
+                logger.error(f"Fallo al aprovisionar tenant en CRM: HTTP {res.status_code} - {res.text}")
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
                     detail=f"El servicio CRM rechazó el registro: {res.text}"
                 )
             crm_res = res.json()
     except httpx.RequestError as exc:
-        logger.error(f"Error de red contactando servicio CRM en {provision_endpoint}: {exc}")
+        logger.error(f"Error de red contactando servicio CRM en '{provision_endpoint}': {type(exc).__name__} - {exc}")
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="No fue posible comunicarse con el servicio CRM. Intente nuevamente en unos momentos."
+            detail=f"No fue posible comunicarse con el servicio CRM en '{provision_endpoint}': {type(exc).__name__} - {exc}"
         )
 
     org_data = crm_res.get("organization", {})

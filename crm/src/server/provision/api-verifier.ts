@@ -93,13 +93,9 @@ export async function verifyApiSecretWithCentral(
 
       return isValid;
     }
-
-    console.warn(
-      `[api-verifier] API central respondió código ${res.status} al verificar secreto.`
-    );
   } catch (err: unknown) {
-    console.warn(
-      `[api-verifier] No fue posible contactar a la API central en ${endpoint}:`,
+    console.error(
+      `[CRM API-VERIFIER] Error de red contactando API central en '${endpoint}':`,
       err instanceof Error ? err.message : err
     );
   }
@@ -107,9 +103,6 @@ export async function verifyApiSecretWithCentral(
   // 3. Fallback secundario de contingencia: validar contra clave local si existe
   const localSecret = getLocalSecretFallback();
   if (localSecret && safeCompare(trimmedToken, localSecret)) {
-    console.info(
-      `[api-verifier] Token validado exitosamente mediante fallback local.`
-    );
     return true;
   }
 
