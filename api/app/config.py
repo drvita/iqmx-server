@@ -46,6 +46,7 @@ class Settings(BaseSettings):
     MERCADOPAGO_ACCESS_TOKEN: str | None = None
     MERCADOPAGO_PUBLIC_KEY: str | None = None
     MERCADOPAGO_WEBHOOK_SECRET: str | None = None
+    MERCADOPAGO_TEST_PAYER_EMAIL: str | None = None
 
     # Microservicio CRM (Aprovisionamiento y Control M2M)
     CRM_SERVICE_URL: str = "http://crm:3000"
@@ -57,6 +58,19 @@ class Settings(BaseSettings):
             return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
         # SQLite por defecto
         return f"sqlite:///{self.SQLITE_DB_PATH}"
+
+    @property
+    def mercadopago_resolved_test_payer_email(self) -> str | None:
+        if not self.MERCADOPAGO_TEST_PAYER_EMAIL:
+            return None
+        cleaned = self.MERCADOPAGO_TEST_PAYER_EMAIL.strip()
+        if "@" not in cleaned:
+            # Convierte TESTUSER1968490994194015693 en test_user_1968490994194015693@testuser.com
+            digits = "".join(filter(str.isdigit, cleaned))
+            if digits:
+                return f"test_user_{digits}@testuser.com"
+            return f"{cleaned.lower()}@testuser.com"
+        return cleaned.lower()
 
     @model_validator(mode="after")
     def validate_configurations(self) -> "Settings":

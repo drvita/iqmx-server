@@ -6,6 +6,8 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { getCheckoutIntent, CheckoutIntent } from '@/utils/checkoutIntent';
 import { ShoppingBagIcon } from '@heroicons/react/24/outline';
+import { CheckCircleIcon } from '@heroicons/react/20/solid';
+import { GuestGuard } from '@/components/AuthGuard';
 
 export default function PortalRegisterPage() {
   const router = useRouter();
@@ -21,6 +23,32 @@ export default function PortalRegisterPage() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [pendingIntent, setPendingIntent] = useState<CheckoutIntent | null>(null);
+
+  // Validación de requisitos de contraseña
+  const password = formData.password;
+  const hasMinLength = password.length >= 8;
+  const hasUpper = /[A-Z]/.test(password);
+  const hasLower = /[a-z]/.test(password);
+  const hasNumber = /[0-9]/.test(password);
+  const criteriaMetCount = [hasMinLength, hasUpper, hasLower, hasNumber].filter(Boolean).length;
+  const isPasswordSecure = criteriaMetCount === 4;
+
+  const getStrengthInfo = () => {
+    if (!password) return { label: '', color: 'bg-gray-200', textCol: 'text-gray-400', width: '0%' };
+    switch (criteriaMetCount) {
+      case 1:
+        return { label: 'Débil', color: 'bg-red-500', textCol: 'text-red-600', width: '25%' };
+      case 2:
+        return { label: 'Regular', color: 'bg-orange-500', textCol: 'text-orange-600', width: '50%' };
+      case 3:
+        return { label: 'Buena', color: 'bg-amber-500', textCol: 'text-amber-600', width: '75%' };
+      case 4:
+        return { label: 'Segura', color: 'bg-emerald-600', textCol: 'text-emerald-700', width: '100%' };
+      default:
+        return { label: '', color: 'bg-gray-200', textCol: 'text-gray-400', width: '0%' };
+    }
+  };
+  const strength = getStrengthInfo();
 
   useEffect(() => {
     const intent = getCheckoutIntent();
@@ -43,6 +71,11 @@ export default function PortalRegisterPage() {
 
     if (!formData.privacy_accepted) {
       setErrorMsg('Debes leer y aceptar el Aviso de Privacidad y Términos de Servicio.');
+      return;
+    }
+
+    if (!isPasswordSecure) {
+      setErrorMsg('La contraseña no cumple con todos los requisitos de seguridad (8+ caracteres, mayúscula, minúscula y número).');
       return;
     }
 
@@ -83,7 +116,8 @@ export default function PortalRegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans text-gray-900">
+    <GuestGuard role="customer">
+      <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans text-gray-900">
       <div className="sm:mx-auto sm:w-full sm:max-w-md flex flex-col items-center text-center">
         <Link href="/" className="inline-flex justify-center mb-2">
           <Image
@@ -198,17 +232,68 @@ export default function PortalRegisterPage() {
                   type="password"
                   name="password"
                   required
-                  minLength={6}
+                  minLength={8}
                   value={formData.password}
                   onChange={handleChange}
-                  placeholder="Mínimo 6 caracteres"
+                  placeholder="Mínimo 8 caracteres"
                   className="mt-1.5 block w-full rounded-lg bg-white border border-gray-300 px-3.5 py-2 text-gray-900 placeholder-gray-400 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 text-sm transition-colors"
                 />
               </div>
             </div>
 
+            {/* Indicador de Fortaleza y Requisitos de Contraseña */}
+            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3.5 space-y-2.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-slate-700">Nivel de seguridad:</span>
+                <span className={`font-bold ${strength.textCol}`}>
+                  {strength.label || 'Ingresa una contraseña'}
+                </span>
+              </div>
+              <div className="h-1.5 w-full bg-slate-200 rounded-full overflow-hidden">
+                <div
+                  className={`h-full ${strength.color} transition-all duration-300`}
+                  style={{ width: strength.width }}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1 text-xs">
+                <div className={`flex items-center gap-1.5 ${hasMinLength ? 'text-emerald-700 font-medium' : 'text-slate-500'}`}>
+                  {hasMinLength ? (
+                    <CheckCircleIcon className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  ) : (
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300 ml-1.5 mr-1 flex-shrink-0" />
+                  )}
+                  <span>Mínimo 8 caracteres</span>
+                </div>
+                <div className={`flex items-center gap-1.5 ${hasUpper ? 'text-emerald-700 font-medium' : 'text-slate-500'}`}>
+                  {hasUpper ? (
+                    <CheckCircleIcon className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  ) : (
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300 ml-1.5 mr-1 flex-shrink-0" />
+                  )}
+                  <span>Al menos 1 mayúscula (A-Z)</span>
+                </div>
+                <div className={`flex items-center gap-1.5 ${hasLower ? 'text-emerald-700 font-medium' : 'text-slate-500'}`}>
+                  {hasLower ? (
+                    <CheckCircleIcon className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  ) : (
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300 ml-1.5 mr-1 flex-shrink-0" />
+                  )}
+                  <span>Al menos 1 minúscula (a-z)</span>
+                </div>
+                <div className={`flex items-center gap-1.5 ${hasNumber ? 'text-emerald-700 font-medium' : 'text-slate-500'}`}>
+                  {hasNumber ? (
+                    <CheckCircleIcon className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+                  ) : (
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-300 ml-1.5 mr-1 flex-shrink-0" />
+                  )}
+                  <span>Al menos 1 número (0-9)</span>
+                </div>
+              </div>
+            </div>
+
             {/* Aceptación obligatoria de Aviso de Privacidad y Términos */}
-            <div className="pt-2">
+            <div className="pt-1">
               <label className="flex items-start space-x-3 cursor-pointer">
                 <input
                   type="checkbox"
@@ -242,8 +327,9 @@ export default function PortalRegisterPage() {
 
             <button
               type="submit"
-              disabled={loading}
-              className="w-full mt-4 flex justify-center py-2.5 px-4 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-sm transition-colors disabled:opacity-50 cursor-pointer"
+              disabled={loading || !isPasswordSecure}
+              title={!isPasswordSecure ? 'Cumple con los 4 requisitos de contraseña para continuar' : undefined}
+              className="w-full mt-4 flex justify-center py-2.5 px-4 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {loading ? 'Creando cuenta...' : 'Crear Cuenta y Continuar'}
             </button>
@@ -261,5 +347,6 @@ export default function PortalRegisterPage() {
         </div>
       </div>
     </div>
-  );
+  </GuestGuard>
+);
 }

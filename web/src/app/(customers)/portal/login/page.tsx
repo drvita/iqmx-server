@@ -6,6 +6,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { getCheckoutIntent, CheckoutIntent } from '@/utils/checkoutIntent';
 import { ShoppingBagIcon } from '@heroicons/react/24/outline';
+import { GuestGuard } from '@/components/AuthGuard';
 
 export default function PortalLoginPage() {
   const router = useRouter();
@@ -85,7 +86,8 @@ export default function PortalLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans text-gray-900">
+    <GuestGuard role="customer">
+      <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans text-gray-900">
       <div className="sm:mx-auto sm:w-full sm:max-w-md flex flex-col items-center text-center">
         <Link href="/" className="inline-flex justify-center mb-2">
           <Image
@@ -194,5 +196,6 @@ export default function PortalLoginPage() {
         </div>
       </div>
     </div>
-  );
+  </GuestGuard>
+);
 }

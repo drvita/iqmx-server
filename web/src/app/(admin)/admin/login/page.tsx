@@ -5,6 +5,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { ShieldCheckIcon, KeyIcon } from '@heroicons/react/24/outline';
+import { GuestGuard } from '@/components/AuthGuard';
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -15,13 +16,8 @@ export default function AdminLoginPage() {
   const [setupRequired, setSetupRequired] = useState(false);
 
   useEffect(() => {
-    const token = localStorage.getItem('iqmx_admin_token');
-    if (token) {
-      router.push('/admin/dashboard');
-      return;
-    }
-
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+
     fetch(`${apiUrl}/api/admin/auth/status`)
       .then((r) => (r.ok ? r.json() : null))
       .then((data) => {
@@ -30,7 +26,7 @@ export default function AdminLoginPage() {
         }
       })
       .catch(() => null);
-  }, [router]);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,7 +62,8 @@ export default function AdminLoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 text-gray-900 font-sans">
+    <GuestGuard role="admin">
+      <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 text-gray-900 font-sans">
       <div className="sm:mx-auto sm:w-full sm:max-w-md flex flex-col items-center text-center">
         <Link href="/" className="inline-flex justify-center mb-4">
           <Image
@@ -156,5 +153,6 @@ export default function AdminLoginPage() {
         </div>
       </div>
     </div>
-  );
+  </GuestGuard>
+);
 }

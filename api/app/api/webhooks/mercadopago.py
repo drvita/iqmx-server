@@ -32,48 +32,91 @@ async def receive_mercadopago_webhook(
     except Exception:
         body = {}
 
-    topic = request.query_params.get("topic") or body.get("type") or body.get("topic")
-    resource_id = request.query_params.get("id") or body.get("data", {}).get("id")
+    topic = (
+        request.query_params.get("type")
+        or request.query_params.get("topic")
+        or (body.get("type") if isinstance(body, dict) else None)
+        or (body.get("topic") if isinstance(body, dict) else None)
+        or (body.get("action") if isinstance(body, dict) else None)
+    )
+    resource_id = (
+        request.query_params.get("data.id")
+        or request.query_params.get("id")
+        or (body.get("data", {}).get("id") if isinstance(body, dict) and isinstance(body.get("data"), dict) else None)
+        or (body.get("id") if isinstance(body, dict) else None)
+    )
 
     logger.info(f"Webhook recibido de Mercado Pago: topic={topic}, id={resource_id}")
 
-    # Si es evento de suscripción (preapproval)
-    if topic in ["subscription_preapproval", "preapproval"] and resource_id:
-        # Consultar estado en Mercado Pago
-        mp_token = settings.MERCADOPAGO_ACCESS_TOKEN
-        if mp_token:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                res = await client.get(
-                    f"https://api.mercadopago.com/preapproval/{resource_id}",
-                    headers={"Authorization": f"Bearer {mp_token}"}
-                )
-                if res.status_code == 200:
-                    mp_data = res.json()
-                    mp_status = mp_data.get("status")  # 'authorized', 'paused', 'cancelled'
-                    ext_ref = mp_data.get("external_reference") or ""
+    mp_token = settings.MERCADOPAGO_ACCESS_TOKEN
+    if not mp_token or not resource_id:
+        return {"status": "ok"}
 
-                    # Buscar suscripción por mp_preapproval_id o external_reference
-                    sub = db.query(CustomerSubscription).filter(
-                        (CustomerSubscription.mp_preapproval_id == str(resource_id)) |
-                        (CustomerSubscription.id == int(ext_ref.split("_")[1])) if "sub_" in ext_ref else False
-                    ).first()
+    preapproval_id = None
 
-                    if sub:
-                        if mp_status == "authorized":
-                            # Procesar activación respetando Upgrade vs Downgrade y cálculo de vigencia
-                            act_result = process_subscription_payment_activation(db, sub)
-                            logger.info(f"Suscripción #{sub.id} procesada por Mercado Pago: {act_result['action']}")
+    # CASO A: Cobro recurrente de suscripción (authorized_payment)
+    if topic in ["subscription_authorized_payment", "authorized_payment"]:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.get(
+                f"https://api.mercadopago.com/authorized_payments/{resource_id}",
+                headers={"Authorization": f"Bearer {mp_token}"}
+            )
+            if res.status_code == 200:
+                pay_data = res.json()
+                pay_status = pay_data.get("payment", {}).get("status") or pay_data.get("status")
+                preapproval_id = pay_data.get("preapproval_id")
+                if pay_status and pay_status != "approved":
+                    logger.info(f"Pago autorizado #{resource_id} no aprobado: {pay_status}")
+                    return {"status": "ok"}
+            else:
+                # Si falla como authorized_payment, probar si resource_id es preapproval_id
+                preapproval_id = str(resource_id)
 
-                            # Si fue activada inmediatamente (nueva o upgrade) y pertenece al CRM con tenant, sincronizar
-                            if act_result["action"] in ["activated_immediate", "upgrade_activated"]:
-                                if sub.plan and sub.plan.product and sub.plan.product.slug == "crm" and sub.external_tenant_id:
-                                    await _sync_features_to_crm(db, sub)
+    # CASO B: Evento de contrato de suscripción (preapproval) o fallback
+    elif topic in ["subscription_preapproval", "preapproval"] or not topic:
+        preapproval_id = str(resource_id)
 
-                        elif mp_status == "cancelled":
-                            sub.status = "cancelled"
-                            sub.cancelled_at = datetime.utcnow()
+    # Procesar y activar la suscripción si tenemos preapproval_id
+    if preapproval_id:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            res = await client.get(
+                f"https://api.mercadopago.com/preapproval/{preapproval_id}",
+                headers={"Authorization": f"Bearer {mp_token}"}
+            )
+            if res.status_code == 200:
+                mp_data = res.json()
+                mp_status = mp_data.get("status")  # 'authorized', 'paused', 'cancelled'
+                ext_ref = mp_data.get("external_reference") or ""
+
+                # Buscar suscripción local por preapproval_id o por external_reference
+                sub = db.query(CustomerSubscription).filter(
+                    CustomerSubscription.mp_preapproval_id == str(preapproval_id)
+                ).first()
+
+                if not sub and "sub_" in ext_ref:
+                    try:
+                        sub_id = int(ext_ref.split("_")[1])
+                        sub = db.query(CustomerSubscription).filter(CustomerSubscription.id == sub_id).first()
+                        if sub and not sub.mp_preapproval_id:
+                            sub.mp_preapproval_id = str(preapproval_id)
                             db.commit()
-                            logger.info(f"Suscripción #{sub.id} cancelada en Mercado Pago.")
+                    except Exception:
+                        pass
+
+                if sub:
+                    if mp_status == "authorized":
+                        act_result = process_subscription_payment_activation(db, sub)
+                        logger.info(f"Suscripción #{sub.id} procesada por Mercado Pago: {act_result['action']}")
+
+                        if act_result["action"] in ["activated_immediate", "upgrade_activated"]:
+                            if sub.plan and sub.plan.product and sub.plan.product.slug == "crm" and sub.external_tenant_id:
+                                await _sync_features_to_crm(db, sub)
+
+                    elif mp_status == "cancelled":
+                        sub.status = "cancelled"
+                        sub.cancelled_at = datetime.utcnow()
+                        db.commit()
+                        logger.info(f"Suscripción #{sub.id} cancelada en Mercado Pago.")
 
     return {"status": "ok"}
 

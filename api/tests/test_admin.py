@@ -59,6 +59,93 @@ class TestAdminModule(unittest.TestCase):
             self.assertIn("is_active", first)
             self.assertIn("active_plans", first)
 
+    def test_admin_users_grant_and_revoke_customer_role(self):
+        """Prueba de extremo a extremo para conceder y revocar el rol de cliente a un usuario de sistema."""
+        from app.lib.security import create_access_token, hash_password
+        from app.models.customer import Customer
+
+        # 1. Asegurar rol admin y usuario admin
+        admin_role = self.db.query(Role).filter(Role.name == "admin").first()
+        if not admin_role:
+            admin_role = Role(name="admin")
+            self.db.add(admin_role)
+            self.db.commit()
+
+        admin = self.db.query(User).filter(User.roles.any(Role.name == "admin")).first()
+        if not admin:
+            admin = User(
+                name="Super Admin Test",
+                email="admin_test_unit@iqmx.com",
+                password_hash=hash_password("AdminPass123!"),
+                role_id=admin_role.id
+            )
+            admin.roles.append(admin_role)
+            self.db.add(admin)
+            self.db.commit()
+            self.db.refresh(admin)
+
+        token = create_access_token(data={"sub": str(admin.id), "user_id": admin.id, "email": admin.email, "role": "admin"})
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 2. Crear usuario interno de prueba
+        test_email = "interno_role_test@iqmx.com"
+        existing = self.db.query(User).filter(User.email == test_email).first()
+        if existing:
+            self.db.delete(existing)
+            self.db.commit()
+
+        res_create = self.client.post("/api/admin/users", headers=headers, json={
+            "name": "Operador Pruebas",
+            "email": test_email,
+            "password": "PasswordInterno123!",
+            "role": "admin"
+        })
+        self.assertEqual(res_create.status_code, 201)
+        user_data = res_create.json()
+        user_id = user_data["id"]
+        self.assertFalse(user_data["has_customer_role"])
+
+        # 3. Otorgar acceso de cliente
+        grant_payload = {
+            "company_name": "Operaciones IQ MX SA",
+            "contact_name": "Operador Pruebas",
+            "phone": "+523141112233",
+            "tax_id": "OPQ101010ZZZ"
+        }
+        res_grant = self.client.put(f"/api/admin/users/{user_id}/customer-role", headers=headers, json=grant_payload)
+        self.assertEqual(res_grant.status_code, 200)
+        grant_data = res_grant.json()
+        self.assertTrue(grant_data["has_customer_role"])
+        self.assertIn("customer", grant_data["roles"])
+        self.assertIsNotNone(grant_data["customer_id"])
+
+        # 4. Probar que puede autenticarse en el portal de clientes
+        portal_login = self.client.post("/api/portal/auth/login", json={
+            "email": test_email,
+            "password": "PasswordInterno123!"
+        })
+        self.assertEqual(portal_login.status_code, 200)
+        self.assertIn("access_token", portal_login.json())
+
+        # 5. Revocar acceso de cliente
+        res_revoke = self.client.delete(f"/api/admin/users/{user_id}/customer-role", headers=headers)
+        self.assertEqual(res_revoke.status_code, 200)
+        revoke_data = res_revoke.json()
+        self.assertFalse(revoke_data["has_customer_role"])
+        self.assertNotIn("customer", revoke_data["roles"])
+
+        # 6. El perfil Customer sigue existiendo en BD pero con is_active=False
+        customer_record = self.db.query(Customer).filter(Customer.user_id == user_id).first()
+        self.assertIsNotNone(customer_record)
+        self.assertFalse(customer_record.is_active)
+
+        # 7. Intento de login en portal de clientes debe ser rechazado con 403 Forbidden
+        portal_login_after = self.client.post("/api/portal/auth/login", json={
+            "email": test_email,
+            "password": "PasswordInterno123!"
+        })
+        self.assertEqual(portal_login_after.status_code, 403)
+
 
 if __name__ == "__main__":
     unittest.main()

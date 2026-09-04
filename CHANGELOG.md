@@ -9,6 +9,42 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [1.4.0] - 2026-09-04
+
+### Añadido
+
+- **Indicador de Fortaleza y Validación de Contraseñas en Registro de Clientes (`/portal/register`)**:
+  - Medidor de seguridad dinámico en tiempo real con barra de progreso de 4 niveles cromáticos (*Débil*, *Regular*, *Buena*, *Segura*).
+  - Checklist interactivo con validación instantánea de 4 criterios obligatorios: mínimo 8 caracteres, al menos 1 mayúscula, al menos 1 minúscula y al menos 1 número.
+  - Bloqueo preventivo del botón de envío en frontend hasta que la contraseña cumpla los 4 criterios de seguridad.
+  - Validación espejo en backend mediante validador estricto Pydantic (`validate_password_strength`) en `CustomerRegisterRequest` (`portal_auth.py`), rechazando con `HTTP 422` contraseñas no conformes.
+  - Preservación de la experiencia de login en `/portal/login` sin alterar el ingreso habitual de los usuarios.
+- **Gestión Multi-rol y Concesión de Acceso a Clientes desde Usuarios del Sistema (`/admin/users`)**:
+  - Soporte multi-rol en la API Central: extensión de `SystemUserResponse` con campos `roles: List[str]`, `has_customer_role: bool` y `customer_id`.
+  - Nuevo endpoint `PUT /api/admin/users/{user_id}/customer-role`: permite a un administrador conceder acceso al Portal de Clientes a cualquier usuario interno (admin, partner, contact), creando o reactivando su perfil de `Customer` y sus credenciales de webhook con sus mismas credenciales de inicio de sesión.
+  - Nuevo endpoint `DELETE /api/admin/users/{user_id}/customer-role`: revoca el rol de cliente y desactiva el perfil empresarial (`is_active = False`) preservando el historial de membresías, transacciones e integridad referencial sin eliminar datos.
+  - Actualización de `/admin/users` en frontend:
+    - Badges visuales independientes por cada rol asignado (*Admin*, *Partner*, *Contacto*, *Cliente*).
+    - Botón contextual interactivo por fila: `+ Acceso Cliente` (abre modal para capturar razón social, contacto, teléfono y RFC) y `✕ Revocar Cliente` (abre modal de confirmación con detalle preventivo).
+- **Integración y Normalización de Pruebas con Mercado Pago Suscripciones**:
+  - Control de entorno desacoplado mediante la variable `ENVIRONMENT`: en entornos que no sean producción (`ENVIRONMENT != "production"`), se activa el modo de pruebas permitiendo sustituir el pagador por un usuario de pruebas oficial de Mercado Pago sin afectar la base de datos de clientes local.
+  - Normalizador inteligente de cuentas de prueba (`mercadopago_resolved_test_payer_email`): convierte automáticamente tanto nicknames o IDs numéricos (`TESTUSER1968490994194015693`) como correos directos al formato oficial exigido por la API de Mercado Pago (`test_user_...xyz@testuser.com`), evitando el error `400 Both payer and collector must be real or test users`.
+  - Mensajes de diagnóstico pedagógicos en la API ante respuestas no exitosas de la pasarela.
+- **Componente Centralizado y Escalable de Autenticación y Carga (`AuthGuard.tsx`)**:
+  - Creación de [AuthGuard.tsx](file:///Users/laclavees12345/code/iqissmexico/main/web/src/components/AuthGuard.tsx), centralizando la lógica de verificación de sesión, endpoints de validación (`/api/admin/auth/me`, `/api/portal/auth/me`), limpieza automática de tokens caducados y redirección contextual (incluyendo intención de checkout pendiente `getCheckoutIntent()`).
+  - Provisión de subcomponentes modulares:
+    - `<GuestGuard>`: Protege rutas de solo visitantes (login y registro tanto de admin como de cliente), encapsulando la comprobación y evitando renderizado innecesario o duplicación de estados locales.
+    - `<AuthRedirect>`: Despachador para rutas raíz (`/admin` y `/portal`), dirigiendo transparentemente al usuario a su dashboard o al login correspondiente.
+    - `<FullScreenLoader>`: Componente visual unificado para pantallas de carga a pantalla completa con spinner animado y mensaje configurable.
+  - Refactorización y eliminación de código duplicado en:
+    - [portal/page.tsx](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/%28customers%29/portal/page.tsx)
+    - [portal/login/page.tsx](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/%28customers%29/portal/login/page.tsx)
+    - [portal/register/page.tsx](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/%28customers%29/portal/register/page.tsx)
+    - [admin/page.tsx](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/%28admin%29/admin/page.tsx)
+    - [admin/login/page.tsx](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/%28admin%29/admin/login/page.tsx)
+- **Comando CLI de Inicialización de Catálogo**:
+  - Incorporación del comando `catalog:seed` en `manage.py` de la API para desplegar de forma automatizada productos y membresías base en entornos locales o de producción.
+
 ## [1.3.0] - 2026-09-03
 
 ### Añadido

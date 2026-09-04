@@ -248,6 +248,12 @@ async def create_checkout_preference(
             status="pending_payment"
         )
 
+    # En entorno que no sea producción, si se define MERCADOPAGO_TEST_PAYER_EMAIL se utiliza como pagador de pruebas en Mercado Pago
+    is_production = (settings.ENVIRONMENT or "").strip().lower() == "production"
+    payer_email_to_send = clean_email
+    if not is_production and settings.mercadopago_resolved_test_payer_email:
+        payer_email_to_send = settings.mercadopago_resolved_test_payer_email
+
     # Llamada real a Mercado Pago
     url = "https://api.mercadopago.com/preapproval"
     payload = {
@@ -258,7 +264,7 @@ async def create_checkout_preference(
             "transaction_amount": float(plan.price_mxn),
             "currency_id": "MXN"
         },
-        "payer_email": clean_email,
+        "payer_email": payer_email_to_send,
         "back_url": "https://iqissmexico.com/portal/dashboard?payment=success",
         "external_reference": f"sub_{sub.id}_cust_{customer.id}"
     }
@@ -271,9 +277,15 @@ async def create_checkout_preference(
         res = await client.post(url, json=payload, headers=headers)
         if res.status_code not in [200, 201]:
             logger.error(f"Fallo creando preferencia de Mercado Pago: {res.status_code} {res.text}")
+            error_msg = "No fue posible generar el enlace de pago con Mercado Pago en este momento."
+            if "Both payer and collector must be real or test users" in res.text:
+                error_msg = (
+                    "Mercado Pago Sandbox exige que el correo del comprador sea un Usuario de Prueba (@testuser.com). "
+                    "Crea una cuenta de comprador de prueba en tu panel de Mercado Pago y configúrala en MERCADOPAGO_TEST_PAYER_EMAIL en api/.env"
+                )
             raise HTTPException(
                 status_code=502,
-                detail="No fue posible generar el enlace de pago con Mercado Pago en este momento."
+                detail=error_msg
             )
         data = res.json()
         preapproval_id = data.get("id")

@@ -36,9 +36,22 @@ class CustomerRegisterRequest(BaseModel):
     contact_name: str = Field(..., min_length=2, max_length=100)
     email: str = Field(..., min_length=5, max_length=150)
     phone: Optional[str] = Field(None, max_length=50)
-    password: str = Field(..., min_length=6, max_length=100)
+    password: str = Field(..., min_length=8, max_length=100)
     tax_id: Optional[str] = Field(None, max_length=50)
     privacy_accepted: bool = Field(..., description="Debe aceptar expresamente el Aviso de Privacidad y Términos")
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_strength(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("La contraseña debe tener al menos 8 caracteres.")
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("La contraseña debe incluir al menos una letra mayúscula.")
+        if not re.search(r"[a-z]", v):
+            raise ValueError("La contraseña debe incluir al menos una letra minúscula.")
+        if not re.search(r"[0-9]", v):
+            raise ValueError("La contraseña debe incluir al menos un número.")
+        return v
 
     @field_validator("email")
     @classmethod

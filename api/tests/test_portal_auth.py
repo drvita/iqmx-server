@@ -84,5 +84,29 @@ class TestPortalAuth(unittest.TestCase):
         self.assertEqual(res.status_code, 400)
         self.assertIn("Aviso de Privacidad", res.json()["detail"])
 
+    def test_register_weak_passwords_rejected(self):
+        base_payload = {
+            "company_name": "Insecure Passwords S.A.",
+            "contact_name": "Test User",
+            "email": "weak_pass@test.com",
+            "privacy_accepted": True
+        }
+
+        # 1. Menos de 8 caracteres
+        res1 = self.client.post("/api/portal/auth/register", json={**base_payload, "password": "Ab1"})
+        self.assertEqual(res1.status_code, 422)
+
+        # 2. Sin mayúscula
+        res2 = self.client.post("/api/portal/auth/register", json={**base_payload, "password": "password123"})
+        self.assertEqual(res2.status_code, 422)
+
+        # 3. Sin minúscula
+        res3 = self.client.post("/api/portal/auth/register", json={**base_payload, "password": "PASSWORD123"})
+        self.assertEqual(res3.status_code, 422)
+
+        # 4. Sin número
+        res4 = self.client.post("/api/portal/auth/register", json={**base_payload, "password": "PasswordABC"})
+        self.assertEqual(res4.status_code, 422)
+
 if __name__ == "__main__":
     unittest.main()

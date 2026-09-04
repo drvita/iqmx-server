@@ -129,6 +129,12 @@ async def generate_mercadopago_subscription(
             preapproval_id=sub.mp_preapproval_id
         )
 
+    # En entorno que no sea producción, si se define MERCADOPAGO_TEST_PAYER_EMAIL se utiliza como pagador de pruebas en Mercado Pago
+    is_production = (settings.ENVIRONMENT or "").strip().lower() == "production"
+    payer_email_to_send = payer_email
+    if not is_production and settings.mercadopago_resolved_test_payer_email:
+        payer_email_to_send = settings.mercadopago_resolved_test_payer_email
+
     url = "https://api.mercadopago.com/preapproval"
     payload = {
         "reason": f"{plan.name} - IQISSMexico",
@@ -138,7 +144,7 @@ async def generate_mercadopago_subscription(
             "transaction_amount": float(plan.price_mxn),
             "currency_id": "MXN"
         },
-        "payer_email": payer_email,
+        "payer_email": payer_email_to_send,
         "back_url": "https://iqissmexico.com/portal/dashboard?status=subscription_authorized",
         "external_reference": f"sub_{sub.id}_cust_{customer.id}"
     }
@@ -151,9 +157,15 @@ async def generate_mercadopago_subscription(
         res = await client.post(url, json=payload, headers=headers)
         if res.status_code not in [200, 201]:
             logger.error(f"Fallo creando suscripción en Mercado Pago: {res.status_code} {res.text}")
+            error_msg = f"Error en Mercado Pago API: {res.text}"
+            if "Both payer and collector must be real or test users" in res.text:
+                error_msg = (
+                    "Mercado Pago Sandbox exige que el correo del comprador sea un Usuario de Prueba (@testuser.com). "
+                    "Crea una cuenta de comprador de prueba en tu panel de Mercado Pago y configúrala en MERCADOPAGO_TEST_PAYER_EMAIL en api/.env"
+                )
             raise HTTPException(
                 status_code=502,
-                detail=f"Error en Mercado Pago API: {res.text}"
+                detail=error_msg
             )
         data = res.json()
         preapproval_id = data.get("id")

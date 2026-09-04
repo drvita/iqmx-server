@@ -43,6 +43,12 @@ def main():
         help="Herramienta interactiva para restablecer la contraseña de un usuario administrador."
     )
 
+    # Comando 3: catalog:seed
+    subparsers.add_parser(
+        "catalog:seed",
+        help="Siembra (o actualiza) el catálogo de productos y planes de membresía en la BD. Idempotente."
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -56,6 +62,10 @@ def main():
     elif args.command == "admin:reset-password":
         from scripts.reset_admin_password import run_reset
         run_reset()
+
+    elif args.command == "catalog:seed":
+        from app.db.seed_catalog import seed_catalog
+        seed_catalog()
 
     else:
         print(f"Comando desconocido: {args.command}")
