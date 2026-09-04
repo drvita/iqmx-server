@@ -9,6 +9,7 @@ from app.models.customer_subscription import CustomerSubscription
 from app.models.product import Product
 from app.config import settings
 from app.lib.crypto import decrypt_token
+from app.api.portal_crm import get_crm_internal_url_and_secret
 
 from app.services.subscription_service import process_subscription_payment_activation
 
@@ -123,14 +124,7 @@ async def receive_mercadopago_webhook(
 async def _sync_features_to_crm(db: Session, sub: CustomerSubscription):
     """Función auxiliar para despachar los límites de la membresía al CRM."""
     try:
-        crm_product = db.query(Product).filter(Product.slug == "crm").first()
-        service_url = crm_product.service_url if (crm_product and crm_product.service_url) else settings.CRM_SERVICE_URL
-        secret = settings.CRM_PROVISION_SECRET
-        if crm_product and crm_product.api_secret_encrypted:
-            try:
-                secret = decrypt_token(crm_product.api_secret_encrypted, settings.TOKEN_ENCRYPTION_KEY)
-            except Exception:
-                pass
+        service_url, secret = get_crm_internal_url_and_secret(db)
 
         features = dict(sub.plan.features_payload)
         if sub.custom_features_override:

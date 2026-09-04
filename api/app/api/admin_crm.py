@@ -18,6 +18,7 @@ from app.models.user import User
 from app.config import settings
 from app.lib.crypto import decrypt_token, encrypt_token
 from app.api.portal_whatsapp import send_provision_to_crm
+from app.api.portal_crm import get_crm_internal_url_and_secret
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -219,15 +220,7 @@ async def sync_tenant_plan_limits(
         features.update(sub.custom_features_override)
 
     # Despachar al CRM
-    crm_product = db.query(Product).filter(Product.slug == "crm").first()
-    service_url = settings.CRM_SERVICE_URL if settings.CRM_SERVICE_URL else (crm_product.service_url if crm_product else "http://crm:3000")
-
-    secret = settings.CRM_PROVISION_SECRET
-    if crm_product and crm_product.api_secret_encrypted:
-        try:
-            secret = decrypt_token(crm_product.api_secret_encrypted, settings.TOKEN_ENCRYPTION_KEY)
-        except Exception:
-            pass
+    service_url, secret = get_crm_internal_url_and_secret(db)
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         url = f"{service_url}/api/provision/tenant/{org_id}/features"
@@ -272,15 +265,7 @@ async def override_tenant_limits(
         db.commit()
 
     # Despachar al CRM
-    crm_product = db.query(Product).filter(Product.slug == "crm").first()
-    service_url = settings.CRM_SERVICE_URL if settings.CRM_SERVICE_URL else (crm_product.service_url if crm_product else "http://crm:3000")
-
-    secret = settings.CRM_PROVISION_SECRET
-    if crm_product and crm_product.api_secret_encrypted:
-        try:
-            secret = decrypt_token(crm_product.api_secret_encrypted, settings.TOKEN_ENCRYPTION_KEY)
-        except Exception:
-            pass
+    service_url, secret = get_crm_internal_url_and_secret(db)
 
     async with httpx.AsyncClient(timeout=10.0) as client:
         url = f"{service_url}/api/provision/tenant/{org_id}/features"

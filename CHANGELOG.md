@@ -42,8 +42,18 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
     - [portal/register/page.tsx](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/%28customers%29/portal/register/page.tsx)
     - [admin/page.tsx](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/%28admin%29/admin/page.tsx)
     - [admin/login/page.tsx](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/%28admin%29/admin/login/page.tsx)
+- **Validación M2M Centralizada mediante Introspección (Single Source of Truth)**:
+  - Creación del endpoint [internal_products.py](file:///Users/laclavees12345/code/iqissmexico/main/api/app/api/internal_products.py) (`POST /api/internal/products/verify-secret`) en la API Central para permitir que los microservicios satélite (como el CRM) validen en tiempo real si un token M2M recibido es legítimo.
+  - Soporte nativo paraPeriodo de Gracia: la API valida tanto la clave activa (`Product.api_secret_encrypted` o variable de entorno) como la clave anterior (`Product.api_secret_previous`) mediante comparaciones seguras timing-safe (`secrets.compare_digest`).
+  - Creación del helper reutilizable [api-verifier.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/provision/api-verifier.ts) en el microservicio CRM con caché en memoria (TTL 30s) y fallback local secundario.
+  - Desacoplamiento total del CRM: el CRM ya no depende de tener llaves maestras estáticas duplicadas en sus archivos `.env`; consulta directamente a la API central.
+  - Integración en `authenticateProvisionRequest` ([auth.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/provision/auth.ts)) y `resolveAuthorizedOrg` ([provision/route.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/settings/whatsapp/provision/route.ts)).
+  - Pruebas unitarias añadidas en `test_provisioning.py` (47/47 tests OK) y pruebas E2E en vivo validadas con códigos `401 Unauthorized` ante tokens falsos y `201 Created` ante tokens legítimos.
 - **Comando CLI de Inicialización de Catálogo**:
   - Incorporación del comando `catalog:seed` en `manage.py` de la API para desplegar de forma automatizada productos y membresías base en entornos locales o de producción.
+- **Comando CLI de Rotación Automatizada de Llaves M2M (`security:rotate-keys`)**:
+  - Nuevo comando en [manage.py](file:///Users/laclavees12345/code/iqissmexico/main/api/manage.py) respaldado por [rotate_m2m_keys.py](file:///Users/laclavees12345/code/iqissmexico/main/api/scripts/rotate_m2m_keys.py) para tareas programadas (Coolify Cron `10 0 * * *` a las 00:10 horas).
+  - Rota las claves secretas de todos los productos en la base de datos generando llaves criptográficas de 256 bits (`secrets.token_hex(32)`), cifrándolas con AES-256-GCM y aplicando automáticamente el periodo de gracia en `api_secret_previous` para evitar interrupciones de servicio. Admite `--slug <producto>` y flag `--dry-run`.
 
 ## [1.3.0] - 2026-09-03
 

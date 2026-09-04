@@ -99,3 +99,79 @@ class TestProvisioning(unittest.TestCase):
         data = res.json()
         self.assertTrue(data["success"])
         self.assertEqual(data["status_code"], 200)
+
+    def test_get_crm_internal_url_and_secret_priority(self):
+        from app.api.portal_crm import get_crm_internal_url_and_secret
+        db = SessionLocal()
+        try:
+            # Con valor explícito de entorno, debe prevalecer sobre la BD
+            with patch.object(settings, "CRM_PROVISION_SECRET", "custom_env_secret_key_123"):
+                _, secret = get_crm_internal_url_and_secret(db)
+                self.assertEqual(secret, "custom_env_secret_key_123")
+
+            # Con el valor default, debe descifrar de la BD
+            with patch.object(settings, "CRM_PROVISION_SECRET", "crm_provision_secret_key_iqmx_default"):
+                _, secret = get_crm_internal_url_and_secret(db)
+                # En la BD tenemos 'f3c30f6ffd217b3e0a108b62df8d4a6e1f1ba02c0df1d8887b2b0c58cbaf2f18'
+                self.assertNotEqual(secret, "crm_provision_secret_key_iqmx_default")
+        finally:
+            db.close()
+
+    def test_verify_product_secret_endpoint_success(self):
+        from app.api.portal_crm import get_crm_internal_url_and_secret
+        db = SessionLocal()
+        try:
+            _, active_secret = get_crm_internal_url_and_secret(db)
+        finally:
+            db.close()
+
+        res = self.client.post("/api/internal/products/verify-secret", json={
+            "product_slug": "crm",
+            "secret": active_secret
+        })
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data["ok"])
+        self.assertTrue(data["valid"])
+        self.assertEqual(data["product_slug"], "crm")
+
+    def test_verify_product_secret_endpoint_invalid(self):
+        res = self.client.post("/api/internal/products/verify-secret", json={
+            "product_slug": "crm",
+            "secret": "invalid_random_secret_token_999"
+        })
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data["ok"])
+        self.assertFalse(data["valid"])
+
+    def test_verify_product_secret_endpoint_matches_env_var_and_db_keys(self):
+        from app.models.product import Product
+        from app.lib.crypto import decrypt_token
+
+        db = SessionLocal()
+        try:
+            p = db.query(Product).filter(Product.slug == "crm").first()
+            db_secret = decrypt_token(p.api_secret_encrypted, settings.TOKEN_ENCRYPTION_KEY)
+        finally:
+            db.close()
+
+        # 1. Con variable de entorno activa, valida la clave de entorno
+        with patch.object(settings, "CRM_PROVISION_SECRET", "custom_super_secret_env_key"):
+            res_env = self.client.post("/api/internal/products/verify-secret", json={
+                "product_slug": "crm",
+                "secret": "custom_super_secret_env_key"
+            })
+            self.assertEqual(res_env.status_code, 200)
+            self.assertTrue(res_env.json()["valid"])
+
+            # 2. Y al mismo tiempo también valida la clave de la BD
+            res_db = self.client.post("/api/internal/products/verify-secret", json={
+                "product_slug": "crm",
+                "secret": db_secret
+            })
+            self.assertEqual(res_db.status_code, 200)
+            self.assertTrue(res_db.json()["valid"])
+
+
+

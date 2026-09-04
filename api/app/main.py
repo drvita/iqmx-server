@@ -7,7 +7,7 @@ import os
 
 from app.config import settings
 from app.limiter import limiter
-from app.api import events, portal_auth, portal_whatsapp, portal_webhook, public_catalog, portal_subscriptions, portal_crm
+from app.api import events, portal_auth, portal_whatsapp, portal_webhook, public_catalog, portal_subscriptions, portal_crm, internal_products
 from app.api import admin_auth, admin_users, admin_customers, admin_catalog, admin_crm, admin_subscriptions, admin_security
 from app.api.webhooks import whatsapp_router, whatsapp_legacy_router, mercadopago
 
@@ -67,6 +67,7 @@ app.include_router(admin_security.router)
 
 # Registrar rutas heredadas / internas
 app.include_router(events.router)
+app.include_router(internal_products.router)
 
 
 @app.get("/health")

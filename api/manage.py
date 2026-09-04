@@ -49,6 +49,23 @@ def main():
         help="Siembra (o actualiza) el catálogo de productos y planes de membresía en la BD. Idempotente."
     )
 
+    # Comando 4: security:rotate-keys
+    rotate_cmd = subparsers.add_parser(
+        "security:rotate-keys",
+        help="Rota automáticamente las claves secretas M2M de todos los productos (o uno específico) con periodo de gracia."
+    )
+    rotate_cmd.add_argument(
+        "--slug",
+        type=str,
+        default=None,
+        help="Slug específico del producto (ej. 'crm'). Por defecto rota todos."
+    )
+    rotate_cmd.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Simula la rotación sin alterar la base de datos."
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -66,6 +83,10 @@ def main():
     elif args.command == "catalog:seed":
         from app.db.seed_catalog import seed_catalog
         seed_catalog()
+
+    elif args.command == "security:rotate-keys":
+        from scripts.rotate_m2m_keys import run_rotate_keys
+        run_rotate_keys(slug=args.slug, dry_run=args.dry_run)
 
     else:
         print(f"Comando desconocido: {args.command}")

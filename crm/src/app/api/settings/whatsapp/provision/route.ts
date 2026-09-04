@@ -12,6 +12,7 @@ import { isWebhookTokenValid } from "@/server/whatsapp/webhook-token";
 
 import { assertCanAddWhatsappAccount } from "@/server/settings/limits";
 import { getOrganizationByWebhookToken } from "@/server/whatsapp/webhook-token";
+import { verifyApiSecretWithCentral } from "@/server/provision/api-verifier";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +55,13 @@ async function resolveAuthorizedOrg(req: Request): Promise<{ ok: boolean; organi
     return { ok: true, organizationId: org.id };
   }
 
-  // 2. Probar si coincide con la clave maestra de aprovisionamiento
+  // 2. Probar mediante introspección con la API Central (Single Source of Truth)
+  const isValidWithCentral = await verifyApiSecretWithCentral(providedToken);
+  if (isValidWithCentral) {
+    return { ok: true };
+  }
+
+  // 3. Probar si coincide con la clave maestra de aprovisionamiento local (fallback)
   const masterSecret =
     process.env.PROVISION_SECRET_KEY ||
     process.env.CRM_PROVISION_SECRET ||

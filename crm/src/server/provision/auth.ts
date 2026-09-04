@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { checkRateLimit } from "@/lib/rate-limit";
+import { verifyApiSecretWithCentral } from "./api-verifier";
 
 export const PROVISION_RATE_LIMIT = { windowMs: 5 * 60 * 1000, max: 20 };
 
@@ -34,8 +35,9 @@ export function getProvisionSecret(): string | null {
 /**
  * Valida la autenticación de la petición de aprovisionamiento.
  * Admite:
- * 1) Firma HMAC-SHA256 con timestamp (Anti-Replay y Anti-Tampering)
- * 2) Token Bearer o cabecera x-api-key en tiempo constante (timing-safe)
+ * 1) Introspección M2M con la API Central (Single Source of Truth)
+ * 2) Token Bearer o cabecera x-api-key con fallback local (timing-safe)
+ * 3) Firma HMAC-SHA256 con timestamp (Anti-Replay y Anti-Tampering)
  */
 export async function authenticateProvisionRequest(
   req: Request,
@@ -70,21 +72,28 @@ export async function authenticateProvisionRequest(
     }
   }
 
-  // 3. Secret configurado
-  const secret = getProvisionSecret();
-  if (!secret) {
-    console.error(
-      "[provision] PROVISION_SECRET_KEY no está configurada en las variables de entorno"
-    );
-    return {
-      ok: false,
-      status: 500,
-      error:
-        "El servicio de aprovisionamiento no está configurado en este servidor.",
-    };
+  // 3. Extraer Token Bearer o x-api-key
+  const authHeader = req.headers.get("authorization");
+  const apiKeyHeader =
+    req.headers.get("x-provision-key") || req.headers.get("x-api-key");
+
+  let providedToken = "";
+  if (authHeader?.startsWith("Bearer ")) {
+    providedToken = authHeader.slice("Bearer ".length).trim();
+  } else if (apiKeyHeader) {
+    providedToken = apiKeyHeader.trim();
   }
 
-  // 4. Verificación de Firma HMAC (si se proporcionan cabeceras de firma)
+  // 4. Validación M2M prioritaria con la API Central (Single Source of Truth)
+  if (providedToken) {
+    const isValidWithCentral = await verifyApiSecretWithCentral(providedToken);
+    if (isValidWithCentral) {
+      return { ok: true };
+    }
+  }
+
+  // 5. Fallback a Firma HMAC (si se proporcionan cabeceras de firma y clave local)
+  const secret = getProvisionSecret();
   const timestampHeader =
     req.headers.get("x-provision-timestamp") ||
     req.headers.get("x-signature-timestamp");
@@ -92,7 +101,7 @@ export async function authenticateProvisionRequest(
     req.headers.get("x-provision-signature") ||
     req.headers.get("x-signature");
 
-  if (timestampHeader && signatureHeader) {
+  if (secret && timestampHeader && signatureHeader) {
     const timestampSec = parseInt(timestampHeader, 10);
     if (isNaN(timestampSec)) {
       return {
@@ -124,19 +133,8 @@ export async function authenticateProvisionRequest(
     return { ok: true };
   }
 
-  // 5. Fallback a Token Bearer o x-api-key (validado en tiempo constante)
-  const authHeader = req.headers.get("authorization");
-  const apiKeyHeader =
-    req.headers.get("x-provision-key") || req.headers.get("x-api-key");
-
-  let providedToken = "";
-  if (authHeader?.startsWith("Bearer ")) {
-    providedToken = authHeader.slice("Bearer ".length).trim();
-  } else if (apiKeyHeader) {
-    providedToken = apiKeyHeader.trim();
-  }
-
-  if (providedToken && safeCompare(providedToken, secret)) {
+  // 6. Fallback a token local si existe clave local
+  if (providedToken && secret && safeCompare(providedToken, secret)) {
     return { ok: true };
   }
 

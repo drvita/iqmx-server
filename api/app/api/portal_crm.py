@@ -72,16 +72,25 @@ class RegisterCrmAccountResponse(BaseModel):
 def get_crm_internal_url_and_secret(db: Session) -> tuple[str, str]:
     """
     Retorna la URL interna de comunicación M2M con el CRM y la clave secreta descifrada.
+    Prioridad:
+    1. Variable de entorno explícita (CRM_PROVISION_SECRET / CRM_SERVICE_URL).
+    2. Base de datos (Product.api_secret_encrypted / Product.service_url).
+    3. Valores predeterminados del sistema.
     """
     crm_product = db.query(Product).filter(Product.slug == "crm").first()
-    internal_url = settings.CRM_SERVICE_URL or "http://crm:3000"
-    secret = settings.CRM_PROVISION_SECRET or "crm_provision_secret_key_iqmx_default"
+    internal_url = settings.CRM_SERVICE_URL or (crm_product.service_url if crm_product and crm_product.service_url else "http://crm:3000")
 
-    if crm_product and crm_product.api_secret_encrypted:
+    # Si se definió explícitamente en el entorno, tiene prioridad sobre la BD
+    if settings.CRM_PROVISION_SECRET and settings.CRM_PROVISION_SECRET != "crm_provision_secret_key_iqmx_default":
+        secret = settings.CRM_PROVISION_SECRET
+    elif crm_product and crm_product.api_secret_encrypted:
         try:
             secret = decrypt_token(crm_product.api_secret_encrypted, settings.TOKEN_ENCRYPTION_KEY)
         except Exception as e:
             logger.warning(f"No fue posible descifrar token M2M del producto CRM: {e}")
+            secret = settings.CRM_PROVISION_SECRET or "crm_provision_secret_key_iqmx_default"
+    else:
+        secret = settings.CRM_PROVISION_SECRET or "crm_provision_secret_key_iqmx_default"
 
     return internal_url.rstrip("/"), secret
 
