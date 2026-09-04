@@ -1,4 +1,4 @@
-import { asc } from "drizzle-orm";
+import { and, asc, eq } from "drizzle-orm";
 import { withAuth } from "@/lib/api";
 import { getDb, schema } from "@/lib/db";
 import { scoped } from "@/lib/db/tenant";
@@ -12,12 +12,20 @@ export const dynamic = "force-dynamic";
  */
 const WARN_CHARS = 24_000;
 
-export const GET = withAuth(async (session) => {
+export const GET = withAuth(async (session, req: Request) => {
+  const url = new URL(req.url);
+  const assistantId = url.searchParams.get("assistantId");
+
   const db = getDb();
+  const conditions = [scoped(schema.kbEntry.organizationId, session.organizationId)];
+  if (assistantId) {
+    conditions.push(eq(schema.kbEntry.assistantId, assistantId));
+  }
+
   const entries = await db
     .select()
     .from(schema.kbEntry)
-    .where(scoped(schema.kbEntry.organizationId, session.organizationId))
+    .where(and(...conditions))
     .orderBy(asc(schema.kbEntry.createdAt));
   const chars = renderKb(entries).length;
   return Response.json({

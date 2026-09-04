@@ -14,6 +14,7 @@ import { ContactAvatar } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { FichaPanel } from "@/components/ficha-panel";
+import { LineBadge } from "./line-badge";
 
 const HANDOFF_LABELS: Record<string, string> = {
   cliente: "El cliente pidió un humano",
@@ -183,13 +184,22 @@ export function ContactPanel({
 
           {/* Línea / Cuenta telefónica receptora (para múltiples números) */}
           {(conversation.linePhone || conversation.phoneNumberId) && (
-            <div className="mt-3 flex items-center justify-between rounded-md border bg-subtle/60 px-3 py-2 text-xs">
+            <div className="mt-3 flex items-center justify-between gap-2 rounded-md border bg-subtle/60 px-3 py-2 text-xs">
               <span className="text-[11px] font-medium text-text-3">
                 Línea receptora:
               </span>
-              <span className="font-mono font-medium text-foreground">
-                {formatPhone(conversation.linePhone ?? conversation.phoneNumberId)}
-              </span>
+              <div className="flex items-center gap-1.5 min-w-0">
+                {conversation.lineName && (
+                  <LineBadge
+                    name={conversation.lineName}
+                    seed={conversation.phoneNumberId ?? conversation.lineName}
+                    size="xs"
+                  />
+                )}
+                <span className="font-mono font-medium text-foreground truncate">
+                  {formatPhone(conversation.linePhone ?? conversation.phoneNumberId)}
+                </span>
+              </div>
             </div>
           )}
 

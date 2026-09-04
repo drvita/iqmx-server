@@ -62,15 +62,15 @@ export function AgentClient() {
     warnAt: number;
     warning: boolean;
   } | null>(null);
+  const [loadingKb, setLoadingKb] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const refetch = useCallback(
+  // Carga perfiles de asistentes
+  const refetchProfiles = useCallback(
     async (preferredId?: string) => {
-      const [p, kb, size] = await Promise.all([
-        fetch("/api/agent/profile").then((r) => (r.ok ? r.json() : null)),
-        fetch("/api/kb").then((r) => (r.ok ? r.json() : null)),
-        fetch("/api/kb/size").then((r) => (r.ok ? r.json() : null)),
-      ]).catch(() => [null, null, null]);
+      const p = await fetch("/api/agent/profile")
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null);
 
       if (p) {
         const list = (p.assistants as Assistant[]) ?? [];
@@ -82,18 +82,44 @@ export function AgentClient() {
           setSelectedId(list[0].id);
         }
       }
-      if (kb) setEntries(kb.entries);
-      if (size) setKbSize(size);
     },
     [selectedId],
   );
 
-  useEffect(() => {
-    void refetch();
-  }, [refetch]);
-
   const selectedAssistant =
     assistants.find((a) => a.id === selectedId) ?? assistants[0] ?? null;
+
+  // Carga la base de conocimiento exclusiva del asistente activo
+  const refetchKb = useCallback(async (assistantId?: string) => {
+    const targetId = assistantId ?? selectedAssistant?.id;
+    if (!targetId) return;
+
+    setLoadingKb(true);
+    try {
+      const [kb, size] = await Promise.all([
+        fetch(`/api/kb?assistantId=${targetId}`).then((r) =>
+          r.ok ? r.json() : null
+        ),
+        fetch(`/api/kb/size?assistantId=${targetId}`).then((r) =>
+          r.ok ? r.json() : null
+        ),
+      ]);
+      if (kb) setEntries(kb.entries ?? []);
+      if (size) setKbSize(size);
+    } finally {
+      setLoadingKb(false);
+    }
+  }, [selectedAssistant?.id]);
+
+  useEffect(() => {
+    void refetchProfiles();
+  }, [refetchProfiles]);
+
+  useEffect(() => {
+    if (selectedAssistant?.id) {
+      void refetchKb(selectedAssistant.id);
+    }
+  }, [selectedAssistant?.id, refetchKb]);
 
   async function saveAssistant(patch: Partial<Assistant>) {
     if (!selectedAssistant) return;
@@ -104,7 +130,7 @@ export function AgentClient() {
     }).catch(() => null);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-    void refetch(selectedAssistant.id);
+    void refetchProfiles(selectedAssistant.id);
   }
 
   async function createAssistant(data: {
@@ -120,7 +146,7 @@ export function AgentClient() {
 
     if (res?.assistant?.id) {
       setIsCreating(false);
-      void refetch(res.assistant.id);
+      void refetchProfiles(res.assistant.id);
     }
   }
 
@@ -131,7 +157,7 @@ export function AgentClient() {
     }).then((r) => (r.ok ? r.json() : null));
 
     if (res?.ok) {
-      void refetch();
+      void refetchProfiles();
     }
   }
 
@@ -351,9 +377,12 @@ export function AgentClient() {
             canDelete={assistants.length > 1 && !selectedAssistant.isDefault}
           />
           <KbSection
+            assistantId={selectedAssistant.id}
+            assistantName={selectedAssistant.name}
             entries={entries}
             kbSize={kbSize}
-            onChanged={() => void refetch()}
+            loading={loadingKb}
+            onChanged={() => void refetchKb(selectedAssistant.id)}
           />
         </div>
       )}
@@ -580,12 +609,18 @@ function AssistantEditor({
 }
 
 function KbSection({
+  assistantId,
+  assistantName,
   entries,
   kbSize,
+  loading,
   onChanged,
 }: {
+  assistantId: string;
+  assistantName: string;
   entries: KbEntry[];
   kbSize: { chars: number; warnAt: number; warning: boolean } | null;
+  loading?: boolean;
   onChanged: () => void;
 }) {
   const [kind, setKind] = useState<"qa" | "block">("qa");
@@ -644,8 +679,8 @@ function KbSection({
     setJustAdded(false);
     const payload =
       kind === "qa"
-        ? { kind: "qa", question, answer }
-        : { kind: "block", content };
+        ? { assistantId, kind: "qa", question, answer }
+        : { assistantId, kind: "block", content };
     try {
       const res = await fetch("/api/kb", {
         method: "POST",
@@ -680,8 +715,10 @@ function KbSection({
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between">
-          <CardTitle>Base de Conocimiento</CardTitle>
-          {kbSize && (
+          <CardTitle>Base de Conocimiento · {assistantName}</CardTitle>
+          {loading ? (
+            <span className="text-xs text-muted-foreground animate-pulse">Cargando…</span>
+          ) : kbSize ? (
             <span
               className={`text-xs ${
                 kbSize.warning
@@ -691,10 +728,10 @@ function KbSection({
             >
               {kbSize.chars} caracteres
             </span>
-          )}
+          ) : null}
         </div>
         <CardDescription>
-          Información del negocio compartida para responder preguntas
+          Información del negocio exclusiva de este asistente para responder preguntas
           frecuentes.
         </CardDescription>
       </CardHeader>

@@ -637,6 +637,9 @@ export const kbEntry = pgTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
+    assistantId: text("assistant_id").references(() => agentProfile.id, {
+      onDelete: "cascade",
+    }),
     kind: text("kind", { enum: ["qa", "block"] }).notNull(),
     question: text("question"),
     answer: text("answer"),
@@ -644,7 +647,10 @@ export const kbEntry = pgTable(
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
-  (t) => [index("kb_org_idx").on(t.organizationId)]
+  (t) => [
+    index("kb_org_idx").on(t.organizationId),
+    index("kb_assistant_idx").on(t.assistantId),
+  ]
 );
 
 export const template = pgTable(

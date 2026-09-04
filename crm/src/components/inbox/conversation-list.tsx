@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import { ContactAvatar } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
 import { formatTime, previewText } from "./helpers";
+import { LineBadge } from "./line-badge";
 
 /* Puntos de etapa con la paleta de la landing: azul, ámbar, verde WhatsApp. */
 const STAGE_DOT: Record<string, string> = {
@@ -310,7 +311,14 @@ export function ConversationList({
                           </span>
                         )}
                       </span>
-                      <span className="mt-1.5 flex items-center gap-1.5">
+                      <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        {c.lineName && (
+                          <LineBadge
+                            name={c.lineName}
+                            seed={c.phoneNumberId ?? c.lineName}
+                            size="xs"
+                          />
+                        )}
                         {c.stageName && (
                           <span className="inline-flex items-center gap-1.5 rounded-full border border-border-strong bg-background px-2 py-0.5 text-[11px] font-medium text-text-2">
                             <span

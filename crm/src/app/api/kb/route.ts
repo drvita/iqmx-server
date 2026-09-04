@@ -7,23 +7,37 @@ import { scoped } from "@/lib/db/tenant";
 
 export const dynamic = "force-dynamic";
 
-export const GET = withAuth(async (session) => {
+export const GET = withAuth(async (session, req: Request) => {
+  const url = new URL(req.url);
+  const assistantId = url.searchParams.get("assistantId");
+
   const db = getDb();
+  const conditions = [scoped(schema.kbEntry.organizationId, session.organizationId)];
+  if (assistantId) {
+    conditions.push(eq(schema.kbEntry.assistantId, assistantId));
+  }
+
   const entries = await db
     .select()
     .from(schema.kbEntry)
-    .where(scoped(schema.kbEntry.organizationId, session.organizationId))
+    .where(and(...conditions))
     .orderBy(asc(schema.kbEntry.createdAt));
   return Response.json({ entries });
 });
 
+const createBase = {
+  assistantId: z.string().min(1).optional().nullable(),
+};
+
 const createSchema = z.discriminatedUnion("kind", [
   z.object({
+    ...createBase,
     kind: z.literal("qa"),
     question: z.string().trim().min(1).max(500),
     answer: z.string().trim().min(1).max(4000),
   }),
   z.object({
+    ...createBase,
     kind: z.literal("block"),
     content: z.string().trim().min(1).max(8000),
   }),
@@ -39,6 +53,7 @@ export const POST = withAuth(async (session, req: Request) => {
     .values({
       id: newId("kbEntry"),
       organizationId: session.organizationId,
+      assistantId: body.data.assistantId ?? null,
       kind: body.data.kind,
       question: body.data.kind === "qa" ? body.data.question : null,
       answer: body.data.kind === "qa" ? body.data.answer : null,

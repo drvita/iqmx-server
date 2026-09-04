@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, or } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
@@ -106,11 +106,15 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
   const { getOrganizationSettings } = await import("@/server/settings/service");
   const settings = await getOrganizationSettings(organizationId);
   if ((!conversation.isTest && !settings.aiEnabled) || (!settings.aiApiKeyEncrypted && !process.env.OPENROUTER_API_TOKEN)) {
+    console.warn(`[agente] Turno omitido para org ${organizationId}: aiEnabled=${settings.aiEnabled}, tieneKey=${Boolean(settings.aiApiKeyEncrypted || process.env.OPENROUTER_API_TOKEN)}`);
     return;
   }
 
   // Condiciones de silencio: handoff activo o IA apagada en la conversación.
-  if (conversation.handoffAt || !conversation.aiEnabled) return;
+  if (conversation.handoffAt || !conversation.aiEnabled) {
+    console.log(`[agente] Conversación ${conversationId} silenciada: handoffAt=${conversation.handoffAt}, aiEnabled=${conversation.aiEnabled}`);
+    return;
+  }
 
   // Si la conversación tiene una línea de WhatsApp asociada, validar si la IA está encendida en esa línea
   let targetAssistantId: string | null = null;
@@ -126,6 +130,7 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
 
     if (creds[0]) {
       if (!conversation.isTest && !creds[0].aiEnabled) {
+        console.log(`[agente] IA apagada específicamente en la línea ${conversation.phoneNumberId}`);
         return; // IA apagada específicamente en esta línea
       }
       targetAssistantId = creds[0].assistantId;
@@ -163,10 +168,16 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
     profile = rows[0] ?? null;
   }
 
-  if (!profile) return;
+  if (!profile) {
+    console.warn(`[agente] No se encontró perfil de asistente conversacional para org ${organizationId}`);
+    return;
+  }
   // El toggle global aplica a conversaciones reales; el Laboratorio evalúa el
   // comportamiento configurado aunque el agente aún no esté encendido.
-  if (!conversation.isTest && !profile.enabled) return;
+  if (!conversation.isTest && !profile.enabled) {
+    console.log(`[agente] Asistente '${profile.name}' (${profile.id}) está deshabilitado`);
+    return;
+  }
 
   const history = await db
     .select()
@@ -190,10 +201,20 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
     return;
   }
 
+  // Cargar base de conocimiento exclusiva del asistente asignado.
+  // Fallback a entradas huérfanas (assistantId is null) solo si existen para esa organización.
   const kb = await db
     .select()
     .from(schema.kbEntry)
-    .where(eq(schema.kbEntry.organizationId, organizationId))
+    .where(
+      and(
+        eq(schema.kbEntry.organizationId, organizationId),
+        or(
+          eq(schema.kbEntry.assistantId, profile.id),
+          isNull(schema.kbEntry.assistantId)
+        )
+      )
+    )
     .orderBy(asc(schema.kbEntry.createdAt));
   const stages = await db
     .select({ id: schema.pipelineStage.id, name: schema.pipelineStage.name })
@@ -218,14 +239,17 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
   // Enviar indicador "escribiendo…" a WhatsApp y marcar como leído mientras el LLM genera la respuesta
   void sendTypingIndicator(conversationId).catch(() => null);
 
-  const result = await chatJson(agentActionSchema(agenda), messages);
+  console.log(`[agente] Ejecutando LLM para conversación ${conversationId} (org: ${organizationId}, asistente: '${profile.name}')`);
+  const result = await chatJson(agentActionSchema(agenda), messages, { organizationId });
   if (!result.ok) {
+    console.error(`[agente] Fallo al generar respuesta de IA (${result.error}): ${result.detail}`);
     if (result.error === "not_configured") return;
     // Fallo persistente del proveedor o salida imposible → escalar (FR-022).
     console.error(`[agente] fallo del proveedor (raw): ${result.detail}`);
     await applyHandoff(conversationId, organizationId, "error");
     return;
   }
+  console.log(`[agente] IA respondió exitosamente con acción: '${result.data.action}'`);
 
   let action: AgentActionType = result.data;
 
@@ -314,13 +338,15 @@ async function deliverReply(
     return;
   }
   try {
-    await sendText({
+    const res = await sendText({
       conversationId: conversation.id,
       organizationId: conversation.organizationId,
       text,
       aiGenerated: true,
     });
+    console.log(`[agente] Respuesta entregada con éxito a WhatsApp para conversación ${conversation.id} (messageId: ${res.messageId})`);
   } catch (err) {
+    console.error(`[agente] Error enviando respuesta en deliverReply:`, err);
     if (err instanceof SendError && err.code === "window_closed") {
       await applyHandoff(conversation.id, conversation.organizationId, "ventana");
       return;
