@@ -13,6 +13,19 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Añadido
 
+- **Base de Conocimiento Aislada por Asistente IA (`crm.kb_entry`)**:
+  - Separación multi-asistente a nivel de base de datos: adición de la columna `assistant_id` con clave foránea a `crm.agent_profile(id)` e índice `kb_assistant_idx`.
+  - Migración SQL preservativa (`0015_kb_entry_assistant.sql`): asocia automáticamente entradas huérfanas existentes al asistente conversacional predeterminado de cada organización, garantizando cero pérdida de información ya cargada.
+  - Endpoints `/api/kb` y `/api/kb/size`: soporte para el parámetro de consulta `?assistantId=...` para listar, computar métricas de caracteres e insertar conocimiento exclusivamente asignado al asistente en edición.
+  - Interfaz de Gestión (`/agent`): al alternar entre asistentes en el selector, el panel actualiza dinámicamente el título contextual (*Base de Conocimiento · {Nombre}*), sus entradas asociadas y el conteo de volumen.
+  - Pipeline LLM (`pipeline.ts`): inyección estricta en el System Prompt de la base de conocimiento exclusiva del asistente conversacional asignado a la línea telefónica receptora, evitando cruces de información entre múltiples negocios/marcas de una misma organización.
+- **Identificación Visual de Líneas Telefónicas en Bandeja de Entrada (`/inbox`)**:
+  - Componente determinista `LineBadge`: asigna colores armónicos y contrastantes (esmeralda, índigo, ámbar, púrpura, cielo, rosa, teal) basados en el identificador o nombre de la línea receptora.
+  - Lista de Conversaciones (`conversation-list.tsx`): renderizado de una insignia de color con el nombre comercial asignado a la línea (ej. `ice frut`, `iqiss mexico`) en cada tarjeta de chat.
+  - Panel de Detalles de Contacto (`contact-panel.tsx`): visualización de la insignia y nombre de la línea junto al número de teléfono formateado en la sección "Línea receptora".
+- **Diagnóstico y Trazabilidad en Pipeline de Respuestas IA**:
+  - Corrección en la llamada `chatJson` de `pipeline.ts` pasando `{ organizationId }` para asegurar la lectura de la API Key de OpenRouter configurada en la BD por organización.
+  - Inclusión de registros estructurados (`console.log`, `console.warn`, `console.error`) para monitorear en tiempo real la resolución de líneas, asistentes y generación de respuestas del bot.
 - **Indicador de Fortaleza y Validación de Contraseñas en Registro de Clientes (`/portal/register`)**:
   - Medidor de seguridad dinámico en tiempo real con barra de progreso de 4 niveles cromáticos (*Débil*, *Regular*, *Buena*, *Segura*).
   - Checklist interactivo con validación instantánea de 4 criterios obligatorios: mínimo 8 caracteres, al menos 1 mayúscula, al menos 1 minúscula y al menos 1 número.
