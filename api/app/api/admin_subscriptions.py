@@ -3,6 +3,7 @@ from datetime import datetime, timedelta
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 from typing import List, Optional
 
@@ -45,6 +46,30 @@ class CreateSubscriptionLinkResponse(BaseModel):
     checkout_url: str
     preapproval_id: Optional[str] = None
 
+class UpdateSubscriptionRequest(BaseModel):
+    status: Optional[str] = Field(None, pattern="^(trial|active|past_due|cancelled|paused)$")
+    current_period_start: Optional[datetime] = None
+    current_period_end: Optional[datetime] = None
+
+def serialize_subscription(s: CustomerSubscription) -> SubscriptionResponse:
+    cust = s.customer
+    plan = s.plan
+    return SubscriptionResponse(
+        id=s.id,
+        customer_id=s.customer_id,
+        customer_name=cust.company_name if cust else "Desconocido",
+        customer_email=cust.user.email if (cust and cust.user) else "",
+        plan_id=s.plan_id,
+        plan_name=plan.name if plan else "Plan eliminado",
+        product_slug=plan.product.slug if (plan and plan.product) else "unknown",
+        price_mxn=float(plan.price_mxn) if plan else 0.0,
+        status=s.status,
+        current_period_start=s.current_period_start.isoformat(),
+        current_period_end=s.current_period_end.isoformat(),
+        mp_preapproval_id=s.mp_preapproval_id,
+        external_tenant_id=s.external_tenant_id
+    )
+
 # --- Endpoints ---
 
 @router.get("", response_model=List[SubscriptionResponse])
@@ -54,26 +79,7 @@ def list_subscriptions(
 ):
     """Lista todas las suscripciones registradas."""
     subs = db.query(CustomerSubscription).order_by(CustomerSubscription.id.desc()).all()
-    res = []
-    for s in subs:
-        cust = s.customer
-        plan = s.plan
-        res.append(SubscriptionResponse(
-            id=s.id,
-            customer_id=s.customer_id,
-            customer_name=cust.company_name if cust else "Desconocido",
-            customer_email=cust.user.email if (cust and cust.user) else "",
-            plan_id=s.plan_id,
-            plan_name=plan.name if plan else "Plan eliminado",
-            product_slug=plan.product.slug if (plan and plan.product) else "unknown",
-            price_mxn=float(plan.price_mxn) if plan else 0.0,
-            status=s.status,
-            current_period_start=s.current_period_start.isoformat(),
-            current_period_end=s.current_period_end.isoformat(),
-            mp_preapproval_id=s.mp_preapproval_id,
-            external_tenant_id=s.external_tenant_id
-        ))
-    return res
+    return [serialize_subscription(s) for s in subs]
 
 @router.post("/generate-link", response_model=CreateSubscriptionLinkResponse)
 async def generate_mercadopago_subscription(
@@ -179,3 +185,75 @@ async def generate_mercadopago_subscription(
             checkout_url=init_point,
             preapproval_id=preapproval_id
         )
+
+@router.patch("/{subscription_id}", response_model=SubscriptionResponse)
+def update_subscription(
+    subscription_id: int,
+    req: UpdateSubscriptionRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    """
+    Permite al administrador editar el estado y periodo de una suscripción.
+    Si la suscripción está vinculada a un inquilino del CRM (external_tenant_id),
+    sincroniza el estado hacia crm.organization.
+    """
+    sub = db.query(CustomerSubscription).filter(CustomerSubscription.id == subscription_id).first()
+    if not sub:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Suscripción no encontrada."
+        )
+
+    status_changed = False
+    if req.status is not None:
+        clean_status = req.status.strip().lower()
+        if clean_status != sub.status:
+            sub.status = clean_status
+            status_changed = True
+            if clean_status == "cancelled":
+                sub.cancelled_at = datetime.utcnow()
+            elif sub.cancelled_at is not None:
+                sub.cancelled_at = None
+
+    if req.current_period_start is not None:
+        sub.current_period_start = req.current_period_start
+
+    if req.current_period_end is not None:
+        if req.current_period_start is not None and req.current_period_end <= req.current_period_start:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La fecha de fin de periodo debe ser posterior a la fecha de inicio."
+            )
+        elif req.current_period_start is None and req.current_period_end <= sub.current_period_start:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La fecha de fin de periodo debe ser posterior a la fecha de inicio actual."
+            )
+        sub.current_period_end = req.current_period_end
+
+    sub.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(sub)
+
+    # Si cambió el estado y tiene tenant CRM asignado, sincronizar crm.organization
+    if status_changed and sub.external_tenant_id:
+        try:
+            # Mapeo de estados hacia crm.organization ('active', 'trial', 'suspended', 'cancelled')
+            crm_status = "active"
+            if sub.status in ["cancelled", "past_due"]:
+                crm_status = "suspended" if sub.status == "past_due" else "cancelled"
+            elif sub.status == "paused":
+                crm_status = "suspended"
+            elif sub.status == "trial":
+                crm_status = "trial"
+
+            update_query = text("UPDATE crm.organization SET status = :status WHERE id = :id")
+            db.execute(update_query, {"status": crm_status, "id": sub.external_tenant_id})
+            db.commit()
+            logger.info(f"Sincronizado estado CRM '{crm_status}' para organización {sub.external_tenant_id}")
+        except Exception as e:
+            logger.warning(f"No se pudo sincronizar estado CRM para org {sub.external_tenant_id}: {e}")
+
+    logger.info(f"Admin #{admin.id} actualizó suscripción #{sub.id} (status={sub.status})")
+    return serialize_subscription(sub)

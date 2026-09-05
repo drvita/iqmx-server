@@ -9,25 +9,27 @@ import { eq } from "drizzle-orm";
 
 export const dynamic = "force-dynamic";
 
-const featuresPatchSchema = z.object({
-  agendaEnabled: z.boolean().optional(),
-  attributionEnabled: z.boolean().optional(),
-  channels: z.string().trim().optional(),
-  maxWhatsappAccounts: z.number().int().min(1).optional(),
-  maxTeamMembers: z.number().int().min(1).optional(),
-  maxContacts: z.number().int().min(1).optional(),
-  maxTokensIn: z.number().int().min(0).optional(),
-  maxTokensOut: z.number().int().min(0).optional(),
-  aiEnabled: z.boolean().optional(),
-  labEnabled: z.boolean().optional(),
-  tasksEnabled: z.boolean().optional(),
-  aiApiKey: z.string().trim().nullable().optional(),
-  aiModel: z.string().trim().nullable().optional(),
-  aiJudgeModel: z.string().trim().nullable().optional(),
-  aiBaseUrl: z.string().trim().url().nullable().optional(),
-  agentCoalesceMs: z.number().int().min(500).max(30000).optional(),
-  extra: z.record(z.unknown()).optional(),
-});
+const featuresPatchSchema = z
+  .object({
+    agendaEnabled: z.boolean().optional(),
+    attributionEnabled: z.boolean().optional(),
+    channels: z.string().trim().optional(),
+    maxWhatsappAccounts: z.number().int().min(1).optional(),
+    maxTeamMembers: z.number().int().min(1).optional(),
+    maxContacts: z.number().int().min(1).optional(),
+    maxTokensIn: z.number().int().min(0).optional(),
+    maxTokensOut: z.number().int().min(0).optional(),
+    aiEnabled: z.boolean().optional(),
+    labEnabled: z.boolean().optional(),
+    tasksEnabled: z.boolean().optional(),
+    aiApiKey: z.string().trim().nullable().optional(),
+    aiModel: z.string().trim().nullable().optional(),
+    aiJudgeModel: z.string().trim().nullable().optional(),
+    aiBaseUrl: z.string().trim().url().nullable().optional(),
+    agentCoalesceMs: z.number().int().min(500).max(30000).optional(),
+    extra: z.record(z.unknown()).optional(),
+  })
+  .passthrough();
 
 async function resolveTenantId(paramId: string): Promise<string | null> {
   const db = getDb();
@@ -72,31 +74,39 @@ export async function GET(
     );
   }
 
-  const settings = await getOrganizationSettings(organizationId);
-  return Response.json({
-    ok: true,
-    organizationId,
-    features: {
-      agendaEnabled: settings.agendaEnabled,
-      attributionEnabled: settings.attributionEnabled,
-      channels: settings.channels,
-      maxWhatsappAccounts: settings.maxWhatsappAccounts,
-      maxTeamMembers: settings.maxTeamMembers,
-      maxContacts: settings.maxContacts,
-      maxTokensIn: settings.maxTokensIn,
-      maxTokensOut: settings.maxTokensOut,
-      aiEnabled: settings.aiEnabled,
-      labEnabled: settings.labEnabled,
-      tasksEnabled: settings.tasksEnabled,
-      hasAiApiKey: Boolean(settings.aiApiKeyEncrypted),
-      aiModel: settings.aiModel,
-      aiJudgeModel: settings.aiJudgeModel,
-      aiBaseUrl: settings.aiBaseUrl,
-      agentCoalesceMs: settings.agentCoalesceMs,
-      extra: settings.extra,
-      updatedAt: settings.updatedAt,
-    },
-  });
+  try {
+    const settings = await getOrganizationSettings(organizationId);
+    return Response.json({
+      ok: true,
+      organizationId,
+      features: {
+        agendaEnabled: settings.agendaEnabled,
+        attributionEnabled: settings.attributionEnabled,
+        channels: settings.channels,
+        maxWhatsappAccounts: settings.maxWhatsappAccounts,
+        maxTeamMembers: settings.maxTeamMembers,
+        maxContacts: settings.maxContacts,
+        maxTokensIn: settings.maxTokensIn,
+        maxTokensOut: settings.maxTokensOut,
+        aiEnabled: settings.aiEnabled,
+        labEnabled: settings.labEnabled,
+        tasksEnabled: settings.tasksEnabled,
+        hasAiApiKey: Boolean(settings.aiApiKeyEncrypted),
+        aiModel: settings.aiModel,
+        aiJudgeModel: settings.aiJudgeModel,
+        aiBaseUrl: settings.aiBaseUrl,
+        agentCoalesceMs: settings.agentCoalesceMs,
+        extra: settings.extra,
+        updatedAt: settings.updatedAt,
+      },
+    });
+  } catch (err: any) {
+    console.error("[provision/features] Error al obtener límites:", err);
+    return Response.json(
+      { ok: false, error: "Error al consultar configuración del inquilino." },
+      { status: 500 }
+    );
+  }
 }
 
 /**
@@ -155,6 +165,39 @@ export async function PATCH(
       },
       { status: 422 }
     );
+  }
+
+  // Agrupar campos desconocidos en 'extra'
+  const knownKeys = new Set([
+    "agendaEnabled",
+    "attributionEnabled",
+    "channels",
+    "maxWhatsappAccounts",
+    "maxTeamMembers",
+    "maxContacts",
+    "maxTokensIn",
+    "maxTokensOut",
+    "aiEnabled",
+    "labEnabled",
+    "tasksEnabled",
+    "aiApiKey",
+    "aiModel",
+    "aiJudgeModel",
+    "aiBaseUrl",
+    "agentCoalesceMs",
+    "extra",
+  ]);
+  const extraFields: Record<string, unknown> = {
+    ...((parsed.data.extra as Record<string, unknown>) || {}),
+  };
+  for (const [k, v] of Object.entries(parsed.data)) {
+    if (!knownKeys.has(k)) {
+      extraFields[k] = v;
+      delete (parsed.data as any)[k];
+    }
+  }
+  if (Object.keys(extraFields).length > 0) {
+    parsed.data.extra = extraFields;
   }
 
   try {

@@ -2,7 +2,7 @@ import logging
 import httpx
 from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from typing import List, Optional, Any, Dict
@@ -11,13 +11,9 @@ from app.db.database import get_db
 from app.models.customer import Customer
 from app.models.customer_subscription import CustomerSubscription
 from app.models.product import Product
-from app.models.whatsapp_number import WhatsAppNumber
-from app.models.customer_webhook import CustomerWebhook
 from app.api.admin_auth import get_current_admin
 from app.models.user import User
 from app.config import settings
-from app.lib.crypto import decrypt_token, encrypt_token
-from app.api.portal_whatsapp import send_provision_to_crm
 from app.api.portal_crm import get_crm_internal_url_and_secret
 
 logger = logging.getLogger("uvicorn.error")
@@ -51,6 +47,8 @@ class CrmTenantSummary(BaseModel):
     created_at: Optional[str] = None
 
 class OverrideLimitsRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+
     max_whatsapp_accounts: Optional[int] = None
     max_team_members: Optional[int] = None
     max_contacts: Optional[int] = None
@@ -68,25 +66,6 @@ class OverrideLimitsRequest(BaseModel):
 
 class ChangeTenantStatusRequest(BaseModel):
     status: str = Field(..., description="'active', 'trial', 'suspended', 'cancelled'")
-
-class WabaAccountResponse(BaseModel):
-    id: str
-    name: str
-    currency: Optional[str] = None
-
-class WabaPhoneNumberResponse(BaseModel):
-    id: str
-    display_phone_number: Optional[str] = None
-    verified_name: Optional[str] = None
-    status: Optional[str] = None
-    quality_rating: Optional[str] = None
-    platform_type: Optional[str] = None
-
-class ConnectWabaNumberRequest(BaseModel):
-    organization_id: str
-    waba_id: str
-    phone_number_id: str
-    token: Optional[str] = None
 
 # --- Endpoints ---
 
@@ -365,276 +344,4 @@ async def list_openrouter_ai_models(
 
     return {"models": _ai_models_cache["data"] or fallback_models}
 
-
-@router.get("/waba-accounts", response_model=List[WabaAccountResponse])
-async def list_owned_waba_accounts(
-    token: Optional[str] = None,
-    admin: User = Depends(get_current_admin)
-):
-    """
-    Lista las cuentas empresariales de WhatsApp (WABAs propias) registradas bajo el Business Manager del Tech Provider.
-    """
-    active_token = (token or "").strip() or (settings.META_SYSTEM_USER_TOKEN or "").strip()
-    if not active_token:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="META_SYSTEM_USER_TOKEN no está configurado en el servidor."
-        )
-
-    business_id = settings.META_BUSINESS_ID or "3649198765130252"
-    url = f"https://graph.facebook.com/{settings.GRAPH_API_VERSION}/{business_id}/owned_whatsapp_business_accounts?fields=id,name,currency&limit=50"
-    headers = {"Authorization": f"Bearer {active_token}"}
-
-    try:
-        async with httpx.AsyncClient(timeout=12.0) as client:
-            res = await client.get(url, headers=headers)
-            if res.status_code != 200:
-                logger.error(f"Error consultando WABAs en Meta ({res.status_code}): {res.text}")
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail=f"Meta Graph API respondió con error HTTP {res.status_code}: {res.text[:200]}"
-                )
-            data = res.json().get("data", [])
-            return [
-                WabaAccountResponse(
-                    id=item.get("id"),
-                    name=item.get("name") or item.get("id"),
-                    currency=item.get("currency")
-                )
-                for item in data
-            ]
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Excepción consultando WABAs propias en Meta")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-
-
-@router.get("/waba-accounts/{waba_id}/phone-numbers", response_model=List[WabaPhoneNumberResponse])
-async def list_waba_phone_numbers(
-    waba_id: str,
-    token: Optional[str] = None,
-    admin: User = Depends(get_current_admin)
-):
-    """
-    Lista los números de teléfono asociados a una WABA en Meta Graph API.
-    """
-    active_token = (token or "").strip() or (settings.META_SYSTEM_USER_TOKEN or "").strip()
-    if not active_token:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="META_SYSTEM_USER_TOKEN no está configurado en el servidor."
-        )
-
-    url = f"https://graph.facebook.com/{settings.GRAPH_API_VERSION}/{waba_id}/phone_numbers?fields=id,display_phone_number,verified_name,status,quality_rating,platform_type"
-    headers = {"Authorization": f"Bearer {active_token}"}
-
-    try:
-        async with httpx.AsyncClient(timeout=12.0) as client:
-            res = await client.get(url, headers=headers)
-            if res.status_code != 200:
-                logger.error(f"Error consultando números en Meta para WABA {waba_id} ({res.status_code}): {res.text}")
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail=f"Meta Graph API respondió con error HTTP {res.status_code}: {res.text[:200]}"
-                )
-            data = res.json().get("data", [])
-            return [
-                WabaPhoneNumberResponse(
-                    id=item.get("id"),
-                    display_phone_number=item.get("display_phone_number"),
-                    verified_name=item.get("verified_name"),
-                    status=item.get("status"),
-                    quality_rating=item.get("quality_rating"),
-                    platform_type=item.get("platform_type")
-                )
-                for item in data
-            ]
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Excepción consultando números de WABA en Meta")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
-
-
-@router.post("/connect-waba-number")
-async def connect_waba_number_to_tenant(
-    req: ConnectWabaNumberRequest,
-    db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
-):
-    """
-    Vincula un número oficial de Meta a una organización/inquilino del CRM.
-    1. Valida el token permanente.
-    2. Resuelve el cliente central correspondiente.
-    3. Consulta Meta Graph para obtener detalles de la línea.
-    4. Valida unicidad estricta entre clientes.
-    5. Suscribe la WABA en Meta (POST /{waba_id}/subscribed_apps) para recibir webhooks.
-    6. Cifra el token con AES-256-GCM y guarda en whatsapp_numbers.
-    7. Aprovisiona la línea en el CRM mediante send_provision_to_crm.
-    """
-    token = (req.token or "").strip() or (settings.META_SYSTEM_USER_TOKEN or "").strip()
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="META_SYSTEM_USER_TOKEN no está configurado en el servidor ni se proporcionó un token."
-        )
-
-    # 1. Resolver organización en CRM
-    org_row = db.execute(
-        text("SELECT id, name, external_customer_id FROM crm.organization WHERE id = :org_id"),
-        {"org_id": req.organization_id}
-    ).fetchone()
-    if not org_row:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Organización '{req.organization_id}' no encontrada en el CRM."
-        )
-
-    # 2. Resolver Customer central asociado
-    customer_id = None
-    sub = db.query(CustomerSubscription).filter(CustomerSubscription.external_tenant_id == req.organization_id).first()
-    if sub and sub.customer_id:
-        customer_id = sub.customer_id
-    elif org_row.external_customer_id:
-        ext_id = str(org_row.external_customer_id)
-        if ext_id.startswith("iqmx_cust_"):
-            customer_id = int(ext_id.replace("iqmx_cust_", ""))
-        elif ext_id.isdigit():
-            customer_id = int(ext_id)
-
-    if not customer_id:
-        c_by_name = db.query(Customer).filter(Customer.company_name.ilike(org_row.name)).first()
-        if c_by_name:
-            customer_id = c_by_name.id
-
-    if not customer_id:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"No se encontró un cliente central vinculado a la organización '{org_row.name}'."
-        )
-
-    customer = db.query(Customer).filter(Customer.id == customer_id).first()
-    if not customer:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Cliente central #{customer_id} no existe en la base de datos."
-        )
-
-    graph_base = f"https://graph.facebook.com/{settings.GRAPH_API_VERSION}"
-    headers = {"Authorization": f"Bearer {token}"}
-
-    # 3. Consultar detalles de la línea en Meta
-    display_phone_number = None
-    verified_name = None
-    async with httpx.AsyncClient(timeout=15.0) as client:
-        pn_url = f"{graph_base}/{req.phone_number_id}?fields=display_phone_number,verified_name,status"
-        res_pn = await client.get(pn_url, headers=headers)
-        if res_pn.status_code != 200:
-            logger.error(f"Error consultando línea #{req.phone_number_id} en Meta: {res_pn.text}")
-            raise HTTPException(
-                status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f"Meta Graph API rechazó la consulta del número #{req.phone_number_id}: {res_pn.text[:200]}"
-            )
-        pn_data = res_pn.json()
-        display_phone_number = pn_data.get("display_phone_number")
-        verified_name = pn_data.get("verified_name")
-
-        # 4. Validar unicidad estricta contra otros clientes
-        existing_number = db.query(WhatsAppNumber).filter(
-            WhatsAppNumber.phone_number_id == str(req.phone_number_id)
-        ).first()
-
-        if existing_number and existing_number.customer_id != customer.id:
-            other_c = db.query(Customer).filter(Customer.id == existing_number.customer_id).first()
-            other_name = other_c.company_name if other_c else f"Cliente #{existing_number.customer_id}"
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=f"Este número telefónico ya está vinculado a la cuenta: '{other_name}'. No es posible duplicar una línea entre diferentes empresas."
-            )
-
-        if display_phone_number:
-            clean_num = "".join(filter(str.isdigit, display_phone_number))
-            if len(clean_num) >= 10:
-                other_numbers = db.query(WhatsAppNumber).filter(
-                    WhatsAppNumber.display_phone_number.isnot(None),
-                    WhatsAppNumber.customer_id != customer.id
-                ).all()
-                for num_row in other_numbers:
-                    if num_row.display_phone_number:
-                        other_clean = "".join(filter(str.isdigit, num_row.display_phone_number))
-                        if other_clean and (other_clean == clean_num or other_clean.endswith(clean_num[-10:]) or clean_num.endswith(other_clean[-10:])):
-                            other_c = db.query(Customer).filter(Customer.id == num_row.customer_id).first()
-                            other_name = other_c.company_name if other_c else f"Cliente #{num_row.customer_id}"
-                            raise HTTPException(
-                                status_code=status.HTTP_409_CONFLICT,
-                                detail=f"La línea '{display_phone_number}' ya está registrada en la cuenta: '{other_name}'. Cada número sólo puede pertenecer a un cliente."
-                            )
-
-        # 5. Suscribir la WABA a los webhooks de Meta
-        sub_url = f"{graph_base}/{req.waba_id}/subscribed_apps"
-        sub_res = await client.post(sub_url, headers=headers)
-        if sub_res.status_code == 200:
-            logger.info(f"Aplicación suscrita con éxito en Meta para WABA {req.waba_id}")
-        else:
-            logger.warning(f"Aviso al suscribir WABA en Meta ({sub_res.status_code}): {sub_res.text}")
-
-    # 6. Cifrar token y guardar en BD
-    encrypted_token_str = encrypt_token(token, settings.TOKEN_ENCRYPTION_KEY)
-
-    if existing_number:
-        existing_number.waba_id = str(req.waba_id)
-        existing_number.display_phone_number = display_phone_number
-        existing_number.verified_name = verified_name
-        existing_number.encrypted_token = encrypted_token_str
-        existing_number.status = "connected"
-        existing_number.updated_at = datetime.utcnow()
-        db.commit()
-        db.refresh(existing_number)
-        number_obj = existing_number
-    else:
-        number_obj = WhatsAppNumber(
-            customer_id=customer.id,
-            phone_number_id=str(req.phone_number_id),
-            waba_id=str(req.waba_id),
-            display_phone_number=display_phone_number,
-            verified_name=verified_name,
-            encrypted_token=encrypted_token_str,
-            status="connected"
-        )
-        db.add(number_obj)
-        db.commit()
-        db.refresh(number_obj)
-
-    logger.info(f"Admin #{admin.id} vinculó línea #{number_obj.phone_number_id} a cliente #{customer.id} ({customer.company_name})")
-
-    # 7. Aprovisionar al CRM
-    cust_webhook = db.query(CustomerWebhook).filter(CustomerWebhook.customer_id == customer.id).first()
-    provision_url = (cust_webhook.provision_url.strip() if cust_webhook and cust_webhook.provision_url else None) or f"{settings.CRM_SERVICE_URL}/api/settings/whatsapp/provision"
-    provision_secret = (cust_webhook.secret_token if cust_webhook and cust_webhook.secret_token else None) or settings.CRM_PROVISION_SECRET
-
-    crm_result = await send_provision_to_crm(
-        provision_url=provision_url,
-        secret_token=provision_secret,
-        waba_id=str(req.waba_id),
-        phone_number_id=str(req.phone_number_id),
-        token=token,
-        display_phone_number=display_phone_number,
-        verified_name=verified_name,
-        organization_id=req.organization_id
-    )
-
-    return {
-        "ok": True,
-        "message": f"Línea {display_phone_number or req.phone_number_id} vinculada exitosamente a '{customer.company_name}'.",
-        "number": {
-            "id": number_obj.id,
-            "phone_number_id": number_obj.phone_number_id,
-            "waba_id": number_obj.waba_id,
-            "display_phone_number": number_obj.display_phone_number,
-            "verified_name": number_obj.verified_name,
-            "status": number_obj.status
-        },
-        "crm_provision": crm_result
-    }
 

@@ -30,7 +30,6 @@ class Settings(BaseSettings):
     META_CONFIG_ID: str = "968187492720390"
     GRAPH_API_VERSION: str = "v26.0"
     META_BUSINESS_ID: str = "3649198765130252"
-    META_SYSTEM_USER_TOKEN: str | None = None
     # Rate Limiting
     RATE_LIMIT_PER_SECOND: int = 35
 

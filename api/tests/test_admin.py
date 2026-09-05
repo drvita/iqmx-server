@@ -146,6 +146,136 @@ class TestAdminModule(unittest.TestCase):
         })
         self.assertEqual(portal_login_after.status_code, 403)
 
+    def test_admin_crm_override_accepts_extra_raw_fields(self):
+        """Verifica que PATCH /api/admin/crm/tenants/{org_id}/override acepte campos dinámicos extra en el JSON crudo."""
+        from unittest.mock import patch
+        import httpx
+        from app.lib.security import create_access_token
+
+        with patch("httpx.AsyncClient.patch") as mock_patch:
+            mock_patch.return_value = httpx.Response(200, json={"ok": True})
+
+            admin = self.db.query(User).filter(User.roles.any(Role.name == "admin")).first()
+            token = create_access_token(data={"sub": str(admin.id), "user_id": admin.id, "email": admin.email, "role": "admin"})
+            headers = {"Authorization": f"Bearer {token}"}
+
+            payload = {
+                "max_whatsapp_accounts": 3,
+                "agenda_enabled": True,
+                "soporte_urgente": True,
+                "custom_flag_beta": "activada",
+                "extra": {"notas_soporte": "ajuste por ticket #1024"}
+            }
+
+            res = self.client.patch("/api/admin/crm/tenants/org_test_override_123/override", headers=headers, json=payload)
+            self.assertEqual(res.status_code, 200)
+            data = res.json()
+            self.assertTrue(data["ok"])
+            self.assertIn("overrides", data)
+            self.assertEqual(data["overrides"]["soporte_urgente"], True)
+            self.assertEqual(data["overrides"]["custom_flag_beta"], "activada")
+
+    def test_admin_update_customer_and_suspension_login_behavior(self):
+        """
+        Prueba que el admin pueda editar datos del cliente (nombre empresa, contacto, email, teléfono),
+        que se valide email duplicado (409), y que suspenderlo bloquee el login en el portal (403).
+        """
+        from app.models.customer import Customer
+        from app.lib.security import create_access_token, hash_password
+
+        admin = self.db.query(User).filter(User.roles.any(Role.name == "admin")).first()
+        token = create_access_token(data={"sub": str(admin.id), "user_id": admin.id, "email": admin.email, "role": "admin"})
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 1. Asegurar un cliente de prueba
+        customer_role = self.db.query(Role).filter(Role.name == "customer").first()
+        test_email = "cliente_soporte_edit@iqmx.com"
+        u = self.db.query(User).filter(User.email == test_email).first()
+        if not u:
+            u = User(
+                name="Contacto Original",
+                email=test_email,
+                password_hash=hash_password("PassSegura123!"),
+                role_id=customer_role.id
+            )
+            u.roles.append(customer_role)
+            self.db.add(u)
+            self.db.commit()
+            self.db.refresh(u)
+
+        c = self.db.query(Customer).filter(Customer.user_id == u.id).first()
+        if not c:
+            c = Customer(
+                user_id=u.id,
+                company_name="Empresa Original SA",
+                contact_name="Contacto Original",
+                phone="+523311223344",
+                is_active=True
+            )
+            self.db.add(c)
+            self.db.commit()
+            self.db.refresh(c)
+
+        # 2. Actualizar datos vía PUT /api/admin/customers/{id}
+        nuevo_email = "cliente_soporte_modificado@iqmx.com"
+        # Limpiar si existía
+        existing_other = self.db.query(User).filter(User.email == nuevo_email).first()
+        if existing_other:
+            self.db.delete(existing_other)
+            self.db.commit()
+
+        update_payload = {
+            "company_name": "Empresa Modificada SA de CV",
+            "contact_name": "Contacto Editado",
+            "email": nuevo_email,
+            "phone": "+523399887766",
+            "is_active": True
+        }
+        res_update = self.client.put(f"/api/admin/customers/{c.id}", headers=headers, json=update_payload)
+        self.assertEqual(res_update.status_code, 200)
+        data = res_update.json()
+        self.assertEqual(data["company_name"], "Empresa Modificada SA de CV")
+        self.assertEqual(data["contact_name"], "Contacto Editado")
+        self.assertEqual(data["email"], nuevo_email)
+        self.assertEqual(data["phone"], "+523399887766")
+        self.assertTrue(data["is_active"])
+
+        # 3. Intentar asignar un email ya registrado por otro usuario -> 409 Conflict
+        res_conflict = self.client.put(f"/api/admin/customers/{c.id}", headers=headers, json={
+            "email": admin.email
+        })
+        self.assertEqual(res_conflict.status_code, 409)
+
+        # 4. Suspender al cliente (is_active = False)
+        res_suspend = self.client.put(f"/api/admin/customers/{c.id}", headers=headers, json={
+            "is_active": False
+        })
+        self.assertEqual(res_suspend.status_code, 200)
+        self.assertFalse(res_suspend.json()["is_active"])
+
+        # 5. Intentar login en portal con cuenta suspendida -> 403 Forbidden
+        portal_login_suspended = self.client.post("/api/portal/auth/login", json={
+            "email": nuevo_email,
+            "password": "PassSegura123!"
+        })
+        self.assertEqual(portal_login_suspended.status_code, 403)
+        self.assertIn("suspendida o inactiva", portal_login_suspended.json()["detail"])
+
+        # 6. Reactivar al cliente (is_active = True)
+        res_reactivate = self.client.put(f"/api/admin/customers/{c.id}", headers=headers, json={
+            "is_active": True
+        })
+        self.assertEqual(res_reactivate.status_code, 200)
+        self.assertTrue(res_reactivate.json()["is_active"])
+
+        # 7. Intentar login en portal nuevamente -> 200 OK
+        portal_login_active = self.client.post("/api/portal/auth/login", json={
+            "email": nuevo_email,
+            "password": "PassSegura123!"
+        })
+        self.assertEqual(portal_login_active.status_code, 200)
+        self.assertIn("access_token", portal_login_active.json())
+
 
 if __name__ == "__main__":
     unittest.main()

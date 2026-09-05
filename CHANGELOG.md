@@ -9,10 +9,44 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [1.5.0] - 2026-09-05
+
+### Añadido
+
+- **Gestión y Edición de Clientes Corporativos por Soporte Técnico (`/admin/customers`)**:
+  - Endpoint `PUT /api/admin/customers/{customer_id}` (con alias `PATCH`): permite al equipo de soporte técnico editar la información integral del cliente corporativo (`company_name`, `contact_name`, `phone`, `tax_id`, `email`, `is_active`).
+  - Validación de unicidad de correo: comprobación previa en la tabla `User` antes de la mutación en base de datos, retornando `409 Conflict` estructurado en caso de coincidencia para evitar fallos de integridad referencial.
+  - Transacción atómica: actualización coordinada de los datos del cliente en `Customer` y de las credenciales de acceso en `User`.
+  - Regla de negocio de suspensión (`is_active = False`): bloqueo inmediato y estricto en `/portal/login` (`403 Forbidden`) y revocación en tiempo real en `/api/portal/*` mediante `get_current_customer`. Se preserva la total independencia operativa del cliente en el CRM u otros servicios satélite si mantiene suscripciones o inquilinos activos.
+  - Modal de edición intuitivo en frontend: interfaz limpia sin textos redundantes entre paréntesis, con inputs para todos los datos de contacto y selector de estado (Activo / Suspendido) acompañado de banner informativo sobre el alcance del bloqueo.
+- **Editor Raw JSON y Limpieza Visual en Modal de Ajuste de Beneficios (`/admin/crm`)**:
+  - Selector de vistas por pestañas: alternancia entre *Formulario Asistido* y *Editor JSON Raw* para permitir la gestión de configuraciones avanzadas o parámetros no contemplados en el formulario estándar.
+  - Editor monospace con botón de autoformateo (*Dar Formato*, 2 espacios de indentación) y validación sintáctica JSON en tiempo real sin pérdida de estado.
+  - Sincronización bidireccional inteligente: preservación de claves y valores personalizados al conmutar de vista o despachar al backend.
+  - Extensibilidad en backend y CRM: soporte de `extra="allow"` en Pydantic (`OverrideLimitsRequest`) y `.passthrough()` en esquemas Zod del CRM, almacenando atributos dinámicos en la columna JSONB `extra` de `crm.organization_settings`.
+
+### Cambiado
+
+- **Optimización Visual y Rediseño de la Tabla de Clientes (`/admin/customers`)**:
+  - Remoción de columnas innecesarias: eliminación de la columna redundante *Líneas WA* y de la columna *ID Cliente* que se cortaba al extremo derecho de la pantalla.
+  - Integración del ID de cliente: incorporación sutil y estilizada del identificador (`#ID`) como badge compacto junto a la razón social de la empresa.
+  - Mejora de espaciado y jerarquía: mayor holgura horizontal en *Empresa y Contacto* y *Correo y Teléfono*, estados explícitos para teléfonos ausentes y formato amigable en la columna de origen (*Registro Web*, *Alta Manual*).
+  - Contenedor con desplazamiento horizontal suave (`overflow-x-auto`) y balance natural en 6 columnas principales para evitar saturación visual o truncamientos en cualquier resolución.
+- **Limpieza de Flujos de Números WABA Propios (`/admin/crm`)**:
+  - Retiro de componentes visuales y estados para el registro manual de números propios en el modal de vinculación WABA, consolidando el onboarding a través del flujo oficial de Embedded Signup.
+  - Depuración de endpoints y eliminación de variables de entorno obsoletas de tokens de usuario, minimizando la superficie de exposición y riesgo de seguridad.
+
+---
+
 ## [1.4.0] - 2026-09-04
 
 ### Añadido
 
+- **Edición Manual de Periodos, Estados y Badges Cromáticos en Membresías (`/admin/subscriptions`)**:
+  - Endpoint `PATCH /api/admin/subscriptions/{subscription_id}`: permite al administrador ajustar el estado (`trial`, `active`, `past_due`, `paused`, `cancelled`) y el rango de fechas de inicio y fin del periodo (`current_period_start` y `current_period_end`).
+  - Sincronización automática de acceso CRM: si la suscripción tiene un inquilino asociado (`external_tenant_id`), el cambio de estado se propaga inmediatamente a `crm.organization.status` (`active`, `trial`, `suspended`, `cancelled`).
+  - Sistema de colores semánticos por estado en la tabla: verde esmeralda para *Activa*, azul cielo para *Prueba*, ámbar para *Atrasada*, morado para *Pausada* y rojo para *Cancelada*.
+  - Modal interactivo de edición con campos de fecha nativos, selectores intuitivos y retroalimentación inmediata sin recarga de página.
 - **Base de Conocimiento Aislada por Asistente IA (`crm.kb_entry`)**:
   - Separación multi-asistente a nivel de base de datos: adición de la columna `assistant_id` con clave foránea a `crm.agent_profile(id)` e índice `kb_assistant_idx`.
   - Migración SQL preservativa (`0015_kb_entry_assistant.sql`): asocia automáticamente entradas huérfanas existentes al asistente conversacional predeterminado de cada organización, garantizando cero pérdida de información ya cargada.
