@@ -23,7 +23,7 @@ export default function PortalLoginPage() {
     }
   }, []);
 
-  const handleSubmit = async (e?: React.FormEvent | React.MouseEvent) => {
+  const handleSubmit = async (e?: React.FormEvent | React.MouseEvent | React.KeyboardEvent) => {
     if (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -162,13 +162,19 @@ export default function PortalLoginPage() {
                 disabled={loading}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void handleSubmit(e);
+                  }
+                }}
                 placeholder="••••••••"
                 className="mt-1.5 block w-full rounded-lg bg-white border border-gray-300 px-3.5 py-2.5 text-gray-900 placeholder-gray-400 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600 text-sm transition-colors disabled:bg-gray-50"
               />
             </div>
 
             <button
-              type="button"
+              type="submit"
               disabled={loading}
               onClick={(e) => void handleSubmit(e)}
               className="w-full flex justify-center py-2.5 px-4 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 shadow-sm transition-colors disabled:opacity-50 cursor-pointer"

@@ -28,3 +28,4 @@ class CustomerSubscription(Base):
 
     customer = relationship("Customer", back_populates="subscriptions")
     plan = relationship("MembershipPlan", back_populates="subscriptions")
+    payments = relationship("Payment", back_populates="subscription", cascade="all, delete-orphan", passive_deletes=True)

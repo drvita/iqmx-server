@@ -60,8 +60,9 @@ def run_cron(dry_run: bool = False):
             if not dry_run:
                 expired_list = expire_due_subscriptions(db)
                 print(f"      -> Exitosamente cambiadas a 'expired': {len(expired_list)}")
+                print(f"      -> Notificaciones de expiración y feedback por WhatsApp enviadas a clientes y admins.")
             else:
-                print("      -> [DRY-RUN] Omitiendo actualización a 'expired'.")
+                print("      -> [DRY-RUN] Omitiendo actualización a 'expired' y despacho de notificaciones.")
         else:
             print("      -> Ninguna membresía vencida pendiente.")
 

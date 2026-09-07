@@ -37,6 +37,24 @@ export default function MySubscriptionsSection({
     }
   };
 
+  const formatScheduledDate = (isoStr: string) => {
+    try {
+      const d = new Date(isoStr);
+      // Si la fecha de inicio es a final de jornada (ej. 23:59:59 o >= 20:00),
+      // entra en vigor para el cliente a partir del día natural siguiente.
+      if (d.getHours() >= 20 || isoStr.includes('23:59')) {
+        d.setDate(d.getDate() + 1);
+      }
+      return d.toLocaleDateString('es-MX', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    } catch {
+      return isoStr;
+    }
+  };
+
   return (
     <div className="rounded-3xl border border-gray-200 bg-white p-6 sm:p-8 shadow-xs">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-100 pb-6 mb-6">
@@ -157,7 +175,7 @@ export default function MySubscriptionsSection({
 
                   <div className="sm:text-right">
                     <span className="rounded-full bg-blue-100 px-2.5 py-1 text-[10px] font-bold text-blue-800 uppercase">
-                      Inicia: {formatDate(sched.current_period_start)}
+                      Inicia: {formatScheduledDate(sched.current_period_start)}
                     </span>
                   </div>
                 </div>

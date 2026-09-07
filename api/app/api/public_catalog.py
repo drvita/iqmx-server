@@ -2,7 +2,7 @@ import logging
 from datetime import datetime, timedelta
 import re
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
@@ -15,7 +15,7 @@ from app.models.customer_subscription import CustomerSubscription
 from app.models.user import User
 from app.models.role import Role
 from app.lib.security import hash_password
-from app.config import settings
+from app.config import settings, resolve_frontend_base_url
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -62,6 +62,15 @@ class PublicCheckoutResponse(BaseModel):
     subscription_id: int
     checkout_url: str
     status: str
+    back_url: Optional[str] = None
+
+class PublicCheckoutStatusResponse(BaseModel):
+    subscription_id: int
+    plan_name: str
+    product_name: str
+    status: str
+    price_mxn: float
+    checkout_url: Optional[str] = None
 
 # --- Endpoints ---
 
@@ -167,6 +176,7 @@ def get_public_plans(
 @router.post("/checkout/preference", response_model=PublicCheckoutResponse)
 async def create_checkout_preference(
     req: PublicCheckoutRequest,
+    request: Request,
     db: Session = Depends(get_db)
 ):
     """
@@ -184,14 +194,13 @@ async def create_checkout_preference(
     if float(plan.price_mxn) <= 0:
         raise HTTPException(
             status_code=400,
-            detail="Las membresías gratuitas no requieren proceso de cobro en Mercado Pago."
+            detail="Los planes gratuitos no requieren preferencia de pago. Deben activarse vía /claim-trial."
         )
 
+    # 1. Obtener o crear Cliente y Usuario
     clean_email = req.email.strip().lower()
-
-    # 1. Buscar o registrar al usuario y cliente
     user = db.query(User).filter(User.email == clean_email).first()
-    customer_role = db.query(Role).filter(Role.name == "customer").first()
+    customer_role = db.query(Role).filter(Role.name == "contact").first()
 
     if not user:
         # Generar usuario para el cliente
@@ -222,30 +231,47 @@ async def create_checkout_preference(
         db.commit()
         db.refresh(customer)
 
-    # 2. Registrar la suscripción en estado 'pending_payment'
+    # 2. Registrar o reutilizar la suscripción en estado 'pending_payment'
     now = datetime.utcnow()
-    sub = CustomerSubscription(
-        customer_id=customer.id,
-        plan_id=plan.id,
-        status="pending_payment",
-        current_period_start=now,
-        current_period_end=now + timedelta(days=30),
-    )
-    db.add(sub)
+    existing_pending = db.query(CustomerSubscription).filter(
+        CustomerSubscription.customer_id == customer.id,
+        CustomerSubscription.status == "pending_payment"
+    ).order_by(CustomerSubscription.id.desc()).first()
+
+    if existing_pending:
+        sub = existing_pending
+        sub.plan_id = plan.id
+        sub.current_period_start = now
+        sub.current_period_end = now + timedelta(days=30)
+    else:
+        sub = CustomerSubscription(
+            customer_id=customer.id,
+            plan_id=plan.id,
+            status="pending_payment",
+            current_period_start=now,
+            current_period_end=now + timedelta(days=30),
+        )
+        db.add(sub)
     db.commit()
     db.refresh(sub)
 
-    # 3. Invocar API de Mercado Pago (Suscripciones / Preapproval)
+    # 3. Resolver URL de retorno dinámica (Frontend / Portal)
+    frontend_base = resolve_frontend_base_url(request, for_external_gateway=True)
+    back_url = f"{frontend_base}/portal/checkout/status?sub_id={sub.id}&plan_id={plan.id}"
+
+    # 4. Invocar API de Mercado Pago (Suscripciones / Preapproval)
     mp_token = settings.MERCADOPAGO_ACCESS_TOKEN
     if not mp_token:
         # Simulación amigable en desarrollo local sin credenciales reales
         mock_checkout = f"https://www.mercadopago.com.mx/subscriptions/checkout?pref_id=mock_{sub.id}"
         sub.mp_preapproval_id = f"mock_preapproval_{sub.id}"
+        sub.custom_features_override = {"checkout_url": mock_checkout, "back_url": back_url}
         db.commit()
         return PublicCheckoutResponse(
             subscription_id=sub.id,
             checkout_url=mock_checkout,
-            status="pending_payment"
+            status="pending_payment",
+            back_url=back_url
         )
 
     # En entorno que no sea producción, si se define MERCADOPAGO_TEST_PAYER_EMAIL se utiliza como pagador de pruebas en Mercado Pago
@@ -253,6 +279,11 @@ async def create_checkout_preference(
     payer_email_to_send = clean_email
     if not is_production and settings.mercadopago_resolved_test_payer_email:
         payer_email_to_send = settings.mercadopago_resolved_test_payer_email
+
+    logger.info(
+        f"[Mercado Pago Checkout] Sub #{sub.id} -> Creando preapproval con back_url='{back_url}' "
+        f"(Origin='{request.headers.get('origin')}', PORTAL_BASE_URL='{settings.PORTAL_BASE_URL}')"
+    )
 
     # Llamada real a Mercado Pago
     url = "https://api.mercadopago.com/preapproval"
@@ -265,7 +296,7 @@ async def create_checkout_preference(
             "currency_id": "MXN"
         },
         "payer_email": payer_email_to_send,
-        "back_url": "https://iqissmexico.com/portal/dashboard?payment=success",
+        "back_url": back_url,
         "external_reference": f"sub_{sub.id}_cust_{customer.id}"
     }
     headers = {
@@ -292,10 +323,43 @@ async def create_checkout_preference(
         init_point = data.get("init_point")
 
         sub.mp_preapproval_id = preapproval_id
+        sub.custom_features_override = {"checkout_url": init_point, "back_url": back_url}
         db.commit()
 
         return PublicCheckoutResponse(
             subscription_id=sub.id,
             checkout_url=init_point,
-            status="pending_payment"
+            status="pending_payment",
+            back_url=back_url
         )
+
+
+@router.get("/checkout/status", response_model=PublicCheckoutStatusResponse)
+def get_public_checkout_status(
+    sub_id: int,
+    db: Session = Depends(get_db)
+):
+    """
+    Retorna el estado público no confidencial de una suscripción tras retornar de Mercado Pago
+    para desplegar la pantalla de agradecimiento o de pago pendiente/error.
+    """
+    sub = db.query(CustomerSubscription).filter(CustomerSubscription.id == sub_id).first()
+    if not sub:
+        raise HTTPException(status_code=404, detail="Suscripción no encontrada.")
+
+    plan = sub.plan
+    product = plan.product if plan else None
+    checkout_url = (
+        (sub.custom_features_override or {}).get("checkout_url")
+        if isinstance(sub.custom_features_override, dict)
+        else None
+    )
+
+    return PublicCheckoutStatusResponse(
+        subscription_id=sub.id,
+        plan_name=plan.name if plan else "Plan IQISSMexico",
+        product_name=product.name if product else "IQISSMexico",
+        status=sub.status,
+        price_mxn=float(plan.price_mxn) if plan else 0.0,
+        checkout_url=checkout_url
+    )

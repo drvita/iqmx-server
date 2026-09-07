@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, BackgroundTasks
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 from typing import Optional
@@ -22,6 +22,13 @@ from app.lib.security import (
     get_current_customer
 )
 from app.lib.crypto import generate_secure_secret
+from app.config import settings
+from app.services.notifications.manager import NotificationManager
+from app.lib.redis_client import (
+    save_email_verification_token,
+    consume_email_verification_token,
+    get_user_id_from_verification_token
+)
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -75,6 +82,16 @@ class CustomerProfileResponse(BaseModel):
     origin: str
     privacy_accepted_at: datetime
     is_active: bool
+    email_verified: bool = False
+    email_verified_at: Optional[datetime] = None
+
+class VerifyEmailRequest(BaseModel):
+    token: str = Field(..., min_length=10, max_length=120)
+
+class VerifyEmailResponse(BaseModel):
+    success: bool
+    message: str
+    email: str
 
 class AuthResponse(BaseModel):
     access_token: str
@@ -88,6 +105,7 @@ class AuthResponse(BaseModel):
 async def register_customer(
     req: CustomerRegisterRequest,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
     """
@@ -168,7 +186,27 @@ async def register_customer(
     # 4. Generar token de acceso JWT
     token = create_access_token(data={"sub": str(new_user.id), "user_id": new_user.id, "email": new_user.email})
 
-    logger.info(f"Nuevo cliente registrado: {new_customer.company_name} (User ID #{new_user.id})")
+    # 5. Generar token de verificación de correo en Redis y enviar email de bienvenida
+    verification_token = generate_secure_secret(32)
+    save_email_verification_token(new_user.id, verification_token, ttl_seconds=86400)
+
+    verification_url = f"{settings.PORTAL_BASE_URL}/portal/verify-email?token={verification_token}"
+    background_tasks.add_task(
+        NotificationManager.notify_customer_template,
+        to_email=new_user.email,
+        template_uuid=settings.MAILTRAP_TEMPLATE_WELCOME,
+        template_variables={
+            "user_name": new_customer.contact_name,
+            "company": new_customer.company_name,
+            "verification_url": verification_url,
+            "support_email": settings.MAIL_FROM_EMAIL,
+        },
+        from_name="IQISSMexico",
+        from_email=settings.MAIL_FROM_EMAIL,
+        to_name=new_customer.contact_name,
+    )
+
+    logger.info(f"Nuevo cliente registrado: {new_customer.company_name} (User ID #{new_user.id}). Token de verificación generado.")
 
     return AuthResponse(
         access_token=token,
@@ -182,7 +220,9 @@ async def register_customer(
             tax_id=new_customer.tax_id,
             origin=new_customer.origin,
             privacy_accepted_at=new_customer.privacy_accepted_at,
-            is_active=new_customer.is_active
+            is_active=new_customer.is_active,
+            email_verified=new_user.is_email_verified,
+            email_verified_at=new_user.email_verified_at
         )
     )
 
@@ -238,7 +278,9 @@ async def login_customer(
             tax_id=customer.tax_id,
             origin=customer.origin,
             privacy_accepted_at=customer.privacy_accepted_at,
-            is_active=customer.is_active
+            is_active=customer.is_active,
+            email_verified=user.is_email_verified,
+            email_verified_at=user.email_verified_at
         )
     )
 
@@ -258,5 +300,147 @@ async def get_my_profile(
         tax_id=current_customer.tax_id,
         origin=current_customer.origin,
         privacy_accepted_at=current_customer.privacy_accepted_at,
-        is_active=current_customer.is_active
+        is_active=current_customer.is_active,
+        email_verified=current_customer.user.is_email_verified,
+        email_verified_at=current_customer.user.email_verified_at
     )
+
+
+@router.get("/verify-email/preview")
+def preview_email_verification(
+    token: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Consulta pasiva del estado del token para mostrar en la pantalla interactiva
+    sin consumirlo ni mutar la base de datos (inofensivo para crawlers/escáneres de Outlook/Gmail).
+    """
+    user_id = get_user_id_from_verification_token(token)
+    if not user_id:
+        return {"valid": False, "email": None}
+
+    user = db.get(User, user_id)
+    if not user:
+        return {"valid": False, "email": None}
+
+    # Ofuscar correo para privacidad (ej. j***n@empresa.com)
+    parts = user.email.split("@")
+    if len(parts) == 2 and len(parts[0]) > 2:
+        masked_email = f"{parts[0][0]}***{parts[0][-1]}@{parts[1]}"
+    else:
+        masked_email = user.email
+
+    return {
+        "valid": True,
+        "email": user.email,
+        "masked_email": masked_email,
+        "user_name": user.name
+    }
+
+
+@router.post("/verify-email", response_model=VerifyEmailResponse)
+def verify_customer_email(
+    req: VerifyEmailRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """
+    Valida y consume el token efímero de verificación en Redis.
+    Actualiza email_verified_at en PostgreSQL y quema el token para un solo uso.
+    Notifica a los administradores vía Telegram con los datos del nuevo lead verificado.
+    """
+    user_id = consume_email_verification_token(req.token)
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El enlace de verificación es inválido o ha expirado. Por favor solicita uno nuevo."
+        )
+
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado."
+        )
+
+    user.email_verified_at = datetime.utcnow()
+    db.commit()
+    db.refresh(user)
+
+    logger.info(f"Correo verificado exitosamente para el usuario #{user.id} ({user.email}).")
+
+    # Obtener información del cliente para notificar a los administradores
+    customer = db.query(Customer).filter(Customer.user_id == user.id).first()
+    customer_id = customer.id if customer else None
+    contact_name = customer.contact_name if customer and customer.contact_name else user.name
+    phone = customer.phone if customer and customer.phone else "No registrado"
+    company_name = customer.company_name if customer and customer.company_name else "Particular / Sin empresa"
+
+    telegram_msg = (
+        "🔔 *¡Nuevo Usuario Validado en IQISSMexico!* 🚀\n\n"
+        "Un usuario ha verificado exitosamente su correo electrónico y muestra interés activo en la plataforma:\n\n"
+        f"• *ID Usuario:* `#{user.id}`" + (f" (Cliente `#{customer_id}`)\n" if customer_id else "\n") +
+        f"• *Nombre:* {contact_name}\n"
+        f"• *Correo:* `{user.email}`\n"
+        f"• *Teléfono:* {phone}\n"
+        f"• *Empresa:* {company_name}\n\n"
+        f"🕒 *Fecha de Verificación:* {datetime.utcnow().strftime('%d/%m/%Y %H:%M UTC')}"
+    )
+
+    background_tasks.add_task(
+        NotificationManager.notify_admins,
+        message=telegram_msg,
+        parse_mode="Markdown"
+    )
+
+    return VerifyEmailResponse(
+        success=True,
+        message="Tu correo electrónico ha sido verificado exitosamente.",
+        email=user.email
+    )
+
+
+@router.post("/resend-verification")
+def resend_email_verification(
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Reenvía el correo de verificación con un nuevo token efímero con vigencia de 24 horas.
+    """
+    if current_user.is_email_verified:
+        return {
+            "success": True,
+            "message": "Tu correo ya se encuentra verificado."
+        }
+
+    customer = db.query(Customer).filter(Customer.user_id == current_user.id).first()
+    company_name = customer.company_name if customer else "Su Empresa"
+    contact_name = customer.contact_name if customer else current_user.name
+
+    new_token = generate_secure_secret(32)
+    save_email_verification_token(current_user.id, new_token, ttl_seconds=86400)
+
+    verification_url = f"{settings.PORTAL_BASE_URL}/portal/verify-email?token={new_token}"
+    background_tasks.add_task(
+        NotificationManager.notify_customer_template,
+        to_email=current_user.email,
+        template_uuid=settings.MAILTRAP_TEMPLATE_WELCOME,
+        template_variables={
+            "user_name": contact_name,
+            "company": company_name,
+            "verification_url": verification_url,
+            "support_email": settings.MAIL_FROM_EMAIL,
+        },
+        from_name="IQISSMexico",
+        from_email=settings.MAIL_FROM_EMAIL,
+        to_name=contact_name,
+    )
+
+    logger.info(f"Reenvío de verificación despachado para User #{current_user.id} ({current_user.email}).")
+
+    return {
+        "success": True,
+        "message": f"Se ha enviado un nuevo enlace de confirmación a {current_user.email}."
+    }

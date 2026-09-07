@@ -1,5 +1,6 @@
 import logging
 import re
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
@@ -60,6 +61,12 @@ class AdminProfileResponse(BaseModel):
     name: str
     email: str
     role: str
+    telegram_chat_id: Optional[str] = None
+
+class UpdateAdminProfileRequest(BaseModel):
+    name: Optional[str] = Field(None, min_length=2, max_length=100)
+    password: Optional[str] = Field(None, min_length=8, max_length=100)
+    telegram_chat_id: Optional[str] = None
 
 class AdminAuthResponse(BaseModel):
     access_token: str
@@ -205,5 +212,68 @@ def get_admin_profile(
         id=current_admin.id,
         name=current_admin.name,
         email=current_admin.email,
-        role=current_admin.role_name or "admin"
+        role=current_admin.role_name or "admin",
+        telegram_chat_id=current_admin.telegram_chat_id
     )
+
+@router.patch("/me", response_model=AdminProfileResponse)
+def update_admin_profile(
+    req: UpdateAdminProfileRequest,
+    db: Session = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    """Actualiza datos del perfil del administrador autenticado (nombre, contraseña, telegram_chat_id)."""
+    if req.name is not None and req.name.strip():
+        current_admin.name = req.name.strip()
+    if req.password is not None and req.password.strip():
+        current_admin.password_hash = hash_password(req.password.strip())
+    if req.telegram_chat_id is not None:
+        clean_tg = req.telegram_chat_id.strip()
+        current_admin.telegram_chat_id = clean_tg if clean_tg else None
+
+    db.commit()
+    db.refresh(current_admin)
+
+    logger.info(f"Perfil de administrador actualizado: #{current_admin.id} ({current_admin.email})")
+
+    return AdminProfileResponse(
+        id=current_admin.id,
+        name=current_admin.name,
+        email=current_admin.email,
+        role=current_admin.role_name or "admin",
+        telegram_chat_id=current_admin.telegram_chat_id
+    )
+
+@router.post("/me/test-telegram")
+def test_my_telegram_notification(
+    current_admin: User = Depends(get_current_admin)
+):
+    """
+    Envía un mensaje de prueba al telegram_chat_id del administrador autenticado.
+    """
+    if not current_admin.telegram_chat_id or not current_admin.telegram_chat_id.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No tienes un Telegram Chat ID configurado en tu perfil."
+        )
+
+    msg = (
+        f"🤖 *¡Prueba de Notificación Exitosa!* 🚀\n\n"
+        f"Hola *{current_admin.name}*, tu cuenta de IQISSMexico ha sido vinculada "
+        f"correctamente a este chat de Telegram.\n\n"
+        f"A partir de este momento recibirás alertas operativas importantes en tiempo real."
+    )
+
+    from app.services.notifications.telegram import send_telegram_message
+    res = send_telegram_message(
+        chat_id=current_admin.telegram_chat_id,
+        text=msg,
+        parse_mode="Markdown"
+    )
+    if not res.get("success"):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"No se pudo enviar el mensaje a Telegram: {res.get('error') or res.get('reason')}"
+        )
+
+    return {"success": True, "message": "Mensaje de prueba enviado exitosamente a tu Telegram."}

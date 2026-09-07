@@ -13,8 +13,9 @@ from app.lib.security import create_access_token
 from app.services.subscription_service import (
     calculate_period_end_for_new,
     calculate_period_end_from_existing,
-    check_subscription_conflict,
     process_subscription_payment_activation,
+    activate_due_scheduled_subscriptions,
+    realign_customer_scheduled_queues,
 )
 
 
@@ -320,7 +321,366 @@ class TestSubscriptionConflicts(unittest.TestCase):
         self.assertIn("crm_registered", data)
         self.assertIn("has_used_trial_before", data)
 
+    def test_expire_due_subscriptions_dispatches_customer_and_admin_notifications(self):
+        """
+        Job 1: Verifica que expire_due_subscriptions detecte suscripciones vencidas,
+        las marque como expired y dispare la notificación al cliente (Mailtrap)
+        y la alerta operativa al administrador (Telegram).
+        """
+        from unittest.mock import patch
+        from app.services.subscription_service import expire_due_subscriptions
+
+        now = datetime.utcnow()
+        due_sub = CustomerSubscription(
+            customer_id=self.customer.id,
+            plan_id=self.plan_basic.id,
+            status="active",
+            current_period_start=now - timedelta(days=32),
+            current_period_end=now - timedelta(seconds=10)
+        )
+        self.db.add(due_sub)
+        self.db.commit()
+        self.db.refresh(due_sub)
+
+        with patch("app.services.notifications.manager.NotificationManager.notify_customer_template") as mock_email, \
+             patch("app.services.notifications.manager.NotificationManager.notify_admins") as mock_admin:
+            expired_list = expire_due_subscriptions(self.db)
+            self.assertTrue(any(s.id == due_sub.id for s in expired_list))
+
+            # Verificar llamada a Mailtrap con la plantilla y variables
+            mock_email.assert_called()
+            call_kwargs = mock_email.call_args.kwargs
+            self.assertEqual(call_kwargs["to_email"], self.user.email)
+            self.assertIn("whatsapp_feedback_url", call_kwargs["template_variables"])
+            self.assertIn("wa.me", call_kwargs["template_variables"]["whatsapp_feedback_url"])
+
+            # En Job 1 NO se envía mensaje a Telegram por cada usuario expirado (se reserva para el resumen Job 3)
+            mock_admin.assert_not_called()
+
+    def test_pending_payment_subscription_checkout_url_and_cancellation(self):
+        """
+        Valida que:
+        1. /api/portal/subscriptions/my retorne el checkout_url para suscripciones pending_payment.
+        2. DELETE /api/portal/subscriptions/{id}/cancel-pending permita al cliente descartar su solicitud.
+        3. No se permita cancelar suscripciones activas por este endpoint.
+        4. No se permita cancelar suscripciones de otros clientes.
+        5. POST /api/public/checkout/preference reutilice suscripciones pending_payment existentes sin duplicar filas.
+        """
+        now = datetime.utcnow()
+        mock_checkout = "https://www.mercadopago.com.mx/subscriptions/checkout?pref_id=test_pending"
+
+        # 1. Crear suscripción pending_payment
+        pending_sub = CustomerSubscription(
+            customer_id=self.customer.id,
+            plan_id=self.plan_basic.id,
+            status="pending_payment",
+            current_period_start=now,
+            current_period_end=now + timedelta(days=30),
+            mp_preapproval_id="mock_preapp_pending_1",
+            custom_features_override={"checkout_url": mock_checkout}
+        )
+        self.db.add(pending_sub)
+        self.db.commit()
+        self.db.refresh(pending_sub)
+
+        # 2. Consultar /my y verificar checkout_url
+        res = self.client.get("/api/portal/subscriptions/my", headers=self.headers)
+        self.assertEqual(res.status_code, 200)
+        items = res.json()
+        pending_item = next((i for i in items if i["id"] == pending_sub.id), None)
+        self.assertIsNotNone(pending_item)
+        self.assertEqual(pending_item["status"], "pending_payment")
+        self.assertEqual(pending_item["checkout_url"], mock_checkout)
+
+        # 3. Intentar cancelar suscripción de otro cliente (404)
+        res_forbidden = self.client.delete(
+            "/api/portal/subscriptions/999999/cancel-pending",
+            headers=self.headers
+        )
+        self.assertEqual(res_forbidden.status_code, 404)
+
+        # 4. Intentar cancelar una suscripción activa con este endpoint (400)
+        active_sub = CustomerSubscription(
+            customer_id=self.customer.id,
+            plan_id=self.plan_basic.id,
+            status="active",
+            current_period_start=now,
+            current_period_end=now + timedelta(days=30)
+        )
+        self.db.add(active_sub)
+        self.db.commit()
+        self.db.refresh(active_sub)
+
+        res_invalid_status = self.client.delete(
+            f"/api/portal/subscriptions/{active_sub.id}/cancel-pending",
+            headers=self.headers
+        )
+        self.assertEqual(res_invalid_status.status_code, 400)
+
+        # 5. Cancelar legítimamente la suscripción pending_payment
+        res_cancel = self.client.delete(
+            f"/api/portal/subscriptions/{pending_sub.id}/cancel-pending",
+            headers=self.headers
+        )
+        self.assertEqual(res_cancel.status_code, 200)
+        self.assertEqual(res_cancel.json()["status"], "cancelled")
+
+        # Verificar que fue purgada de la BD
+        deleted_check = self.db.query(CustomerSubscription).filter(
+            CustomerSubscription.id == pending_sub.id
+        ).first()
+        self.assertIsNone(deleted_check)
+
+        # 6. Validar reutilización en checkout/preference para evitar duplicidad
+        res_pref1 = self.client.post(
+            "/api/public/checkout/preference",
+            json={
+                "plan_id": self.plan_basic.id,
+                "company_name": self.customer.company_name,
+                "contact_name": self.customer.contact_name,
+                "email": self.user.email,
+            }
+        )
+        self.assertEqual(res_pref1.status_code, 200)
+        sub1_id = res_pref1.json()["subscription_id"]
+
+        # Segunda llamada con los mismos datos: debe reutilizar sub1_id
+        res_pref2 = self.client.post(
+            "/api/public/checkout/preference",
+            json={
+                "plan_id": self.plan_basic.id,
+                "company_name": self.customer.company_name,
+                "contact_name": self.customer.contact_name,
+                "email": self.user.email,
+            }
+        )
+        self.assertEqual(res_pref2.status_code, 200)
+        sub2_id = res_pref2.json()["subscription_id"]
+        self.assertEqual(sub1_id, sub2_id, "Debe reutilizar la suscripción pending_payment existente.")
+
+    def test_frontend_domain_resolution_and_checkout_status_endpoint(self):
+        """
+        Valida que:
+        1. resolve_frontend_base_url resuelva orígenes seguros (localhost, staging.iqissmexico.com)
+           y recurra al valor configurado si no hay origen válido.
+        2. GET /api/public/checkout/status retorne la información pública del plan y suscripción.
+        3. POST /api/public/checkout/preference admita Origin headers para back_url dinámico.
+        """
+        from app.config import resolve_frontend_base_url, settings
+
+        class DummyRequest:
+            def __init__(self, headers):
+                self.headers = headers
+
+        saved_base = settings.PORTAL_BASE_URL
+        try:
+            settings.PORTAL_BASE_URL = "http://localhost:3001"
+            # 1. Prueba de resolución de URL base
+            req_local = DummyRequest({"origin": "http://localhost:3001"})
+            self.assertEqual(resolve_frontend_base_url(req_local), "http://localhost:3001")
+            self.assertEqual(resolve_frontend_base_url(req_local, for_external_gateway=True), "https://iqissmexico.com")
+
+            req_staging = DummyRequest({"origin": "https://staging.iqissmexico.com"})
+            self.assertEqual(resolve_frontend_base_url(req_staging), "https://staging.iqissmexico.com")
+            self.assertEqual(resolve_frontend_base_url(req_staging, for_external_gateway=True), "https://staging.iqissmexico.com")
+
+            req_external = DummyRequest({"origin": "https://malicious-site.com"})
+            resolved_default = resolve_frontend_base_url(req_external)
+            self.assertTrue(
+                resolved_default.startswith("http://") or resolved_default.startswith("https://")
+            )
+            self.assertNotIn("malicious-site.com", resolved_default)
+        finally:
+            settings.PORTAL_BASE_URL = saved_base
+
+        # 2. Prueba del endpoint GET /api/public/checkout/status
+        # Inexistente
+        res_404 = self.client.get("/api/public/checkout/status?sub_id=999999")
+        self.assertEqual(res_404.status_code, 404)
+
+        # Existente
+        sub = CustomerSubscription(
+            customer_id=self.customer.id,
+            plan_id=self.plan_basic.id,
+            status="pending_payment",
+            current_period_start=datetime.utcnow(),
+            current_period_end=datetime.utcnow() + timedelta(days=30),
+            custom_features_override={"checkout_url": "https://test-checkout-url.com"}
+        )
+        self.db.add(sub)
+        self.db.commit()
+        self.db.refresh(sub)
+
+        res_status = self.client.get(f"/api/public/checkout/status?sub_id={sub.id}")
+        self.assertEqual(res_status.status_code, 200)
+        json_status = res_status.json()
+        self.assertEqual(json_status["subscription_id"], sub.id)
+        self.assertEqual(json_status["plan_name"], self.plan_basic.name)
+        self.assertEqual(json_status["status"], "pending_payment")
+        self.assertEqual(json_status["price_mxn"], float(self.plan_basic.price_mxn))
+        self.assertEqual(json_status["checkout_url"], "https://test-checkout-url.com")
+
+    def test_multiple_scheduled_subscriptions_sequential_pipeline(self):
+        """
+        Verifica que al contratar múltiples membresías inferiores o de igual valor (downgrades / renovaciones),
+        las suscripciones programadas se encadenen secuencialmente en el tiempo sin traslaparse.
+        """
+        now = datetime.utcnow()
+        # 1. Crear suscripción activa inicial (Plan Pro)
+        active_sub = CustomerSubscription(
+            customer_id=self.customer.id,
+            plan_id=self.plan_pro.id,
+            status="active",
+            current_period_start=now,
+            current_period_end=calculate_period_end_for_new(now, 30)
+        )
+        self.db.add(active_sub)
+        self.db.commit()
+        self.db.refresh(active_sub)
+
+        # 2. Contratar primera suscripción en downgrade (Plan Basic)
+        sched1 = CustomerSubscription(
+            customer_id=self.customer.id,
+            plan_id=self.plan_basic.id,
+            status="pending_payment",
+            current_period_start=now,
+            current_period_end=now + timedelta(days=30)
+        )
+        self.db.add(sched1)
+        self.db.commit()
+        self.db.refresh(sched1)
+
+        res1 = process_subscription_payment_activation(self.db, sched1.id)
+        self.assertEqual(res1["action"], "scheduled_queued")
+        self.db.refresh(sched1)
+        self.assertEqual(sched1.status, "scheduled")
+        self.assertEqual(sched1.current_period_start, active_sub.current_period_end)
+        self.assertEqual(sched1.current_period_end, calculate_period_end_from_existing(active_sub.current_period_end, 30))
+
+        # 3. Contratar segunda suscripción en downgrade / renovación (Plan Basic)
+        sched2 = CustomerSubscription(
+            customer_id=self.customer.id,
+            plan_id=self.plan_basic.id,
+            status="pending_payment",
+            current_period_start=now,
+            current_period_end=now + timedelta(days=30)
+        )
+        self.db.add(sched2)
+        self.db.commit()
+        self.db.refresh(sched2)
+
+        res2 = process_subscription_payment_activation(self.db, sched2.id)
+        self.assertEqual(res2["action"], "scheduled_queued")
+        self.db.refresh(sched2)
+        self.assertEqual(sched2.status, "scheduled")
+        # sched2 debe iniciar exactamente donde termina sched1
+        self.assertEqual(sched2.current_period_start, sched1.current_period_end)
+        self.assertEqual(sched2.current_period_end, calculate_period_end_from_existing(sched1.current_period_end, 30))
+
+        # Validar que sched2 > sched1 > active_sub
+        self.assertGreater(sched2.current_period_start, sched1.current_period_start)
+        self.assertGreater(sched2.current_period_end, sched1.current_period_end)
+
+    def test_activate_due_scheduled_subscriptions_waits_for_active_and_activates_only_one(self):
+        """
+        Verifica que:
+        1. Si hay una suscripción activa vigente, no se active ninguna suscripción programada.
+        2. Al expirar la activa, si hay múltiples programadas que ya llegaron a fecha, solo se active 1 por producto.
+        """
+        now = datetime.utcnow()
+        # 1. Suscripción activa que aún no expira (termina en 10 días)
+        active_sub = CustomerSubscription(
+            customer_id=self.customer.id,
+            plan_id=self.plan_pro.id,
+            status="active",
+            current_period_start=now - timedelta(days=20),
+            current_period_end=now + timedelta(days=10)
+        )
+        # Programada que por desface de reloj tuviera fecha de inicio pasada
+        sched1 = CustomerSubscription(
+            customer_id=self.customer.id,
+            plan_id=self.plan_basic.id,
+            status="scheduled",
+            current_period_start=now - timedelta(hours=1),
+            current_period_end=now + timedelta(days=29)
+        )
+        sched2 = CustomerSubscription(
+            customer_id=self.customer.id,
+            plan_id=self.plan_basic.id,
+            status="scheduled",
+            current_period_start=now - timedelta(minutes=30),
+            current_period_end=now + timedelta(days=59)
+        )
+        self.db.add_all([active_sub, sched1, sched2])
+        self.db.commit()
+
+        # Debe ignorar la activación porque active_sub.current_period_end > now
+        activated = activate_due_scheduled_subscriptions(self.db)
+        self.assertEqual(len(activated), 0)
+
+        # Ahora simulamos que la activa fue cancelada o expiró
+        active_sub.status = "expired"
+        self.db.commit()
+
+        # Al correr la activación, SOLO 1 programada debe activarse para no duplicar activas
+        activated_second = activate_due_scheduled_subscriptions(self.db)
+        self.assertEqual(len(activated_second), 1)
+        self.assertEqual(activated_second[0].id, sched1.id)
+
+        self.db.refresh(sched1)
+        self.db.refresh(sched2)
+        self.assertEqual(sched1.status, "active")
+        self.assertEqual(sched2.status, "scheduled")
+
+    def test_realign_customer_scheduled_queues_resolves_overlapping_scheduled(self):
+        """
+        Verifica que suscripciones programadas preexistentes con fechas traslapadas (caso reportado)
+        sean realineadas ordenadamente en cola secuencial contigua.
+        """
+        fixed_dt = datetime(2026, 10, 5, 23, 59, 59)
+        # Activa que finaliza el 5 de octubre
+        active_sub = CustomerSubscription(
+            customer_id=self.customer.id,
+            plan_id=self.plan_pro.id,
+            status="active",
+            current_period_start=datetime(2026, 9, 5, 23, 59, 59),
+            current_period_end=fixed_dt
+        )
+        # Dos programadas con las MISMAS fechas (el bug reportado en pantalla)
+        sched1 = CustomerSubscription(
+            customer_id=self.customer.id,
+            plan_id=self.plan_basic.id,
+            status="scheduled",
+            current_period_start=fixed_dt,
+            current_period_end=calculate_period_end_from_existing(fixed_dt, 30)
+        )
+        sched2 = CustomerSubscription(
+            customer_id=self.customer.id,
+            plan_id=self.plan_basic.id,
+            status="scheduled",
+            current_period_start=fixed_dt,
+            current_period_end=calculate_period_end_from_existing(fixed_dt, 30)
+        )
+        self.db.add_all([active_sub, sched1, sched2])
+        self.db.commit()
+        self.db.refresh(sched1)
+        self.db.refresh(sched2)
+
+        # Ejecutar realineamiento de colas
+        realigned_count = realign_customer_scheduled_queues(self.db, self.customer.id)
+        self.assertGreaterEqual(realigned_count, 1)
+
+        self.db.refresh(sched1)
+        self.db.refresh(sched2)
+
+        # sched1 se mantiene iniciando en active_sub.current_period_end
+        self.assertEqual(sched1.current_period_start, active_sub.current_period_end)
+        # sched2 ahora debe haber sido empujada al final de sched1
+        self.assertEqual(sched2.current_period_start, sched1.current_period_end)
+        self.assertEqual(sched2.current_period_end, calculate_period_end_from_existing(sched1.current_period_end, 30))
+
 
 if __name__ == "__main__":
     unittest.main()
+
 

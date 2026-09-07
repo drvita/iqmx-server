@@ -20,6 +20,7 @@ export default function PortalBillingPage() {
   const router = useRouter();
   const [subscriptions, setSubscriptions] = useState<SubscriptionItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cancellingId, setCancellingId] = useState<number | null>(null);
 
   const getHeaders = useCallback((): Record<string, string> => {
     const token = typeof window !== 'undefined' ? localStorage.getItem('iqmx_portal_token') : null;
@@ -56,10 +57,53 @@ export default function PortalBillingPage() {
     }
   };
 
+  const formatScheduledDate = (isoStr: string) => {
+    try {
+      const d = new Date(isoStr);
+      // Si la fecha de inicio es a final de jornada (ej. 23:59:59 o >= 20:00),
+      // entra en vigor para el cliente a partir del día natural siguiente.
+      if (d.getHours() >= 20 || isoStr.includes('23:59')) {
+        d.setDate(d.getDate() + 1);
+      }
+      return d.toLocaleDateString('es-MX', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      });
+    } catch {
+      return isoStr;
+    }
+  };
+
   if (loading) {
     return <PortalLoader message="Cargando historial de membresías..." />;
   }
 
+  const handleCancelPending = async (subId: number) => {
+    if (!confirm('¿Estás seguro de que deseas cancelar y descartar esta solicitud de membresía?')) {
+      return;
+    }
+    setCancellingId(subId);
+    try {
+      const headers = getHeaders();
+      const res = await fetch(`/api/portal/subscriptions/${subId}/cancel-pending`, {
+        method: 'DELETE',
+        headers,
+      });
+      if (res.ok) {
+        setSubscriptions((prev) => prev.filter((s) => s.id !== subId));
+      } else {
+        const err = await res.json();
+        alert(err.detail || 'Error al cancelar la suscripción pendiente.');
+      }
+    } catch {
+      alert('Error de red al cancelar la suscripción.');
+    } finally {
+      setCancellingId(null);
+    }
+  };
+
+  const pendingSubs = subscriptions.filter((s) => s.status === 'pending_payment');
   const activeSubs = subscriptions.filter((s) => s.status === 'active' || s.status === 'trial');
   const scheduledSubs = subscriptions.filter((s) => s.status === 'scheduled');
   const pastSubs = subscriptions.filter((s) => s.status === 'cancelled' || s.status === 'past_due');
@@ -89,6 +133,64 @@ export default function PortalBillingPage() {
           <ArrowRightIcon className="h-3.5 w-3.5" />
         </Link>
       </div>
+
+      {/* ─── 0. MEMBRESÍAS PENDIENTES DE PAGO ─── */}
+      {pendingSubs.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-sm font-bold text-amber-900 uppercase tracking-wider flex items-center gap-2">
+            <ClockIcon className="h-4 w-4 text-amber-600" />
+            <span>Suscripciones Pendientes de Pago</span>
+          </h2>
+
+          <div className="grid grid-cols-1 gap-4">
+            {pendingSubs.map((sub) => (
+              <div
+                key={sub.id}
+                className="rounded-3xl border-2 border-amber-300 bg-amber-50/70 p-6 sm:p-7 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-6"
+              >
+                <div>
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="rounded-full bg-amber-200 px-2.5 py-0.5 text-[10px] font-bold text-amber-900 uppercase flex items-center gap-1">
+                      <ClockIcon className="h-3.5 w-3.5 text-amber-700" />
+                      <span>Pago Pendiente</span>
+                    </span>
+                    <span className="text-xs font-semibold text-amber-800 uppercase tracking-wider bg-amber-100/60 px-2 py-0.5 rounded-md">
+                      {sub.product_name}
+                    </span>
+                  </div>
+
+                  <h3 className="text-xl font-extrabold text-gray-900">{sub.plan_name}</h3>
+                  <p className="text-sm font-bold text-amber-900 mt-1">
+                    ${sub.price_mxn.toFixed(2)} MXN / mes
+                  </p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Iniciada el: {formatDate(sub.current_period_start)}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5 sm:justify-end">
+                  {sub.checkout_url && (
+                    <a
+                      href={sub.checkout_url}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition-colors cursor-pointer"
+                    >
+                      <CreditCardIcon className="h-4 w-4" />
+                      <span>Completar Pago →</span>
+                    </a>
+                  )}
+                  <button
+                    onClick={() => handleCancelPending(sub.id)}
+                    disabled={cancellingId === sub.id}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-rose-300 bg-rose-50 px-3.5 py-2 text-xs font-bold text-rose-700 hover:bg-rose-100 transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    <span>{cancellingId === sub.id ? 'Cancelando…' : 'Cancelar Solicitud'}</span>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ─── 1. MEMBRESÍAS ACTIVAS ─── */}
       <div className="space-y-4">
@@ -200,7 +302,7 @@ export default function PortalBillingPage() {
 
                 <div className="sm:text-right">
                   <span className="rounded-full bg-blue-200/70 text-blue-900 px-3 py-1 text-[11px] font-bold">
-                    Inicia el: {formatDate(sub.current_period_start)}
+                    Inicia el: {formatScheduledDate(sub.current_period_start)}
                   </span>
                 </div>
               </div>

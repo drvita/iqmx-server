@@ -18,8 +18,13 @@ logger = logging.getLogger("uvicorn.error")
 from app.config import settings
 from app.limiter import limiter
 from app.api import events, portal_auth, portal_whatsapp, portal_webhook, public_catalog, portal_subscriptions, portal_crm, internal_products
-from app.api import admin_auth, admin_users, admin_customers, admin_catalog, admin_crm, admin_subscriptions, admin_security
-from app.api.webhooks import whatsapp_router, whatsapp_legacy_router, mercadopago
+from app.api import admin_auth, admin_users, admin_customers, admin_catalog, admin_crm, admin_subscriptions, admin_security, admin_notifications
+from app.api.webhooks import (
+    whatsapp_router,
+    whatsapp_legacy_router,
+    mercadopago_router,
+    mercadopago_legacy_router,
+)
 
 ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 
@@ -56,7 +61,8 @@ app.add_middleware(CORSMiddleware, **cors_kwargs)
 # Registrar rutas de Webhook Gateway
 app.include_router(whatsapp_router)
 app.include_router(whatsapp_legacy_router)
-app.include_router(mercadopago.router)
+app.include_router(mercadopago_router)
+app.include_router(mercadopago_legacy_router)
 
 # Registrar rutas del Portal de Clientes
 app.include_router(portal_auth.router)
@@ -74,6 +80,7 @@ app.include_router(admin_catalog.router)
 app.include_router(admin_crm.router)
 app.include_router(admin_subscriptions.router)
 app.include_router(admin_security.router)
+app.include_router(admin_notifications.router)
 
 # Registrar rutas heredadas / internas
 app.include_router(events.router)

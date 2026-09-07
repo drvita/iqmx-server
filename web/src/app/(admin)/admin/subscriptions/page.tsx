@@ -68,6 +68,16 @@ const STATUS_CONFIG: Record<
     badge: 'bg-rose-50 text-rose-700 border-rose-200',
     dot: 'bg-rose-500',
   },
+  pending_payment: {
+    label: 'Pago Pendiente',
+    badge: 'bg-amber-50 text-amber-700 border-amber-200',
+    dot: 'bg-amber-500',
+  },
+  scheduled: {
+    label: 'Programada',
+    badge: 'bg-blue-50 text-blue-700 border-blue-200',
+    dot: 'bg-blue-500',
+  },
 };
 
 export default function AdminSubscriptionsPage() {

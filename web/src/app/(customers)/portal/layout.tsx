@@ -31,7 +31,11 @@ export default function PortalLayout({
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
-  const isAuthPage = pathname === '/portal/login' || pathname === '/portal/register';
+  const isAuthPage =
+    pathname === '/portal/login' ||
+    pathname === '/portal/register' ||
+    pathname.startsWith('/portal/verify-email') ||
+    pathname.startsWith('/portal/checkout/status');
 
   useEffect(() => {
     let active = true;

@@ -1,9 +1,11 @@
+import logging
 from datetime import datetime
 from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db.database import get_db
 from app.models.customer import Customer
 from app.models.customer_subscription import CustomerSubscription
@@ -13,10 +15,13 @@ from app.api.portal_auth import get_current_customer
 from app.services.subscription_service import (
     check_subscription_conflict,
     activate_due_scheduled_subscriptions,
+    realign_customer_scheduled_queues,
     calculate_period_end_for_new,
     has_customer_used_trial_before,
     get_customer_crm_info,
 )
+
+logger = logging.getLogger("uvicorn.error")
 
 router = APIRouter(prefix="/api/portal/subscriptions", tags=["portal-subscriptions"])
 
@@ -34,6 +39,7 @@ class MySubscriptionItem(BaseModel):
     current_period_end: datetime
     days_remaining: int
     features_payload: Dict[str, Any]
+    checkout_url: Optional[str] = None
 
 
 class ConflictCheckResponse(BaseModel):
@@ -179,8 +185,9 @@ def get_my_subscriptions(
 ):
     """
     Lista las membresías del cliente autenticado (activas, programadas o recientes).
-    Activa automáticamente cualquier suscripción programada cuyo plazo ya haya iniciado.
+    Realinea colas de suscripciones programadas y activa automáticamente las que hayan llegado a su plazo.
     """
+    realign_customer_scheduled_queues(db, customer.id)
     # Activar suscripciones programadas cuyo momento ya haya llegado
     activate_due_scheduled_subscriptions(db)
 
@@ -198,6 +205,13 @@ def get_my_subscriptions(
         if s.current_period_end and s.current_period_end > now:
             remaining = max(0, (s.current_period_end.date() - now.date()).days)
 
+        checkout_url = None
+        if s.status == "pending_payment":
+            if s.custom_features_override and isinstance(s.custom_features_override, dict):
+                checkout_url = s.custom_features_override.get("checkout_url")
+            if not checkout_url and s.mp_preapproval_id:
+                checkout_url = f"https://www.mercadopago.com.mx/subscriptions/checkout?preapproval_id={s.mp_preapproval_id}"
+
         items.append(MySubscriptionItem(
             id=s.id,
             plan_id=s.plan_id,
@@ -210,7 +224,8 @@ def get_my_subscriptions(
             current_period_start=s.current_period_start,
             current_period_end=s.current_period_end,
             days_remaining=remaining,
-            features_payload=plan.features_payload if plan else {}
+            features_payload=plan.features_payload if plan else {},
+            checkout_url=checkout_url
         ))
 
     return items
@@ -291,4 +306,69 @@ def claim_free_trial(
         message="¡Tu período de prueba gratuito ha sido activado exitosamente!",
         subscription_id=sub.id
     )
+
+
+class CancelPendingResponse(BaseModel):
+    status: str
+    message: str
+    subscription_id: int
+
+
+@router.delete("/{subscription_id}/cancel-pending", response_model=CancelPendingResponse)
+@router.post("/{subscription_id}/cancel-pending", response_model=CancelPendingResponse)
+async def cancel_pending_subscription(
+    subscription_id: int,
+    db: Session = Depends(get_db),
+    customer: Customer = Depends(get_current_customer)
+):
+    """
+    Cancela y descarta una suscripción en estado 'pending_payment'.
+    Si se generó una pre-aprobación en Mercado Pago, solicita su cancelación vía API REST.
+    Elimina el registro borrador de la base de datos para no saturar el panel con intentos no completados.
+    """
+    sub = db.query(CustomerSubscription).filter(
+        CustomerSubscription.id == subscription_id,
+        CustomerSubscription.customer_id == customer.id
+    ).first()
+
+    if not sub:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Suscripción no encontrada o no pertenece a tu cuenta."
+        )
+
+    if sub.status != "pending_payment":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solo es posible descartar solicitudes que se encuentren en estado de pago pendiente."
+        )
+
+    # Cancelar preapproval en Mercado Pago si existe y no es mock
+    if sub.mp_preapproval_id and not sub.mp_preapproval_id.startswith("mock_") and settings.MERCADOPAGO_ACCESS_TOKEN:
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                await client.put(
+                    f"https://api.mercadopago.com/preapproval/{sub.mp_preapproval_id}",
+                    headers={
+                        "Authorization": f"Bearer {settings.MERCADOPAGO_ACCESS_TOKEN}",
+                        "Content-Type": "application/json"
+                    },
+                    json={"status": "cancelled"}
+                )
+        except Exception as e:
+            logger.warning(f"No fue posible cancelar preapproval {sub.mp_preapproval_id} en Mercado Pago: {e}")
+
+    sub_id = sub.id
+    db.delete(sub)
+    db.commit()
+
+    logger.info(f"Cliente #{customer.id} descartó la suscripción pendiente #{sub_id}.")
+
+    return CancelPendingResponse(
+        status="cancelled",
+        message="La solicitud de suscripción pendiente ha sido cancelada y descartada exitosamente.",
+        subscription_id=sub_id
+    )
+
 

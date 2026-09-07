@@ -163,5 +163,23 @@ class TestWebhooks(unittest.TestCase):
         self.assertEqual(event.delivery_status, "sent")
         db.close()
 
+    def test_mercadopago_dual_routes(self):
+        """
+        Verifica que existan exactamente las 2 rutas homologadas para Mercado Pago:
+        - /api/webhooks/mercadopago
+        - /mercadopago
+        Y que ambas procesen la solicitud a través del mismo handler.
+        """
+        # Prueba ruta estándar /api/webhooks/mercadopago
+        res_std = self.client.post("/api/webhooks/mercadopago", json={})
+        self.assertEqual(res_std.status_code, 200)
+        self.assertEqual(res_std.json(), {"status": "ok"})
+
+        # Prueba ruta legacy /mercadopago
+        res_legacy = self.client.post("/mercadopago", json={})
+        self.assertEqual(res_legacy.status_code, 200)
+        self.assertEqual(res_legacy.json(), {"status": "ok"})
+
+
 if __name__ == "__main__":
     unittest.main()

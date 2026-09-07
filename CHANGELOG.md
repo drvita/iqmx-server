@@ -9,6 +9,104 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [1.6.0] - 2026-09-06
+
+### Añadido
+
+- **Catálogo Completo y Estandarización de Automatizaciones (`manage.py`)**:
+  - Unificación de todas las tareas cron del sistema bajo la interfaz de comandos de [api/manage.py](file:///Users/laclavees12345/code/iqissmexico/main/api/manage.py), preparadas para su programación en los Schedules de Coolify:
+    - `python manage.py subscriptions:cron` (Job 1: Bajas y expiración de suscripciones).
+    - `python manage.py subscriptions:alerts` (Job 2: Alertas preventivas inteligentes anti-spam).
+    - `python manage.py digest:morning` (Job 3: Resumen ejecutivo matutino a administradores).
+    - `python manage.py system:cleanup` (Job 4: Mantenimiento de claves efímeras y purga de BD).
+  - Soporte de simulación `--dry-run` transversal en todos los comandos para auditoría previa sin impacto en producción.
+- **Trazabilidad de Pagos y Renovaciones Recurrentes (`Payment` / `payments`)**:
+  - Modelo `Payment` y migración de base de datos Alembic `d9f1a2b3c4e5_create_payments_table`.
+  - Trazabilidad idempotente de pagos de Mercado Pago (`record_subscription_payment`).
+  - Renovación de membresías recurrentes sin pérdida de días ni cortes en el servicio (`renewed_active`).
+  - Detección y tratamiento de cobros rechazados (`past_due`) con alerta inmediata por Telegram a administradores y correo urgente al cliente.
+- **Job 1: Conciliación Diaria y Suspensión de Membresías Vencidas**:
+  - Plantilla transaccional oficial en Mailtrap API (`MAILTRAP_TEMPLATE_EXPIRED`, UUID: `03312624-4bca-4944-b63b-f3f39cc5d6b4`, ID: `76187`) con diseño institucional responsivo.
+  - Bloque visual de feedback con botón directo a WhatsApp oficial (`5213141560219`) para conocer el motivo de no renovación.
+  - Suspensión automática del inquilino en CRM (`crm.organization.status = 'suspended'`) y pausa de bots en WhatsApp.
+- **Job 2: Alertas Preventivas Selectivas (Estrategia Anti-Spam)**:
+  - Filtro inteligente que omite notificaciones a usuarios con cobro automático activo en Mercado Pago (`mp_preapproval_id`), previniendo spam innecesario.
+  - Alerta selectiva a cancelaciones próximas (-3 días), término de Free Trial (-24 horas) y pagos rebotados (`past_due`).
+  - Nuevas plantillas oficiales de Mailtrap integradas: `MAILTRAP_TEMPLATE_PAYMENT_FAILED`, `MAILTRAP_TEMPLATE_CANCELLED_EXPIRING` y `MAILTRAP_TEMPLATE_TRIAL_EXPIRING`.
+- **Job 3: Resumen Ejecutivo Matutino (Morning Digest)**:
+  - Extracción y compilación diaria de métricas de las últimas 24 horas: leads con email validado, pagos y renovaciones cobradas en `payments` (total MXN), cobros rechazados y cuentas suspendidas.
+  - Detección anticipada de pruebas gratuitas o cancelaciones que concluyen en las siguientes 24–48 horas.
+  - Despacho consolidado en formato Markdown a todos los administradores configurados vía Telegram (`NotificationManager.notify_admins`).
+- **Job 4: Limpieza de Claves Efímeras y Mantenimiento de BD/Redis (`system:cleanup`)**:
+  - Servicio `maintenance_service.py` para escaneo y purga en Redis de tokens huérfanos, desincronizados o de usuarios ya validados en PostgreSQL (`email_verified_at is not None`).
+  - Depuración de eventos históricos en la tabla `events` de PostgreSQL (>30 días para entregados, >60 días para fallidos).
+  - Operación silenciosa hacia Telegram generando únicamente logs estructurados de auditoría.
+- **Sistema Centralizado de Notificaciones Multi-Canal (`NotificationManager`)**:
+  - **Canal Telegram Bot para Administradores (`IQMX Admin` / `TELEGRAM_BOT_TOKEN`)**:
+    - Notificación operativa en tiempo real a todos los usuarios con rol `admin` y `telegram_chat_id` configurado cuando un cliente confirma exitosamente su correo electrónico en el portal web.
+    - Inclusión estructurada de datos de contacto: ID de usuario/cliente, nombre de contacto, correo electrónico, teléfono y razón social.
+    - Despacho desacoplado y asíncrono con `BackgroundTasks` de FastAPI tolerante a fallos para no añadir latencia ni bloquear la experiencia del cliente.
+    - Soporte multi-admin dinámico: cada administrador recibe individualmente la alerta sin exponer números o IDs en código duro.
+  - **Canal Mailtrap Send API con Plantillas Oficiales**:
+    - Soporte nativo para entorno Sandbox y Producción mediante la variable configurable `MAILTRAP_API_URL` (por defecto `https://send.api.mailtrap.io`).
+    - Plantilla HTML de bienvenida y verificación de cuenta (`MAILTRAP_TEMPLATE_WELCOME`) con diseño de marca IQISSMexico: logo oficial PNG, paleta institucional navy (`#0f2a4a`), azul (`#2563eb`), contenedor contrastante y pie de página corporativo.
+    - Script sincronizador idempotente de plantillas (`api/scripts/sync_mailtrap_templates.py`).
+- **Módulo de Perfil Administrativo (`/admin/profile`)**:
+  - Nueva página dedicada para que cada administrador gestione sus datos de cuenta y contraseña.
+  - Sección interactiva para vincular su **Telegram Chat ID** con guía amigable de 3 pasos para usuarios no técnicos y enlace directo de 1 clic a `@userinfobot`.
+  - Botón de prueba inmediata (*"Probar Notificación"*) con retroalimentación visual que envía un mensaje directo a su Telegram para validar la conexión en segundos.
+  - Enlace directo a *"Mi Perfil"* incorporado en la barra lateral de navegación y en la tarjeta de sesión de usuario.
+- **Gestión Asistida de Telegram en Lista de Usuarios (`/admin/users`)**:
+  - Modal de configuración rápida de Telegram para que un administrador pueda asistir a un colega asignando su `telegram_chat_id` con botón de prueba integrado.
+  - Validación de seguridad estricta en API: restricción absoluta del `telegram_chat_id` exclusivamente para usuarios con rol `admin` (bloqueo para roles `partner` o `contact`).
+- **Gestión de Suscripciones Pendientes de Pago (`pending_payment`) y Autogestión**:
+  - **Detección y Visualización en Portal del Cliente**: Detección automática de borradores de suscripción `pending_payment` en Dashboard (`/portal/dashboard`) y Facturación (`/portal/billing`), alertando al cliente de manera destacada con las opciones inmediatas de *"Pagar con Mercado Pago"* o *"Cancelar Solicitud"*.
+  - **Reutilización Idempotente de Checkouts**: En `create_checkout_preference`, si el cliente ya cuenta con una suscripción en estado `pending_payment` para el mismo plan, se actualiza y reutiliza el registro existente en lugar de generar registros duplicados o fantasmas.
+  - **Persistencia de URL de Checkout Directo**: Almacenamiento seguro del enlace de pago (`init_point` de Mercado Pago) en `custom_features_override.checkout_url` y exposición en `GET /api/portal/subscriptions/my`, permitiendo al usuario reanudar el pago en cualquier momento si abandonó la pasarela.
+  - **Descarte Seguro y Depuración**: Endpoint `DELETE /api/portal/subscriptions/{subscription_id}/cancel-pending` (con alias `POST`) con validación de titularidad de cuenta, cancelación del preapproval en Mercado Pago y eliminación del borrador en base de datos para mantener limpio el panel de administración.
+- **Resolución Dinámica de Dominio Frontend y Flujo de Agradecimiento de Mercado Pago**:
+  - **Resolución Dinámica de Dominio (`PORTAL_BASE_URL`)**:
+    - Reutilización de `PORTAL_BASE_URL` en variables de entorno y helper `resolve_frontend_base_url(request, for_external_gateway)`.
+    - Detección inteligente mediante encabezados `Origin` / `Referer` con validación de dominios permitidos (`iqissmexico.com`, subdominios, túneles ngrok/cloudflare).
+    - Compatibilidad estricta con Mercado Pago: fallback automático a FQDN HTTPS válido en entornos locales donde la pasarela rechaza `localhost` o `testserver` con `400 Bad Request`.
+  - **Página de Retorno y Agradecimiento en Frontend (`/portal/checkout/status`)**:
+    - Nueva vista pública dedicada con diseño responsivo institucional para recibir al cliente tras su interacción con Mercado Pago.
+    - **Agradecimiento y Éxito**: Despliega confirmación de compra ("¡Gracias por tu compra!"), resumen de plan y costo, y cuenta regresiva de 5 segundos con botón directo para redirigir a `/portal/dashboard`.
+    - **Pago Pendiente / Interrumpido**: Explicación clara del estado, botón para completar el pago con Mercado Pago si se cerró la ventana (`checkout_url`), o regresar a gestionar desde el panel de control.
+    - Endpoint público no confidencial `GET /api/public/checkout/status?sub_id={sub_id}` para consultar el estado del plan sin requerir sesión activa ni exponer datos sensibles.
+- **Secuenciamiento en Cola de Suscripciones Programadas (`scheduled` pipeline)**:
+  - **Cálculo Encadenado de Fechas**: Al contratar membresías de menor o igual valor (downgrades o renovaciones anticipadas) teniendo una suscripción activa previa u otras programadas en espera, cada nueva suscripción se calcula secuencialmente a partir del término de la última programada (`current_period_end`), garantizando continuidad estricta y eliminando traslapes de fechas.
+  - **Protección de Activación Única**: En `activate_due_scheduled_subscriptions`, se valida que la suscripción activa unifique su término y nunca se active más de una suscripción simultáneamente para el mismo cliente y producto al cumplirse el plazo.
+  - **Auto-reparación de Colas (`realign_customer_scheduled_queues`)**: Algoritmo de detección y corrección automática de fechas que realinea registros programados preexistentes con fechas idénticas al ser consultados desde el portal (`GET /api/portal/subscriptions/my`).
+- **Homologación de Rutas para Webhook de Mercado Pago**:
+  - Estandarización a exactamente dos rutas homologadas idénticas a las de WhatsApp:
+    - `/api/webhooks/mercadopago` (ruta canónica)
+    - `/mercadopago` (ruta simplificada sin prefijo)
+  - Ambas rutas operan con el mismo controlador y soportan cobros recurrentes (`authorized_payment`) y altas de suscripción (`preapproval`).
+- **Resolución Dinámica de URL en Checkout de Planes Gratuitos (`/admin/subscriptions`)**:
+  - Reemplazo de la URL fija de producción en el flujo de asignación manual de planes gratuitos por la URL dinámica resuelta (`f"{frontend_base}/portal/dashboard?plan=free_activated"`), garantizando redirecciones correctas en entornos de desarrollo, staging o túneles de prueba.
+- **Suite de Pruebas Automatizadas**:
+  - Nuevas suites de pruebas en `test_notifications.py`, `test_email_verification.py`, `test_payments.py`, `test_maintenance.py`, `test_webhooks.py` y `test_subscription_conflicts.py`.
+  - 82/82 pruebas unitarias aprobadas al 100% en contenedor Docker.
+
+### Cambiado
+
+- **Optimización de Notificaciones en Job 1**:
+  - Eliminado el envío de alertas individuales a Telegram en la madrugada por cada usuario expirado, consolidando el total de bajas operativas en el reporte matutino del Job 3 para mantener silencioso el canal administrativo fuera de horario laboral.
+- **Optimización de Acciones y Layout en Panel Administrativo (`/admin`)**:
+  - **Barra Lateral Fija (Sticky Viewport)**: Corrección del navbar/sidebar en `admin/layout.tsx` para permanecer anclado al viewport (`h-screen`, `overflow-hidden`) con desplazamiento vertical independiente en el área principal de contenido (`overflow-y-auto`), evitando que el menú crezca o se estire cuando hay tablas extensas.
+  - **Columna de Acciones Compacta en `/admin/users`**: Reemplazo de botones voluminosos por botones tipo píldora compactos y armónicos (`✕ / + Cliente` y `+ / ✈️ Telegram`), permitiendo la convivencia limpia de múltiples acciones sin provocar desplazamiento horizontal.
+- **Experiencia de Usuario en Formularios de Inicio de Sesión (`/admin/login` y `/portal/login`)**:
+  - Soporte nativo de envío de formulario al presionar la tecla `Enter` en el campo de contraseña en ambos portales.
+  - Corrección del botón de acción en `/portal/login` a `type="submit"` y adición de escuchador `onKeyDown` explícito en los campos de contraseña para garantizar el despacho inmediato.
+- **Claridad Visual en Fechas de Inicio de Membresías Programadas (`/portal/billing` y `/portal/dashboard`)**:
+  - Implementación del formateador inteligente `formatScheduledDate`: cuando la fecha técnica de inicio en base de datos coincide con el límite de la medianoche previa (`23:59:59`), el portal presenta el día natural exacto en que entra en vigor para el cliente (ej. *"Inicia el: 8 de noviembre"* en lugar de repetir *"7 de noviembre"*), eliminando dudas visuales y consultas de soporte.
+- **Acceso Público a Verificación de Correo (`/portal/verify-email`)**:
+  - Corrección de la guardia de autenticación en `portal/layout.tsx` para incluir `/portal/verify-email` como ruta de acceso público y onboarding sin sesión requerida.
+  - Eliminación de redirecciones erróneas y parpadeos al iniciar sesión, permitiendo que cualquier usuario verifique su cuenta con un solo clic desde cualquier dispositivo, navegador o ventana de incógnito.
+
+---
+
 ## [1.5.0] - 2026-09-05
 
 ### Añadido

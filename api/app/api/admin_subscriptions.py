@@ -1,7 +1,7 @@
 import logging
 from datetime import datetime, timedelta
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -13,7 +13,7 @@ from app.models.membership_plan import MembershipPlan
 from app.models.customer_subscription import CustomerSubscription
 from app.api.admin_auth import get_current_admin
 from app.models.user import User
-from app.config import settings
+from app.config import settings, resolve_frontend_base_url
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -45,6 +45,7 @@ class CreateSubscriptionLinkResponse(BaseModel):
     subscription_id: int
     checkout_url: str
     preapproval_id: Optional[str] = None
+    back_url: Optional[str] = None
 
 class UpdateSubscriptionRequest(BaseModel):
     status: Optional[str] = Field(None, pattern="^(trial|active|past_due|cancelled|paused)$")
@@ -84,6 +85,7 @@ def list_subscriptions(
 @router.post("/generate-link", response_model=CreateSubscriptionLinkResponse)
 async def generate_mercadopago_subscription(
     req: CreateSubscriptionLinkRequest,
+    request: Request,
     db: Session = Depends(get_db),
     admin: User = Depends(get_current_admin)
 ):
@@ -114,25 +116,35 @@ async def generate_mercadopago_subscription(
     db.commit()
     db.refresh(sub)
 
+    # Resolver URL base del frontend
+    frontend_base = resolve_frontend_base_url(request, for_external_gateway=False)
+
     # Si es plan gratuito, no se crea checkout en Mercado Pago
     if float(plan.price_mxn) == 0:
+        free_url = f"{frontend_base}/portal/dashboard?plan=free_activated"
         return CreateSubscriptionLinkResponse(
             subscription_id=sub.id,
-            checkout_url="https://iqissmexico.com/portal/dashboard?plan=free_activated",
-            preapproval_id=None
+            checkout_url=free_url,
+            preapproval_id=None,
+            back_url=free_url
         )
 
-    # Llamar a Mercado Pago API REST de Suscripciones (/preapproval)
+    # Resolver URL de retorno dinámica para pasarela externa
+    frontend_gateway_base = resolve_frontend_base_url(request, for_external_gateway=True)
+    back_url = f"{frontend_gateway_base}/portal/checkout/status?sub_id={sub.id}&plan_id={plan.id}"
+
+    # Llamar a Mercado Pago API si hay token configurado
     mp_token = settings.MERCADOPAGO_ACCESS_TOKEN
     if not mp_token:
-        # Modo simulación / sandbox sin credenciales configuradas
-        mock_checkout = f"https://www.mercadopago.com.mx/subscriptions/checkout?pref_id=mock_sub_{sub.id}"
+        mock_checkout = f"https://www.mercadopago.com.mx/subscriptions/checkout?pref_id=mock_{sub.id}"
         sub.mp_preapproval_id = f"mock_preapproval_{sub.id}"
+        sub.custom_features_override = {"checkout_url": mock_checkout, "back_url": back_url}
         db.commit()
         return CreateSubscriptionLinkResponse(
             subscription_id=sub.id,
             checkout_url=mock_checkout,
-            preapproval_id=sub.mp_preapproval_id
+            preapproval_id=sub.mp_preapproval_id,
+            back_url=back_url
         )
 
     # En entorno que no sea producción, si se define MERCADOPAGO_TEST_PAYER_EMAIL se utiliza como pagador de pruebas en Mercado Pago
@@ -140,6 +152,11 @@ async def generate_mercadopago_subscription(
     payer_email_to_send = payer_email
     if not is_production and settings.mercadopago_resolved_test_payer_email:
         payer_email_to_send = settings.mercadopago_resolved_test_payer_email
+
+    logger.info(
+        f"[Mercado Pago Admin Link] Sub #{sub.id} -> Creando preapproval con back_url='{back_url}' "
+        f"(Origin='{request.headers.get('origin')}', PORTAL_BASE_URL='{settings.PORTAL_BASE_URL}')"
+    )
 
     url = "https://api.mercadopago.com/preapproval"
     payload = {
@@ -151,7 +168,7 @@ async def generate_mercadopago_subscription(
             "currency_id": "MXN"
         },
         "payer_email": payer_email_to_send,
-        "back_url": "https://iqissmexico.com/portal/dashboard?status=subscription_authorized",
+        "back_url": back_url,
         "external_reference": f"sub_{sub.id}_cust_{customer.id}"
     }
     headers = {
@@ -178,12 +195,14 @@ async def generate_mercadopago_subscription(
         init_point = data.get("init_point")
 
         sub.mp_preapproval_id = preapproval_id
+        sub.custom_features_override = {"checkout_url": init_point, "back_url": back_url}
         db.commit()
 
         return CreateSubscriptionLinkResponse(
             subscription_id=sub.id,
             checkout_url=init_point,
-            preapproval_id=preapproval_id
+            preapproval_id=preapproval_id,
+            back_url=back_url
         )
 
 @router.patch("/{subscription_id}", response_model=SubscriptionResponse)

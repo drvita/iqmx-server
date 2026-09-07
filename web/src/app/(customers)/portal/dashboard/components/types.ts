@@ -7,6 +7,8 @@ export interface CustomerProfile {
   tax_id?: string | null;
   origin?: string;
   is_active: boolean;
+  email_verified?: boolean;
+  email_verified_at?: string | null;
 }
 
 export interface WhatsAppNumber {
@@ -62,6 +64,7 @@ export interface SubscriptionItem {
   current_period_end: string;
   days_remaining: number;
   features_payload: Record<string, any>;
+  checkout_url?: string | null;
 }
 
 export interface ConflictCheckInfo {

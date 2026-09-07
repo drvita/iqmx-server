@@ -51,6 +51,27 @@ class Settings(BaseSettings):
     CRM_SERVICE_URL: str = "http://crm:3000"
     CRM_PROVISION_SECRET: str = "crm_provision_secret_key_iqmx_default"
 
+    # Notificaciones Operativas (Telegram Bot)
+    TELEGRAM_BOT_TOKEN: str | None = None
+
+    # Notificaciones Transaccionales (Mailtrap Send API)
+    MAILTRAP_API_TOKEN: str | None = None
+    MAILTRAP_API_URL: str = "https://send.api.mailtrap.io/api/send"
+    MAIL_FROM_EMAIL: str = "noreply@iqissmexico.com"
+    MAIL_FROM_NAME: str = "IQISSMexico"
+    MAILTRAP_TEMPLATE_WELCOME: str = "f3a41171-c547-44d2-8da7-f4e0731707b5"
+    MAILTRAP_TEMPLATE_PAYMENT_FAILED: str = "f3e97813-9c70-497e-b553-a332fc0242de"
+    MAILTRAP_TEMPLATE_CANCELLED_EXPIRING: str = "18382bc8-7694-45fb-ae98-fd96df453546"
+    MAILTRAP_TEMPLATE_TRIAL_EXPIRING: str = "90d1a17d-3ebe-457d-940f-0857dff7a224"
+    MAILTRAP_TEMPLATE_EXPIRED: str = "03312624-4bca-4944-b63b-f3f39cc5d6b4"
+    SUPPORT_WHATSAPP_PHONE: str = "5213141560219"
+
+    # URL base del Portal / Frontend para enlaces en correos y pasarelas
+    PORTAL_BASE_URL: str = "http://localhost:3001"
+
+    # Redis (Tokens Efímeros & Cache)
+    REDIS_URL: str = "redis://redis:6379/0"
+
     @property
     def db_url(self) -> str:
         if self.DATABASE_TYPE == "postgresql":
@@ -94,3 +115,61 @@ class Settings(BaseSettings):
         return self
 
 settings = Settings()
+
+
+def resolve_frontend_base_url(request=None, for_external_gateway: bool = False) -> str:
+    """
+    Resuelve dinámicamente el dominio base del frontend para URLs de retorno en pasarelas de pago.
+    1. Si 'for_external_gateway' es True (ej. Mercado Pago), la pasarela exige HTTPS y un dominio público
+       válido con TLD (rechaza localhost, 127.0.0.1 y testserver con 400 Bad Request).
+    2. Si PORTAL_BASE_URL en variables de entorno está configurado con un dominio público (ej. túnel ngrok o staging),
+       se le da prioridad directa para permitir pruebas locales con retorno hacia el túnel.
+    3. Si la petición HTTP incluye un header 'origin' o 'referer' con dominio público válido, lo utiliza.
+    4. Si tanto el origen como PORTAL_BASE_URL son locales (localhost) y es para pasarela externa,
+       recurre a 'https://iqissmexico.com' como fallback público para evitar el error 400 de Mercado Pago.
+    """
+    from urllib.parse import urlparse
+
+    configured_base = (settings.PORTAL_BASE_URL or "http://localhost:3001").strip().rstrip("/")
+    p_conf = urlparse(configured_base)
+    h_conf = p_conf.netloc.split(":")[0].lower() if p_conf.netloc else ""
+    is_conf_public = bool(h_conf and h_conf not in ["localhost", "127.0.0.1", "testserver"] and "." in h_conf)
+
+    # 1. Si PORTAL_BASE_URL tiene un dominio público configurado explícitamente (ej. túnel ngrok), respetarlo
+    if is_conf_public:
+        return f"https://{p_conf.netloc}".rstrip("/") if (for_external_gateway and p_conf.scheme == "http") else configured_base
+
+    # 2. Si hay una petición HTTP, inspeccionar Origin o Referer
+    if request is not None:
+        try:
+            origin = request.headers.get("origin") or request.headers.get("referer")
+            if origin:
+                parsed = urlparse(origin)
+                scheme = parsed.scheme
+                netloc = parsed.netloc
+                if scheme in ["http", "https"] and netloc:
+                    host = netloc.split(":")[0].lower()
+                    allowed_hosts = {"localhost", "127.0.0.1", "testserver"}
+                    is_allowed = (
+                        host in allowed_hosts
+                        or host == "iqissmexico.com"
+                        or host.endswith(".iqissmexico.com")
+                        or host.endswith(".ngrok-free.app")
+                        or host.endswith(".trycloudflare.com")
+                    )
+                    if is_allowed:
+                        is_origin_public = bool(host not in allowed_hosts and "." in host)
+                        if is_origin_public:
+                            return f"{scheme}://{netloc}".rstrip("/")
+                        elif not for_external_gateway:
+                            return f"{scheme}://{netloc}".rstrip("/")
+        except Exception:
+            pass
+
+    # 3. Fallback público para pasarelas externas que rechazan localhost
+    if for_external_gateway:
+        return "https://iqissmexico.com"
+
+    return configured_base
+
+

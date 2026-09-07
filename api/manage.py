@@ -29,12 +29,45 @@ def main():
     # Comando 1: subscriptions:cron
     sub_cron = subparsers.add_parser(
         "subscriptions:cron",
-        help="Ejecuta la tarea diaria de expirar membresías vencidas y activar las programadas."
+        help="Ejecuta la tarea diaria de expirar membresías vencidas y activar las programadas (Job 1)."
     )
     sub_cron.add_argument(
         "--dry-run",
         action="store_true",
         help="Simula la ejecución sin alterar la base de datos."
+    )
+
+    # Comando 1b: subscriptions:alerts (Job 2)
+    sub_alerts = subparsers.add_parser(
+        "subscriptions:alerts",
+        help="Ejecuta la tarea de alertas preventivas selectivas anti-spam (Job 2)."
+    )
+    sub_alerts.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Simula la ejecución sin despachar correos reales."
+    )
+
+    # Comando 1c: digest:morning (Job 3)
+    sub_digest = subparsers.add_parser(
+        "digest:morning",
+        help="Compila y despacha el Resumen Ejecutivo Matutino a Telegram (Job 3)."
+    )
+    sub_digest.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Simula el resumen e imprime en consola sin enviar a Telegram."
+    )
+
+    # Comando 1d: system:cleanup (Job 4)
+    sub_cleanup = subparsers.add_parser(
+        "system:cleanup",
+        help="Mantenimiento preventivo: purga tokens efímeros en Redis y eventos obsoletos en BD (Job 4)."
+    )
+    sub_cleanup.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Simula la limpieza sin eliminar registros ni claves."
     )
 
     # Comando 2: admin:reset-password
@@ -75,6 +108,18 @@ def main():
     if args.command == "subscriptions:cron":
         from scripts.cron_subscriptions import run_cron
         run_cron(dry_run=args.dry_run)
+
+    elif args.command == "subscriptions:alerts":
+        from scripts.cron_preventive_alerts import run_cron
+        run_cron(dry_run=args.dry_run)
+
+    elif args.command == "digest:morning":
+        from scripts.cron_morning_digest import run_digest
+        run_digest(dry_run=args.dry_run)
+
+    elif args.command == "system:cleanup":
+        from scripts.cron_system_cleanup import run_cleanup
+        run_cleanup(dry_run=args.dry_run)
 
     elif args.command == "admin:reset-password":
         from scripts.reset_admin_password import run_reset

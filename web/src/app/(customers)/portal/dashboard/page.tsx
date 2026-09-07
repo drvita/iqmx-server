@@ -1,30 +1,33 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import React, { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   ChatBubbleLeftRightIcon,
   CreditCardIcon,
   ShoppingBagIcon,
   CheckCircleIcon,
   ArrowRightIcon,
-  SparklesIcon,
   BoltIcon,
   CalendarDaysIcon,
-  ExclamationCircleIcon,
   BuildingOffice2Icon,
   CommandLineIcon,
-} from '@heroicons/react/24/outline';
-import PortalLoader from '@/components/PortalLoader';
-import FeedbackAlert from './components/FeedbackAlert';
-import { getCheckoutIntent, clearCheckoutIntent, CheckoutIntent } from '@/utils/checkoutIntent';
+  EnvelopeIcon,
+} from "@heroicons/react/24/outline";
+import PortalLoader from "@/components/PortalLoader";
+import FeedbackAlert from "./components/FeedbackAlert";
+import {
+  getCheckoutIntent,
+  clearCheckoutIntent,
+  CheckoutIntent,
+} from "@/utils/checkoutIntent";
 import {
   CustomerProfile,
   FeedbackMessage,
   SubscriptionItem,
   ConflictCheckInfo,
-} from './components/types';
+} from "./components/types";
 
 export default function PortalDashboardPage() {
   const router = useRouter();
@@ -34,15 +37,41 @@ export default function PortalDashboardPage() {
   const [feedbackMsg, setFeedbackMsg] = useState<FeedbackMessage | null>(null);
   const [loadingInitial, setLoadingInitial] = useState(true);
 
-  // Intención de compra pendiente
-  const [pendingIntent, setPendingIntent] = useState<CheckoutIntent | null>(null);
-  const [conflictInfo, setConflictInfo] = useState<ConflictCheckInfo | null>(null);
+  // Intención o suscripción pendiente de pago
+  const [pendingIntent, setPendingIntent] = useState<CheckoutIntent | null>(
+    null,
+  );
+  const [conflictInfo, setConflictInfo] = useState<ConflictCheckInfo | null>(
+    null,
+  );
   const [payingPending, setPayingPending] = useState(false);
+  const [cancellingPending, setCancellingPending] = useState(false);
+
+  // Suscripción pendiente detectada en base de datos
+  const dbPendingSub = subscriptions.find(
+    (s) => s.status === "pending_payment",
+  );
+  const activePendingPlanId =
+    dbPendingSub?.plan_id || pendingIntent?.plan_id;
+  const activePendingPlanName =
+    dbPendingSub?.plan_name || pendingIntent?.plan_name;
+  const activePendingPrice =
+    dbPendingSub?.price_mxn ?? pendingIntent?.price_mxn ?? 0;
+
+  // Verificación de Correo
+  const [resendingEmail, setResendingEmail] = useState(false);
+  const [resendEmailMsg, setResendEmailMsg] = useState<{
+    type: "success" | "error";
+    text: string;
+  } | null>(null);
 
   const getHeaders = useCallback((): Record<string, string> => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('iqmx_portal_token') : null;
+    const token =
+      typeof window !== "undefined"
+        ? localStorage.getItem("iqmx_portal_token")
+        : null;
     return {
-      'Content-Type': 'application/json',
+      "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
     };
   }, []);
@@ -51,11 +80,11 @@ export default function PortalDashboardPage() {
     const headers = getHeaders();
     try {
       // 1. Perfil del cliente
-      const resMe = await fetch('/api/portal/auth/me', { headers });
+      const resMe = await fetch("/api/portal/auth/me", { headers });
       if (resMe.status === 401) {
-        localStorage.removeItem('iqmx_portal_token');
-        localStorage.removeItem('iqmx_portal_customer');
-        router.push('/portal/login');
+        localStorage.removeItem("iqmx_portal_token");
+        localStorage.removeItem("iqmx_portal_customer");
+        router.push("/portal/login");
         return;
       }
       if (resMe.ok) {
@@ -63,14 +92,14 @@ export default function PortalDashboardPage() {
       }
 
       // 2. Membresías del cliente
-      const resSubs = await fetch('/api/portal/subscriptions/my', { headers });
+      const resSubs = await fetch("/api/portal/subscriptions/my", { headers });
       if (resSubs.ok) {
         setSubscriptions(await resSubs.json());
       }
     } catch {
       setFeedbackMsg({
-        type: 'error',
-        text: 'Error de red al consultar la información del panel.',
+        type: "error",
+        text: "Error de red al consultar la información del panel.",
       });
     } finally {
       setLoadingInitial(false);
@@ -84,27 +113,30 @@ export default function PortalDashboardPage() {
     const intent = getCheckoutIntent();
     if (intent) setPendingIntent(intent);
 
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
-      if (params.get('trial') === '1' || params.get('trial') === 'success') {
+      if (params.get("trial") === "1" || params.get("trial") === "success") {
         setFeedbackMsg({
-          type: 'success',
-          text: '¡Tu membresía de Prueba Gratuita (Free Trial) ha sido activada exitosamente!',
+          type: "success",
+          text: "¡Tu membresía de Prueba Gratuita (Free Trial) ha sido activada exitosamente!",
         });
-      } else if (params.get('payment') === 'success') {
+      } else if (params.get("payment") === "success") {
         setFeedbackMsg({
-          type: 'success',
-          text: '¡Tu pago ha sido validado exitosamente con Mercado Pago y tu membresía está activa!',
+          type: "success",
+          text: "¡Tu pago ha sido validado exitosamente con Mercado Pago y tu membresía está activa!",
         });
       }
     }
   }, [loadData]);
 
-  // Verificar conflicto de membresía cuando existe intención pendiente
+  // Verificar conflicto de membresía cuando existe plan pendiente
   useEffect(() => {
-    if (pendingIntent) {
+    if (activePendingPlanId) {
       const headers = getHeaders();
-      fetch(`/api/portal/subscriptions/check-conflict?plan_id=${pendingIntent.plan_id}`, { headers })
+      fetch(
+        `/api/portal/subscriptions/check-conflict?plan_id=${activePendingPlanId}`,
+        { headers },
+      )
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
           if (data && data.has_active) {
@@ -117,18 +149,25 @@ export default function PortalDashboardPage() {
     } else {
       setConflictInfo(null);
     }
-  }, [pendingIntent, getHeaders]);
+  }, [activePendingPlanId, getHeaders]);
 
   const handlePayPending = async () => {
-    if (!pendingIntent || !profile) return;
+    if (dbPendingSub?.checkout_url) {
+      clearCheckoutIntent();
+      setPendingIntent(null);
+      window.location.href = dbPendingSub.checkout_url;
+      return;
+    }
+
+    if (!activePendingPlanId || !profile) return;
     setPayingPending(true);
 
     try {
-      const res = await fetch('/api/public/checkout/preference', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const res = await fetch("/api/public/checkout/preference", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          plan_id: pendingIntent.plan_id,
+          plan_id: activePendingPlanId,
           company_name: profile.company_name,
           contact_name: profile.contact_name,
           email: profile.email,
@@ -142,23 +181,91 @@ export default function PortalDashboardPage() {
         window.location.href = data.checkout_url;
       } else {
         setFeedbackMsg({
-          type: 'error',
-          text: data.detail || 'Error al conectar con la pasarela de Mercado Pago.',
+          type: "error",
+          text:
+            data.detail || "Error al conectar con la pasarela de Mercado Pago.",
         });
       }
     } catch {
       setFeedbackMsg({
-        type: 'error',
-        text: 'Error de red al procesar el pago.',
+        type: "error",
+        text: "Error de red al procesar el pago.",
       });
     } finally {
       setPayingPending(false);
     }
   };
 
-  const handleDismissPending = () => {
-    clearCheckoutIntent();
-    setPendingIntent(null);
+  const handleCancelPending = async () => {
+    if (dbPendingSub) {
+      setCancellingPending(true);
+      try {
+        const headers = getHeaders();
+        const res = await fetch(
+          `/api/portal/subscriptions/${dbPendingSub.id}/cancel-pending`,
+          {
+            method: "DELETE",
+            headers,
+          },
+        );
+        const data = await res.json();
+        if (res.ok) {
+          clearCheckoutIntent();
+          setPendingIntent(null);
+          setFeedbackMsg({
+            type: "success",
+            text: "La solicitud de membresía pendiente ha sido cancelada y descartada exitosamente.",
+          });
+          void loadData();
+        } else {
+          setFeedbackMsg({
+            type: "error",
+            text: data.detail || "Error al cancelar la suscripción pendiente.",
+          });
+        }
+      } catch {
+        setFeedbackMsg({
+          type: "error",
+          text: "Error de red al cancelar la suscripción pendiente.",
+        });
+      } finally {
+        setCancellingPending(false);
+      }
+    } else {
+      clearCheckoutIntent();
+      setPendingIntent(null);
+    }
+  };
+
+  const handleResendVerification = async () => {
+    setResendingEmail(true);
+    setResendEmailMsg(null);
+    try {
+      const headers = getHeaders();
+      const res = await fetch("/api/portal/auth/resend-verification", {
+        method: "POST",
+        headers,
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setResendEmailMsg({
+          type: "success",
+          text: data.message || "Enlace enviado a tu bandeja de correo.",
+        });
+      } else {
+        setResendEmailMsg({
+          type: "error",
+          text: data.detail || "No se pudo enviar el correo de verificación.",
+        });
+      }
+    } catch {
+      setResendEmailMsg({
+        type: "error",
+        text: "Error de comunicación al solicitar el reenvío.",
+      });
+    } finally {
+      setResendingEmail(false);
+    }
   };
 
   if (loadingInitial && !profile) {
@@ -167,52 +274,106 @@ export default function PortalDashboardPage() {
 
   // Identificar membresía del CRM
   const crmSub = subscriptions.find(
-    (s) => s.product_slug === 'crm' && (s.status === 'active' || s.status === 'trial')
+    (s) =>
+      s.product_slug === "crm" &&
+      (s.status === "active" || s.status === "trial"),
   );
 
   return (
     <div className="space-y-8 font-sans text-gray-900">
-      {/* ─── BANNER DE CONTRATACIÓN PENDIENTE (SI EXISTE) ─── */}
-      {pendingIntent && (
-        <div className="rounded-3xl border-2 border-blue-500 bg-blue-50/90 p-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+      {/* ─── BANNER DE CORREO NO VERIFICADO (OPCIÓN A) ─── */}
+      {profile && profile.email_verified === false && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/90 p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-start gap-3">
-            <div className="h-10 w-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shrink-0 mt-0.5 shadow-xs">
+            <div className="h-9 w-9 rounded-xl bg-amber-500 flex items-center justify-center text-white shrink-0 mt-0.5 shadow-2xs">
+              <EnvelopeIcon className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-amber-950">
+                  Confirma tu correo electrónico
+                </h3>
+                <span className="rounded-full bg-amber-200/80 px-2 py-0.5 text-[10px] font-bold text-amber-900 uppercase">
+                  Pendiente
+                </span>
+              </div>
+              <p className="text-xs text-amber-800 mt-1 leading-relaxed">
+                Enviamos un enlace de validación a{" "}
+                <strong>{profile.email}</strong>. Confirma tu cuenta para
+                proteger tu acceso y habilitar la contratación de planes.
+              </p>
+              {resendEmailMsg && (
+                <p
+                  className={`text-xs mt-2 font-semibold ${
+                    resendEmailMsg.type === "success"
+                      ? "text-emerald-700"
+                      : "text-red-600"
+                  }`}
+                >
+                  {resendEmailMsg.text}
+                </p>
+              )}
+            </div>
+          </div>
+
+          <div className="w-full sm:w-auto flex justify-end shrink-0">
+            <button
+              onClick={handleResendVerification}
+              disabled={resendingEmail}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 rounded-xl border border-amber-300 bg-white px-3.5 py-2 text-xs font-bold text-amber-900 shadow-2xs hover:bg-amber-100/50 transition-colors disabled:opacity-50 cursor-pointer"
+            >
+              <EnvelopeIcon className="h-4 w-4 text-amber-700" />
+              <span>{resendingEmail ? "Enviando…" : "Reenviar enlace"}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── BANNER DE CONTRATACIÓN PENDIENTE (SI EXISTE) ─── */}
+      {(dbPendingSub || pendingIntent) && (
+        <div className="rounded-3xl border-2 border-amber-400 bg-amber-50/90 p-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="h-10 w-10 rounded-xl bg-amber-500 flex items-center justify-center text-white shrink-0 mt-0.5 shadow-xs">
               <ShoppingBagIcon className="h-5 w-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-blue-950">
+                <h3 className="text-sm font-bold text-amber-950">
                   Tienes una contratación pendiente por completar
                 </h3>
-                <span className="rounded-full bg-blue-200 px-2 py-0.5 text-[10px] font-bold text-blue-800 uppercase">
-                  Pendiente
+                <span className="rounded-full bg-amber-200 px-2 py-0.5 text-[10px] font-bold text-amber-900 uppercase">
+                  Pago Pendiente
                 </span>
               </div>
-              <p className="text-xs text-blue-800 mt-1">
-                Membresía seleccionada: <strong>{pendingIntent.plan_name}</strong> por{' '}
-                <strong>${pendingIntent.price_mxn.toFixed(2)} MXN / mes</strong> a través de Mercado Pago.
+              <p className="text-xs text-amber-900 mt-1">
+                Membresía seleccionada:{" "}
+                <strong>{activePendingPlanName}</strong> por{" "}
+                <strong>${activePendingPrice.toFixed(2)} MXN / mes</strong>{" "}
+                a través de Mercado Pago.
               </p>
 
               {conflictInfo?.has_active && conflictInfo.message && (
                 <div
                   className={`mt-2.5 rounded-xl border p-2.5 text-xs flex items-start gap-2 ${
-                    conflictInfo.conflict_type === 'upgrade'
-                      ? 'border-amber-300 bg-amber-50 text-amber-900'
-                      : 'border-blue-200 bg-blue-100/70 text-blue-900'
+                    conflictInfo.conflict_type === "upgrade"
+                      ? "border-amber-300 bg-amber-50 text-amber-900"
+                      : "border-blue-200 bg-blue-100/70 text-blue-900"
                   }`}
                 >
-                  {conflictInfo.conflict_type === 'upgrade' ? (
+                  {conflictInfo.conflict_type === "upgrade" ? (
                     <BoltIcon className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
                   ) : (
                     <CalendarDaysIcon className="h-4 w-4 text-blue-700 shrink-0 mt-0.5" />
                   )}
                   <div>
                     <p className="font-bold text-[10px] uppercase tracking-wider">
-                      {conflictInfo.conflict_type === 'upgrade'
-                        ? '⚡ Mejora de Membresía (Upgrade)'
-                        : '📅 Activación Programada'}
+                      {conflictInfo.conflict_type === "upgrade"
+                        ? "⚡ Mejora de Membresía (Upgrade)"
+                        : "📅 Activación Programada"}
                     </p>
-                    <p className="mt-0.5 leading-relaxed">{conflictInfo.message}</p>
+                    <p className="mt-0.5 leading-relaxed">
+                      {conflictInfo.message}
+                    </p>
                   </div>
                 </div>
               )}
@@ -222,24 +383,30 @@ export default function PortalDashboardPage() {
           <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
             <button
               onClick={handlePayPending}
-              disabled={payingPending}
+              disabled={payingPending || cancellingPending}
               className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-xs hover:bg-blue-700 transition-colors disabled:opacity-50 cursor-pointer"
             >
               <CreditCardIcon className="h-4 w-4" />
-              <span>{payingPending ? 'Conectando…' : 'Pagar con Mercado Pago →'}</span>
+              <span>
+                {payingPending ? "Conectando…" : "Pagar con Mercado Pago →"}
+              </span>
             </button>
             <button
-              onClick={handleDismissPending}
-              className="rounded-xl px-3 py-2 text-xs font-semibold text-gray-500 hover:bg-blue-100/50 hover:text-gray-700 transition-colors cursor-pointer"
+              onClick={handleCancelPending}
+              disabled={payingPending || cancellingPending}
+              className="rounded-xl px-3 py-2 text-xs font-semibold text-rose-700 bg-rose-50 border border-rose-200 hover:bg-rose-100 hover:text-rose-800 transition-colors cursor-pointer disabled:opacity-50"
             >
-              Descartar
+              {cancellingPending ? "Cancelando…" : "Cancelar Solicitud"}
             </button>
           </div>
         </div>
       )}
 
       {/* Alertas del sistema */}
-      <FeedbackAlert message={feedbackMsg} onDismiss={() => setFeedbackMsg(null)} />
+      <FeedbackAlert
+        message={feedbackMsg}
+        onDismiss={() => setFeedbackMsg(null)}
+      />
 
       {/* ─── ENCABEZADO EJECUTIVO ─── */}
       <div className="rounded-3xl border border-gray-200 bg-linear-to-br from-slate-900 to-blue-950 p-6 sm:p-8 text-white shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-6">
@@ -252,7 +419,8 @@ export default function PortalDashboardPage() {
             Bienvenido, {profile?.company_name}
           </h1>
           <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-xl">
-            Gestiona tus productos contratados, configura tus integraciones y da seguimiento a tus membresías desde este portal.
+            Gestiona tus productos contratados, configura tus integraciones y da
+            seguimiento a tus membresías desde este portal.
           </p>
         </div>
 
@@ -294,7 +462,11 @@ export default function PortalDashboardPage() {
                 {crmSub ? (
                   <span className="rounded-full bg-emerald-100 text-emerald-800 px-2.5 py-0.5 text-[10px] font-bold uppercase flex items-center gap-1">
                     <CheckCircleIcon className="h-3.5 w-3.5 text-emerald-600" />
-                    <span>{crmSub.status === 'trial' ? 'Prueba Gratuita' : crmSub.plan_name}</span>
+                    <span>
+                      {crmSub.status === "trial"
+                        ? "Prueba Gratuita"
+                        : crmSub.plan_name}
+                    </span>
                   </span>
                 ) : (
                   <span className="rounded-full bg-gray-100 text-gray-600 px-2.5 py-0.5 text-[10px] font-bold uppercase">
@@ -303,9 +475,12 @@ export default function PortalDashboardPage() {
                 )}
               </div>
 
-              <h3 className="text-lg font-bold text-gray-900">CRM WhatsApp Omnicanal</h3>
+              <h3 className="text-lg font-bold text-gray-900">
+                CRM WhatsApp Omnicanal
+              </h3>
               <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-                Centraliza las conversaciones de WhatsApp Business, asigna múltiples agentes y automatiza respuestas 24/7 con IA.
+                Centraliza las conversaciones de WhatsApp Business, asigna
+                múltiples agentes y automatiza respuestas 24/7 con IA.
               </p>
 
               {crmSub && (
@@ -314,7 +489,13 @@ export default function PortalDashboardPage() {
                     Plan: <strong>{crmSub.plan_name}</strong>
                   </p>
                   <p className="text-[11px] text-blue-700">
-                    Vence: <strong>{new Date(crmSub.current_period_end).toLocaleDateString('es-MX')}</strong> ({crmSub.days_remaining} días restantes)
+                    Vence:{" "}
+                    <strong>
+                      {new Date(crmSub.current_period_end).toLocaleDateString(
+                        "es-MX",
+                      )}
+                    </strong>{" "}
+                    ({crmSub.days_remaining} días restantes)
                   </p>
                 </div>
               )}
@@ -343,9 +524,13 @@ export default function PortalDashboardPage() {
                 </span>
               </div>
 
-              <h3 className="text-lg font-bold text-gray-900">Soluciones de Software y Automatización</h3>
+              <h3 className="text-lg font-bold text-gray-900">
+                Soluciones de Software y Automatización
+              </h3>
               <p className="text-xs text-gray-500 mt-1 leading-relaxed">
-                Flujos automatizados con n8n y Airflow, diseño de sitios web empresariales y entrenamiento de modelos de inteligencia artificial a la medida.
+                Flujos automatizados con n8n y Airflow, diseño de sitios web
+                empresariales y entrenamiento de modelos de inteligencia
+                artificial a la medida.
               </p>
             </div>
 
@@ -371,11 +556,13 @@ export default function PortalDashboardPage() {
             <CreditCardIcon className="h-5 w-5 text-gray-600" />
           </div>
           <div>
-            <h4 className="text-sm font-bold text-gray-900">Facturación y Vigencias</h4>
+            <h4 className="text-sm font-bold text-gray-900">
+              Facturación y Vigencias
+            </h4>
             <p className="text-xs text-gray-500">
               {subscriptions.length > 0
                 ? `Tienes ${subscriptions.length} registro(s) de membresías en tu cuenta.`
-                : 'No cuentas con membresías activas registradas.'}
+                : "No cuentas con membresías activas registradas."}
             </p>
           </div>
         </div>

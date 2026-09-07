@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, event
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, event
 from sqlalchemy.orm import relationship, object_session
 from typing import List
 from app.models.base import Base
@@ -11,10 +11,16 @@ class User(Base):
     name = Column(String(100), nullable=False)
     email = Column(String(100), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=False)
+
+    # Verificación de correo electrónico (computado: is_email_verified)
+    email_verified_at = Column(DateTime, nullable=True)
     
     # role_id se mantiene como nullable para retrocompatibilidad
     role_id = Column(Integer, ForeignKey("roles.id"), nullable=True)
     partner_id = Column(Integer, ForeignKey("partners.id"), nullable=True)
+
+    # Identificador para notificaciones operativas vía Telegram Bot
+    telegram_chat_id = Column(String(50), nullable=True, index=True)
 
     # Relación simple legada y relación muchos a muchos con user_has_role
     role = relationship("Role", foreign_keys=[role_id], back_populates=None)
@@ -39,6 +45,10 @@ class User(Base):
 
     def has_role(self, role_name: str) -> bool:
         return role_name in self.role_names
+
+    @property
+    def is_email_verified(self) -> bool:
+        return self.email_verified_at is not None
 
 # Validación de relación obligatoria antes de persistir en base de datos
 @event.listens_for(User, 'before_insert')

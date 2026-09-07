@@ -32,6 +32,7 @@ class SystemUserResponse(BaseModel):
     has_customer_role: bool = False
     customer_id: Optional[int] = None
     partner_id: Optional[int] = None
+    telegram_chat_id: Optional[str] = None
 
 class CreateSystemUserRequest(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
@@ -39,6 +40,7 @@ class CreateSystemUserRequest(BaseModel):
     password: str = Field(..., min_length=8, max_length=100)
     role: str = Field("admin", description="Rol del usuario interno ('admin', 'partner', 'contact')")
     partner_id: Optional[int] = None
+    telegram_chat_id: Optional[str] = None
 
     @field_validator("email")
     @classmethod
@@ -63,6 +65,7 @@ class UpdateSystemUserRequest(BaseModel):
     password: Optional[str] = Field(None, min_length=8, max_length=100)
     role: Optional[str] = None
     partner_id: Optional[int] = None
+    telegram_chat_id: Optional[str] = None
 
 class GrantCustomerRoleRequest(BaseModel):
     company_name: str = Field(..., min_length=2, max_length=150)
@@ -81,7 +84,8 @@ def build_system_user_response(u: User, db: Session) -> SystemUserResponse:
         roles=u.role_names,
         has_customer_role=u.has_role("customer"),
         customer_id=cust.id if cust else None,
-        partner_id=u.partner_id
+        partner_id=u.partner_id,
+        telegram_chat_id=u.telegram_chat_id
     )
 
 
@@ -133,12 +137,22 @@ def create_system_user(
         db.commit()
         db.refresh(target_role)
 
+    tg_chat_id = None
+    if req.telegram_chat_id and req.telegram_chat_id.strip():
+        if req.role != "admin":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="La configuración de Telegram solo está disponible para usuarios con rol 'admin'."
+            )
+        tg_chat_id = req.telegram_chat_id.strip()
+
     new_user = User(
         name=req.name.strip(),
         email=clean_email,
         password_hash=hash_password(req.password),
         role_id=target_role.id,
-        partner_id=req.partner_id
+        partner_id=req.partner_id,
+        telegram_chat_id=tg_chat_id
     )
     new_user.roles.append(target_role)
     db.add(new_user)
@@ -171,6 +185,22 @@ def update_system_user(
         user.password_hash = hash_password(req.password)
     if req.partner_id is not None:
         user.partner_id = req.partner_id
+
+    # Validar que Telegram solo pueda configurarse para administradores
+    if req.telegram_chat_id is not None:
+        clean_tg = req.telegram_chat_id.strip()
+        if clean_tg:
+            effective_role = req.role.strip().lower() if req.role else None
+            is_admin = (effective_role == "admin") if effective_role else user.has_role("admin")
+            if not is_admin:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="La configuración de Telegram solo está disponible para usuarios con rol 'admin'."
+                )
+            user.telegram_chat_id = clean_tg
+        else:
+            user.telegram_chat_id = None
+
     if req.role:
         target_role = db.query(Role).filter(Role.name == req.role.strip().lower()).first()
         if target_role:
@@ -182,6 +212,9 @@ def update_system_user(
                 if cust_role and cust_role.id != target_role.id:
                     new_roles.append(cust_role)
             user.roles = new_roles
+            # Si el rol cambia y ya no es admin, limpiar telegram_chat_id
+            if target_role.name != "admin":
+                user.telegram_chat_id = None
 
     db.commit()
     db.refresh(user)
@@ -289,3 +322,55 @@ def revoke_customer_role(
     logger.info(f"Rol customer revocado al usuario #{user.id} ({user.email}) por admin #{admin.id}")
 
     return build_system_user_response(user, db)
+
+
+@router.post("/{user_id}/test-telegram")
+def test_admin_user_telegram(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    """
+    Envía un mensaje de prueba al telegram_chat_id configurado para un usuario administrador.
+    """
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado.")
+
+    if not target_user.has_role("admin"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Solo los usuarios con rol 'admin' pueden recibir alertas por Telegram."
+        )
+
+    if not target_user.telegram_chat_id or not target_user.telegram_chat_id.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"El administrador {target_user.name} no tiene configurado un Telegram Chat ID."
+        )
+
+    msg = (
+        f"🤖 *¡Prueba de Notificación IQISSMexico!* 🚀\n\n"
+        f"Hola *{target_user.name}*, tu cuenta de administrador ha sido vinculada correctamente "
+        f"para recibir notificaciones operativas.\n\n"
+        f"• Prueba ejecutada por: {admin.name}\n"
+        f"• Estado: ✅ Conexión exitosa."
+    )
+
+    from app.services.notifications.telegram import send_telegram_message
+    res = send_telegram_message(
+        chat_id=target_user.telegram_chat_id,
+        text=msg,
+        parse_mode="Markdown"
+    )
+    if not res.get("success"):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"No se pudo enviar el mensaje a Telegram: {res.get('error') or res.get('reason')}"
+        )
+
+    return {
+        "success": True,
+        "message": f"Mensaje de prueba enviado exitosamente a {target_user.name} ({target_user.telegram_chat_id})."
+    }
+

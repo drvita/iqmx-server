@@ -38,6 +38,23 @@ services:
       retries: 5
 
   # ----------------------------------------------------------------------------
+  # REDIS (Tokens Efímeros & Cache)
+  # ----------------------------------------------------------------------------
+  redis:
+    <<: *base-common
+    image: redis:7.2-alpine
+    container_name: iqmx-redis
+    ports:
+      - "${HOST_REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------------------------------
   # BACKEND API & WEBHOOK GATEWAY (FastAPI)
   # ----------------------------------------------------------------------------
   api:
@@ -50,6 +67,8 @@ services:
       - "8000:8000"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     env_file:
       - ./api/.env
@@ -125,6 +144,8 @@ networks:
 volumes:
   postgres-data:
     name: iqmx-postgres-data
+  redis-data:
+    name: iqmx-redis-data
   sqlite-data:
     name: iqmx-sqlite-data
   web-node-modules:

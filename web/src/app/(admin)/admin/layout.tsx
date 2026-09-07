@@ -11,6 +11,7 @@ import {
   CreditCardIcon,
   CpuChipIcon,
   ShieldCheckIcon,
+  UserCircleIcon,
   ArrowRightOnRectangleIcon,
 } from '@heroicons/react/24/outline';
 import LogoutConfirmationModal from '@/components/LogoutConfirmationModal';
@@ -22,6 +23,7 @@ const NAV_ITEMS = [
   { name: 'Suscripciones', href: '/admin/subscriptions', icon: CreditCardIcon },
   { name: 'Gestión CRM', href: '/admin/crm', icon: CpuChipIcon },
   { name: 'Usuarios Sistema', href: '/admin/users', icon: ShieldCheckIcon },
+  { name: 'Mi Perfil', href: '/admin/profile', icon: UserCircleIcon },
 ];
 
 export default function AdminLayout({
@@ -94,9 +96,9 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 flex flex-col lg:flex-row font-sans">
-      {/* Sidebar Lateral Claro */}
-      <aside className="w-full lg:w-64 bg-white border-r border-gray-200 flex flex-col shrink-0 shadow-xs">
+    <div className="h-screen bg-gray-50 text-gray-900 flex flex-col lg:flex-row font-sans overflow-hidden">
+      {/* Sidebar Lateral Fijo Claro */}
+      <aside className="w-full lg:w-64 lg:h-screen bg-white border-r border-gray-200 flex flex-col shrink-0 shadow-xs z-20">
         <div className="p-4 border-b border-gray-200 flex items-center justify-between">
           <Link href="/admin/dashboard" className="flex items-center gap-2">
             <Image
@@ -137,14 +139,20 @@ export default function AdminLayout({
         {/* Perfil del Admin & Logout */}
         <div className="p-3 border-t border-gray-200 bg-gray-50/50">
           <div className="flex items-center justify-between px-2 py-1">
-            <div className="truncate">
-              <p className="text-xs font-semibold text-gray-900 truncate">{adminUser?.name}</p>
+            <Link
+              href="/admin/profile"
+              className="truncate flex-1 group hover:opacity-80 transition-opacity"
+              title="Ver y editar mi perfil"
+            >
+              <p className="text-xs font-semibold text-gray-900 truncate group-hover:text-blue-600 transition-colors">
+                {adminUser?.name}
+              </p>
               <p className="text-[11px] text-gray-500 truncate">{adminUser?.email}</p>
-            </div>
+            </Link>
             <button
               onClick={handleLogout}
               title="Cerrar Sesión"
-              className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-200 hover:text-red-600 transition-colors"
+              className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-200 hover:text-red-600 transition-colors shrink-0 ml-2"
             >
               <ArrowRightOnRectangleIcon className="h-5 w-5" />
             </button>
@@ -152,8 +160,8 @@ export default function AdminLayout({
         </div>
       </aside>
 
-      {/* Contenido Principal Claro */}
-      <main className="flex-1 overflow-y-auto min-w-0 p-4 sm:p-6 lg:p-8">
+      {/* Contenido Principal con Scroll Independiente */}
+      <main className="flex-1 h-screen overflow-y-auto min-w-0 p-4 sm:p-6 lg:p-8">
         {children}
       </main>
       {/* Modal de Confirmación de Cierre de Sesión */}

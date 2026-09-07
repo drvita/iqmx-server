@@ -28,8 +28,10 @@ export default function AdminLoginPage() {
       .catch(() => null);
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (e?: React.FormEvent | React.KeyboardEvent) => {
+    if (e) {
+      e.preventDefault();
+    }
     if (!email.trim() || !password) {
       setErrorMsg('Por favor complete todos los campos.');
       return;
@@ -137,6 +139,12 @@ export default function AdminLoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void handleSubmit(e);
+                  }
+                }}
                 placeholder="••••••••••••"
                 className="mt-1.5 block w-full rounded-lg bg-white border border-gray-300 px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
               />
