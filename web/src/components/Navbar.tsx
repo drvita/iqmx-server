@@ -36,6 +36,12 @@ export default function Navbar({ showMenu = true }: NavbarProps) {
                   Inicio
                 </Link>
                 <Link
+                  href="/productos"
+                  className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
+                >
+                  Productos
+                </Link>
+                <Link
                   href="/aboutus"
                   className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
                 >
@@ -48,7 +54,7 @@ export default function Navbar({ showMenu = true }: NavbarProps) {
                   CRM WhatsApp
                 </Link>
                 <Link
-                  href="/landingpage/consultorios"
+                  href="/landingpage/crm/consultorio"
                   className="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium"
                 >
                   Consultorios

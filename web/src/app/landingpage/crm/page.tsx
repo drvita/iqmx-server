@@ -1,7 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import React from 'react';
 import Link from 'next/link';
 import {
   ChatBubbleLeftRightIcon,
@@ -9,88 +8,15 @@ import {
   SparklesIcon,
   ViewColumnsIcon,
   CheckIcon,
-  CreditCardIcon,
   BoltIcon,
   ClockIcon,
   ArrowRightIcon,
   ChartBarIcon,
-  StarIcon,
 } from '@heroicons/react/24/outline';
-import { saveCheckoutIntent } from '@/utils/checkoutIntent';
-
-type Plan = {
-  id: number;
-  product_id: number;
-  name: string;
-  slug: string;
-  description: string | null;
-  price_mxn: number;
-  billing_interval: string;
-  features_payload: any;
-};
+import MembershipPlans from '@/components/landing/MembershipPlans';
+import LandingFaqSection from '@/components/landing/LandingFaqSection';
 
 export default function CrmLandingPage() {
-  const router = useRouter();
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [loadingPlans, setLoadingPlans] = useState(true);
-
-  useEffect(() => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
-    fetch(`${apiUrl}/api/public/products/crm/plans?agenda=false&include_free=true`)
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => setPlans(data))
-      .catch(() => setPlans([]))
-      .finally(() => setLoadingPlans(false));
-  }, []);
-
-  const [claimingTrial, setClaimingTrial] = useState(false);
-
-  const handleSelectPlan = async (plan: Plan) => {
-    const token = typeof window !== 'undefined' ? localStorage.getItem('iqmx_portal_token') : null;
-    
-    // Si es plan gratis (Trial)
-    if (plan.price_mxn <= 0) {
-      if (token) {
-        setClaimingTrial(true);
-        try {
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
-          const res = await fetch(`${apiUrl}/api/portal/subscriptions/claim-trial`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
-            },
-          });
-          if (res.ok) {
-            router.push('/portal/dashboard?trial=1');
-            return;
-          }
-        } catch {
-          // Si falla red, redirigir al panel
-        } finally {
-          setClaimingTrial(false);
-        }
-        router.push('/portal/dashboard');
-      } else {
-        router.push('/portal/register');
-      }
-      return;
-    }
-
-    saveCheckoutIntent({
-      plan_id: plan.id,
-      plan_name: plan.name,
-      price_mxn: plan.price_mxn,
-      product_slug: 'crm',
-    });
-
-    if (!token) {
-      router.push('/portal/login?redirect=checkout');
-    } else {
-      router.push('/portal/dashboard?pending_checkout=1');
-    }
-  };
-
   const scrollToPlans = () => {
     document.getElementById('planes')?.scrollIntoView({ behavior: 'smooth' });
   };
@@ -107,7 +33,7 @@ export default function CrmLandingPage() {
             <div className="space-y-6">
               <div className="inline-flex items-center gap-1.5 rounded-full bg-white/10 backdrop-blur-sm px-3.5 py-1 text-xs font-semibold text-blue-200 border border-white/15">
                 <SparklesIcon className="h-4 w-4 text-blue-300" />
-                <span>CRM Omnicanal con IA para WhatsApp</span>
+                <span>CRM Omnicanal para WhatsApp con IA</span>
               </div>
 
               <h1 className="text-4xl sm:text-5xl lg:text-[3.5rem] font-extrabold tracking-tight leading-[1.1]">
@@ -124,9 +50,9 @@ export default function CrmLandingPage() {
               <div className="flex flex-col sm:flex-row gap-3 pt-2">
                 <button
                   onClick={scrollToPlans}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-6 py-3.5 text-sm font-bold text-blue-950 shadow-lg hover:bg-blue-50 transition-all hover:shadow-xl"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-6 py-3.5 text-sm font-bold text-blue-950 shadow-lg hover:bg-blue-50 transition-all hover:shadow-xl cursor-pointer"
                 >
-                  <span>Ver Planes y Contratar</span>
+                  <span>Ver Membresías y Planes</span>
                   <ArrowRightIcon className="h-4 w-4" />
                 </button>
               </div>
@@ -264,7 +190,7 @@ export default function CrmLandingPage() {
                 <SparklesIcon className="h-6 w-6" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-gray-900">Agente de IA que no duerme</h3>
+                <h3 className="text-base font-bold text-gray-900">Asistente virtual de IA que no duerme</h3>
                 <p className="mt-1 text-sm text-gray-600 leading-relaxed">
                   Responde preguntas frecuentes, <strong>califica prospectos</strong> automáticamente y escala al 
                   humano indicado cuando se requiere. Disponible <strong>24 horas, 7 días</strong>.
@@ -290,10 +216,10 @@ export default function CrmLandingPage() {
                 <BoltIcon className="h-6 w-6" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-gray-900">Conexión oficial verificada</h3>
+                <h3 className="text-base font-bold text-gray-900">Conexión oficial y plantillas de Meta integradas</h3>
                 <p className="mt-1 text-sm text-gray-600 leading-relaxed">
-                  Tu número queda verificado como cuenta oficial de negocio en WhatsApp. 
-                  <strong>Sin riesgo de baneo</strong>, sin apps de terceros, sin compartir tu celular personal.
+                  Cuenta verificada oficial <strong>sin riesgo de baneo</strong>. Además, crea y gestiona 
+                  <strong> plantillas aprobadas por Meta</strong> directo en tu panel para reactivar prospectos con 1 clic sin salir a plataformas externas.
                 </p>
               </div>
             </div>
@@ -315,8 +241,9 @@ export default function CrmLandingPage() {
             </p>
             <ul className="mt-6 space-y-3">
               {[
-                'Arrastra y suelta contactos entre etapas comerciales',
+                'Arrastra y suelta prospectos entre etapas comerciales',
                 'Filtra por asesor, etiqueta o fecha de última interacción',
+                'Reactivación de prospectos inactivos con plantillas oficiales en 1 clic',
                 'Vista unificada: pipeline + chat en la misma pantalla',
                 'Métricas de conversión por etapa en tiempo real',
               ].map((item, i) => (
@@ -329,9 +256,9 @@ export default function CrmLandingPage() {
 
             <button
               onClick={scrollToPlans}
-              className="mt-8 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-md hover:bg-blue-700 transition-colors"
+              className="mt-8 inline-flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-md hover:bg-blue-700 transition-colors cursor-pointer"
             >
-              <span>Empezar Ahora</span>
+              <span>Ver Membresías</span>
               <ArrowRightIcon className="h-4 w-4" />
             </button>
           </div>
@@ -378,12 +305,12 @@ export default function CrmLandingPage() {
       {/* ─── CTA PUENTE ─── */}
       <section className="py-12 px-4 sm:px-6 lg:px-8 bg-white">
         <div className="max-w-3xl mx-auto text-center">
-          <p className="text-sm text-gray-500 uppercase tracking-wider font-bold">¿Tu consultorio médico?</p>
+          <p className="text-sm text-gray-500 uppercase tracking-wider font-bold">¿Tienes un consultorio o clínica?</p>
           <h3 className="mt-1 text-xl font-bold text-gray-900">
-            Tenemos una solución especializada para clínicas y profesionales de la salud
+            Tenemos una solución especializada para profesionales de la salud
           </h3>
           <p className="mt-2 text-sm text-gray-600">
-            Agenda de citas inteligente, recordatorios automáticos, triaje por WhatsApp y más.
+            Agenda médica especializada, agendamiento de pacientes 24/7 y triaje por WhatsApp.
           </p>
           <Link
             href="/landingpage/crm/consultorio"
@@ -395,154 +322,19 @@ export default function CrmLandingPage() {
         </div>
       </section>
 
-      {/* ─── PLANES Y CHECKOUT ─── */}
-      <section id="planes" className="py-20 px-4 sm:px-6 lg:px-8 bg-gray-50 border-t border-gray-200">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center max-w-2xl mx-auto mb-12">
-            <span className="text-xs font-bold text-blue-600 uppercase tracking-wider">Membresías</span>
-            <h2 className="mt-2 text-3xl font-extrabold text-gray-900">
-              Elige tu plan y activa tu CRM hoy mismo
-            </h2>
-            <p className="mt-2 text-sm text-gray-600">
-              Pagos recurrentes mensuales seguros con Mercado Pago. Cancela cuando quieras sin penalización.
-            </p>
-          </div>
+      {/* ─── MEMBRESÍAS Y PLANES (COMPONENTE MODULAR DINÁMICO) ─── */}
+      <MembershipPlans
+        theme="blue"
+        sector="general"
+        endpointAgenda={false}
+        includeFree={true}
+        id="planes"
+        title="Elige tu plan y activa tu CRM hoy mismo"
+        subtitle="Pagos recurrentes mensuales seguros procesados con Mercado Pago. Cancela cuando quieras sin penalización."
+      />
 
-          {loadingPlans ? (
-            <div className="p-16 text-center text-gray-400">
-              <div className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
-              <p className="mt-3 text-xs">Cargando membresías disponibles…</p>
-            </div>
-          ) : plans.length > 0 ? (
-            <div className={`grid gap-8 max-w-4xl mx-auto ${plans.length === 1 ? 'grid-cols-1 max-w-md' : plans.length === 2 ? 'grid-cols-1 md:grid-cols-2' : 'grid-cols-1 md:grid-cols-3'}`}>
-              {plans.map((p) => {
-                const isFree = p.price_mxn <= 0;
-                const isPopular = p.slug === 'crm-basic-plus';
-                return (
-                  <div
-                    key={p.id}
-                    className={`rounded-3xl bg-white p-8 flex flex-col justify-between shadow-sm transition-all hover:shadow-lg relative ${
-                      isPopular 
-                        ? 'border-2 border-blue-600 ring-2 ring-blue-100' 
-                        : isFree
-                        ? 'border border-gray-200 bg-linear-to-b from-gray-50/50 to-white'
-                        : 'border border-gray-200'
-                    }`}
-                  >
-                    {isPopular && (
-                      <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-600 px-3 py-1 text-[10px] font-bold text-white uppercase shadow-sm">
-                          <StarIcon className="h-3 w-3" /> Más Popular
-                        </span>
-                      </div>
-                    )}
-
-                    {isFree && (
-                      <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-3 py-1 text-[10px] font-bold text-white uppercase shadow-sm">
-                          Sin Costo
-                        </span>
-                      </div>
-                    )}
-
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900">{p.name}</h3>
-                      <p className="mt-1 text-sm text-gray-500">{p.description}</p>
-
-                      <div className="mt-6 flex items-baseline gap-1">
-                        <span className="text-4xl font-extrabold text-gray-900">
-                          {isFree ? 'Gratis' : `$${p.price_mxn.toFixed(0)}`}
-                        </span>
-                        <span className="text-sm text-gray-500 font-medium">{isFree ? 'sin tarjeta' : 'MXN / mes'}</span>
-                      </div>
-
-                      <ul className="mt-6 space-y-3 border-t border-gray-100 pt-6">
-                        <li className="flex items-center gap-2 text-sm text-gray-700">
-                          <CheckIcon className="h-4 w-4 text-blue-600 shrink-0" />
-                          <span>Hasta <strong>{p.features_payload?.max_whatsapp_accounts ?? 1}</strong> {(p.features_payload?.max_whatsapp_accounts ?? 1) === 1 ? 'línea' : 'líneas'} de WhatsApp</span>
-                        </li>
-                        <li className="flex items-center gap-2 text-sm text-gray-700">
-                          <CheckIcon className="h-4 w-4 text-blue-600 shrink-0" />
-                          <span>Hasta <strong>{p.features_payload?.max_team_members ?? 5}</strong> agentes / miembros</span>
-                        </li>
-                        <li className="flex items-center gap-2 text-sm text-gray-700">
-                          <CheckIcon className="h-4 w-4 text-blue-600 shrink-0" />
-                          <span>Hasta <strong>{(p.features_payload?.max_contacts ?? 500).toLocaleString()}</strong> contactos</span>
-                        </li>
-                        <li className="flex items-center gap-2 text-sm text-gray-700">
-                          <CheckIcon className="h-4 w-4 text-blue-600 shrink-0" />
-                          <span>Pipeline Kanban de ventas</span>
-                        </li>
-                        <li className="flex items-center gap-2 text-sm text-gray-700">
-                          <CheckIcon className="h-4 w-4 text-blue-600 shrink-0" />
-                          <span>Agente de IA 24/7</span>
-                        </li>
-                        {p.features_payload?.lab_enabled && (
-                          <li className="flex items-center gap-2 text-sm text-gray-700">
-                            <CheckIcon className="h-4 w-4 text-purple-600 shrink-0" />
-                            <span className="font-semibold text-purple-700">Laboratorio de evaluación IA</span>
-                          </li>
-                        )}
-                        {p.features_payload?.tasks_enabled && (
-                          <li className="flex items-center gap-2 text-sm text-gray-700">
-                            <CheckIcon className="h-4 w-4 text-purple-600 shrink-0" />
-                            <span className="font-semibold text-purple-700">Módulo de tareas</span>
-                          </li>
-                        )}
-                        {p.features_payload?.attribution_enabled && (
-                          <li className="flex items-center gap-2 text-sm text-gray-700">
-                            <CheckIcon className="h-4 w-4 text-purple-600 shrink-0" />
-                            <span className="font-semibold text-purple-700">Atribución Meta CAPI</span>
-                          </li>
-                        )}
-                      </ul>
-                    </div>
-
-                    <button
-                      onClick={() => handleSelectPlan(p)}
-                      disabled={isFree && claimingTrial}
-                      className={`mt-8 w-full inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3.5 text-sm font-bold shadow-md transition-all hover:shadow-lg ${
-                        isFree
-                          ? 'bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50'
-                          : isPopular
-                          ? 'bg-blue-600 text-white hover:bg-blue-700'
-                          : 'bg-gray-900 text-white hover:bg-gray-800'
-                      }`}
-                    >
-                      {isFree ? (
-                        claimingTrial ? (
-                          <span>Activando prueba gratuita…</span>
-                        ) : (
-                          <>
-                            <SparklesIcon className="h-4 w-4" />
-                            <span>Probar Gratis</span>
-                          </>
-                        )
-                      ) : (
-                        <>
-                          <CreditCardIcon className="h-4 w-4" />
-                          <span>Contratar Ahora</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center max-w-lg mx-auto shadow-xs">
-              <h3 className="text-base font-bold text-gray-900">Próximamente</h3>
-              <p className="mt-2 text-sm text-gray-600">
-                Estamos preparando los planes de membresía. Pronto podrás contratar directamente aquí.
-              </p>
-            </div>
-          )}
-
-          <p className="text-center text-xs text-gray-400 mt-8">
-            Todos los planes incluyen soporte por WhatsApp y actualizaciones automáticas.
-          </p>
-        </div>
-      </section>
+      {/* ─── PREGUNTAS FRECUENTES (FAQ & SEO) ─── */}
+      <LandingFaqSection theme="blue" sector="general" id="faq" />
 
       {/* ─── CTA FINAL ─── */}
       <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-blue-950 to-blue-800 text-white text-center">
@@ -556,9 +348,9 @@ export default function CrmLandingPage() {
           </p>
           <button
             onClick={scrollToPlans}
-            className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-bold text-blue-950 shadow-xl hover:bg-blue-50 transition-all hover:shadow-2xl"
+            className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-bold text-blue-950 shadow-xl hover:bg-blue-50 transition-all hover:shadow-2xl cursor-pointer"
           >
-            <span>Ver Planes y Contratar</span>
+            <span>Ver Membresías Disponibles</span>
             <ArrowRightIcon className="h-5 w-5" />
           </button>
         </div>

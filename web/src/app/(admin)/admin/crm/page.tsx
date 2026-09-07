@@ -15,6 +15,7 @@ import {
   CodeBracketIcon,
   DocumentTextIcon,
 } from "@heroicons/react/24/outline";
+import { RawJsonEditor } from "@/components/admin/RawJsonEditor";
 
 type Tenant = {
   organization_id: string;
@@ -1082,46 +1083,20 @@ export default function AdminCrmPage() {
 
             {/* Vista 2: Editor JSON Raw */}
             {overrideModalTab === "raw" && (
-              <div className="mt-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-gray-500 font-medium">
-                    Edita el payload directamente para agregar parámetros no
-                    contemplados en el formulario:
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handlePrettifyJson}
-                    className="rounded-md border border-gray-300 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 cursor-pointer shadow-2xs"
-                  >
-                    Dar Formato
-                  </button>
-                </div>
-
-                <div className="relative">
-                  <textarea
-                    rows={13}
-                    spellCheck={false}
-                    value={rawJsonText}
-                    onChange={(e) => {
-                      setRawJsonText(e.target.value);
-                      setRawJsonError(null);
-                    }}
-                    className="w-full rounded-xl border border-gray-300 bg-gray-950 p-3.5 text-xs font-mono text-emerald-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-hidden leading-relaxed shadow-inner"
-                  />
-                </div>
-
-                {rawJsonError && (
-                  <div className="rounded-lg bg-red-50 border border-red-200 p-2.5 text-xs text-red-700 flex items-start gap-2">
-                    <ExclamationCircleIcon className="h-4 w-4 shrink-0 mt-0.5 text-red-500" />
-                    <span>{rawJsonError}</span>
-                  </div>
-                )}
-
-                <p className="text-[11px] text-gray-500">
-                  Tip: Puedes agregar nuevas claves a nivel raíz o dentro del
-                  objeto <code>extra</code>. Serán enviadas y persistidas en el
-                  CRM.
-                </p>
+              <div className="mt-4">
+                <RawJsonEditor
+                  value={rawJsonText}
+                  onChange={(val) => {
+                    setRawJsonText(val);
+                    setRawJsonError(null);
+                  }}
+                  error={rawJsonError}
+                  onErrorChange={setRawJsonError}
+                  rows={13}
+                  label="Payload Raw de Ajustes"
+                  description="Edita el payload directamente para agregar parámetros no contemplados en el formulario."
+                  tip="Tip: Puedes agregar nuevas claves a nivel raíz o dentro del objeto extra. Serán enviadas y persistidas en el CRM."
+                />
               </div>
             )}
 

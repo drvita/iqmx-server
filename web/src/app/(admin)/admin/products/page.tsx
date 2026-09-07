@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from "react";
 import {
   PlusIcon,
   CubeIcon,
@@ -8,8 +8,8 @@ import {
   PencilSquareIcon,
   GlobeAltIcon,
   ArrowTopRightOnSquareIcon,
-  CheckCircleIcon,
-} from '@heroicons/react/24/outline';
+} from "@heroicons/react/24/outline";
+import { RawJsonEditor } from "@/components/admin/RawJsonEditor";
 
 type Product = {
   id: number;
@@ -18,6 +18,7 @@ type Product = {
   description: string | null;
   service_url: string | null;
   provision_endpoint?: string | null;
+  landing_path?: string | null;
   is_active: boolean;
   plans_count: number;
 };
@@ -38,17 +39,19 @@ type Plan = {
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
-  const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<number | null>(
+    null,
+  );
   const [loading, setLoading] = useState(true);
 
   // Modal para Crear/Editar Plan con JSON crudo
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [planForm, setPlanForm] = useState({
-    name: '',
-    slug: '',
-    description: '',
+    name: "",
+    slug: "",
+    description: "",
     price_mxn: 0,
-    billing_interval: 'monthly',
+    billing_interval: "monthly",
     is_public: true,
     is_active: true,
     features_json: JSON.stringify(
@@ -61,28 +64,44 @@ export default function AdminProductsPage() {
         tasks_enabled: false,
       },
       null,
-      2
+      2,
     ),
   });
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [savingPlan, setSavingPlan] = useState(false);
 
+  // Modal para Editar Plan con JSON crudo
+  const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
+  const [editPlanForm, setEditPlanForm] = useState({
+    name: "",
+    slug: "",
+    description: "",
+    price_mxn: 0,
+    billing_interval: "monthly",
+    is_public: true,
+    is_active: true,
+    features_json: "",
+  });
+  const [editJsonError, setEditJsonError] = useState<string | null>(null);
+  const [updatingPlan, setUpdatingPlan] = useState(false);
+
   // Modal para Editar Producto (service_url, provision_endpoint, etc.)
   const [isEditProductModalOpen, setIsEditProductModalOpen] = useState(false);
   const [editProductForm, setEditProductForm] = useState({
-    name: '',
-    description: '',
-    service_url: '',
-    provision_endpoint: '',
+    name: "",
+    description: "",
+    service_url: "",
+    provision_endpoint: "",
+    landing_path: "",
     is_active: true,
   });
   const [productError, setProductError] = useState<string | null>(null);
   const [savingProduct, setSavingProduct] = useState(false);
 
   const fetchData = useCallback(async () => {
-    const token = localStorage.getItem('iqmx_admin_token');
+    const token = localStorage.getItem("iqmx_admin_token");
     if (!token) return;
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
     const headers = { Authorization: `Bearer ${token}` };
 
     try {
@@ -117,22 +136,32 @@ export default function AdminProductsPage() {
     let parsedPayload = {};
     try {
       parsedPayload = JSON.parse(planForm.features_json);
+      if (
+        typeof parsedPayload !== "object" ||
+        parsedPayload === null ||
+        Array.isArray(parsedPayload)
+      ) {
+        setJsonError("El JSON de configuración debe ser un objeto ({ ... }).");
+        return;
+      }
       setJsonError(null);
-    } catch {
-      setJsonError('El JSON de configuración no es válido. Revisa las comillas y comas.');
+    } catch (err: any) {
+      setJsonError(
+        `El JSON de configuración no es válido: ${err?.message || "revisa comillas y comas"}`,
+      );
       return;
     }
 
     setSavingPlan(true);
 
     try {
-      const token = localStorage.getItem('iqmx_admin_token');
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+      const token = localStorage.getItem("iqmx_admin_token");
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
       const res = await fetch(`${apiUrl}/api/admin/catalog/plans`, {
-        method: 'POST',
+        method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           product_id: selectedProductId,
@@ -152,12 +181,91 @@ export default function AdminProductsPage() {
         fetchData();
       } else {
         const d = await res.json();
-        setJsonError(d.detail || 'Error al guardar el plan.');
+        setJsonError(d.detail || "Error al guardar el plan.");
       }
     } catch {
-      setJsonError('Error de red al comunicarse con el servidor.');
+      setJsonError("Error de red al comunicarse con el servidor.");
     } finally {
       setSavingPlan(false);
+    }
+  };
+
+  const handleOpenEditPlan = (plan: Plan) => {
+    setEditingPlan(plan);
+    setEditPlanForm({
+      name: plan.name,
+      slug: plan.slug,
+      description: plan.description || "",
+      price_mxn: plan.price_mxn,
+      billing_interval: plan.billing_interval || "monthly",
+      is_public: plan.is_public,
+      is_active: plan.is_active,
+      features_json: JSON.stringify(plan.features_payload || {}, null, 2),
+    });
+    setEditJsonError(null);
+  };
+
+  const handleUpdatePlan = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPlan) return;
+
+    let parsedPayload: Record<string, any> = {};
+    try {
+      parsedPayload = JSON.parse(editPlanForm.features_json);
+      if (
+        typeof parsedPayload !== "object" ||
+        parsedPayload === null ||
+        Array.isArray(parsedPayload)
+      ) {
+        setEditJsonError(
+          "El JSON de configuración debe ser un objeto ({ ... }).",
+        );
+        return;
+      }
+      setEditJsonError(null);
+    } catch (err: any) {
+      setEditJsonError(
+        `JSON inválido: ${err?.message || "revisa comillas y comas"}`,
+      );
+      return;
+    }
+
+    setUpdatingPlan(true);
+
+    try {
+      const token = localStorage.getItem("iqmx_admin_token");
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+      const res = await fetch(
+        `${apiUrl}/api/admin/catalog/plans/${editingPlan.id}`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: editPlanForm.name.trim(),
+            description: editPlanForm.description.trim() || null,
+            price_mxn: Number(editPlanForm.price_mxn),
+            billing_interval: editPlanForm.billing_interval,
+            features_payload: parsedPayload,
+            is_public: editPlanForm.is_public,
+            is_active: editPlanForm.is_active,
+          }),
+        },
+      );
+
+      if (res.ok) {
+        setEditingPlan(null);
+        await fetchData();
+      } else {
+        const d = await res.json();
+        setEditJsonError(d.detail || "Error al actualizar el plan.");
+      }
+    } catch {
+      setEditJsonError("Error de red al comunicarse con el servidor.");
+    } finally {
+      setUpdatingPlan(false);
     }
   };
 
@@ -166,9 +274,10 @@ export default function AdminProductsPage() {
     if (!prod) return;
     setEditProductForm({
       name: prod.name,
-      description: prod.description || '',
-      service_url: prod.service_url || '',
-      provision_endpoint: prod.provision_endpoint || '/api/provision',
+      description: prod.description || "",
+      service_url: prod.service_url || "",
+      provision_endpoint: prod.provision_endpoint || "/api/provision",
+      landing_path: prod.landing_path || "",
       is_active: prod.is_active,
     });
     setProductError(null);
@@ -182,32 +291,37 @@ export default function AdminProductsPage() {
     setProductError(null);
 
     try {
-      const token = localStorage.getItem('iqmx_admin_token');
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
-      const res = await fetch(`${apiUrl}/api/admin/catalog/products/${selectedProductId}`, {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
+      const token = localStorage.getItem("iqmx_admin_token");
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+      const res = await fetch(
+        `${apiUrl}/api/admin/catalog/products/${selectedProductId}`,
+        {
+          method: "PATCH",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: editProductForm.name.trim(),
+            description: editProductForm.description.trim() || null,
+            service_url: editProductForm.service_url.trim() || null,
+            provision_endpoint:
+              editProductForm.provision_endpoint.trim() || null,
+            landing_path: editProductForm.landing_path.trim() || null,
+            is_active: editProductForm.is_active,
+          }),
         },
-        body: JSON.stringify({
-          name: editProductForm.name.trim(),
-          description: editProductForm.description.trim() || null,
-          service_url: editProductForm.service_url.trim() || null,
-          provision_endpoint: editProductForm.provision_endpoint.trim() || null,
-          is_active: editProductForm.is_active,
-        }),
-      });
+      );
 
       if (res.ok) {
         setIsEditProductModalOpen(false);
         await fetchData();
       } else {
         const d = await res.json();
-        setProductError(d.detail || 'Error al actualizar el producto.');
+        setProductError(d.detail || "Error al actualizar el producto.");
       }
     } catch {
-      setProductError('Error de red al comunicarse con el servidor.');
+      setProductError("Error de red al comunicarse con el servidor.");
     } finally {
       setSavingProduct(false);
     }
@@ -223,9 +337,12 @@ export default function AdminProductsPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Catálogo de Productos y Membresías</h1>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">
+            Catálogo de Productos y Membresías
+          </h1>
           <p className="text-sm text-gray-600 mt-1">
-            Gestiona los microservicios y define manualmente los planes y el JSON de configuraciones que se despachará al CRM.
+            Gestiona los microservicios y define manualmente los planes y el
+            JSON de configuraciones que se despachará al CRM.
           </p>
         </div>
         <button
@@ -248,8 +365,8 @@ export default function AdminProductsPage() {
             onClick={() => setSelectedProductId(prod.id)}
             className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-semibold shrink-0 transition-colors ${
               selectedProductId === prod.id
-                ? 'bg-blue-50 text-blue-700 border border-blue-200 shadow-xs'
-                : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                ? "bg-blue-50 text-blue-700 border border-blue-200 shadow-xs"
+                : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"
             }`}
           >
             <CubeIcon className="h-4 w-4" />
@@ -266,20 +383,28 @@ export default function AdminProductsPage() {
         <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4">
             <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-gray-900">{currentProduct.name}</span>
+              <span className="text-sm font-bold text-gray-900">
+                {currentProduct.name}
+              </span>
               <span className="rounded bg-gray-100 px-2 py-0.5 text-[11px] font-mono text-gray-600">
                 slug: {currentProduct.slug}
               </span>
-              <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                currentProduct.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-600'
-              }`}>
-                {currentProduct.is_active ? 'Activo' : 'Inactivo'}
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                  currentProduct.is_active
+                    ? "bg-emerald-100 text-emerald-800"
+                    : "bg-gray-100 text-gray-600"
+                }`}
+              >
+                {currentProduct.is_active ? "Activo" : "Inactivo"}
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-600 border-t sm:border-t-0 sm:border-l sm:border-gray-200 sm:pl-4 pt-2 sm:pt-0">
               <div className="flex items-center gap-1.5">
                 <GlobeAltIcon className="h-4 w-4 text-gray-400 shrink-0" />
-                <span className="text-gray-500">URL del Servicio (Navegador):</span>
+                <span className="text-gray-500">
+                  URL del Servicio (Navegador):
+                </span>
                 {currentProduct.service_url ? (
                   <a
                     href={currentProduct.service_url}
@@ -291,12 +416,32 @@ export default function AdminProductsPage() {
                     <ArrowTopRightOnSquareIcon className="h-3 w-3" />
                   </a>
                 ) : (
-                  <span className="italic text-gray-400">Sin URL configurada</span>
+                  <span className="italic text-gray-400">
+                    Sin URL configurada
+                  </span>
                 )}
               </div>
               <div className="flex items-center gap-1.5">
                 <span className="text-gray-500">Endpoint M2M:</span>
-                <span className="font-mono text-gray-700">{currentProduct.provision_endpoint || '/api/provision'}</span>
+                <span className="font-mono text-gray-700">
+                  {currentProduct.provision_endpoint || "/api/provision"}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-gray-500">Landing Page:</span>
+                {currentProduct.landing_path ? (
+                  <a
+                    href={currentProduct.landing_path}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-mono text-blue-600 hover:underline inline-flex items-center gap-0.5"
+                  >
+                    <span>{currentProduct.landing_path}</span>
+                    <ArrowTopRightOnSquareIcon className="h-3 w-3" />
+                  </a>
+                ) : (
+                  <span className="italic text-gray-400">Sin landing específica</span>
+                )}
               </div>
             </div>
           </div>
@@ -324,12 +469,16 @@ export default function AdminProductsPage() {
                   {plan.slug}
                 </span>
                 <span className="text-xs font-semibold text-gray-500 capitalize">
-                  {plan.billing_interval === 'monthly' ? 'Mensual' : 'Anual'}
+                  {plan.billing_interval === "monthly" ? "Mensual" : "Anual"}
                 </span>
               </div>
 
-              <h3 className="mt-3 text-lg font-bold text-gray-900">{plan.name}</h3>
-              <p className="mt-1 text-xs text-gray-500">{plan.description || 'Sin descripción'}</p>
+              <h3 className="mt-3 text-lg font-bold text-gray-900">
+                {plan.name}
+              </h3>
+              <p className="mt-1 text-xs text-gray-500">
+                {plan.description || "Sin descripción"}
+              </p>
 
               <div className="mt-4 flex items-baseline gap-1 border-b border-gray-100 pb-4">
                 <span className="text-3xl font-extrabold text-gray-900">
@@ -344,17 +493,32 @@ export default function AdminProductsPage() {
                   <CodeBracketIcon className="h-3.5 w-3.5 text-gray-400" />
                   <span>Configuración enviada al CRM:</span>
                 </p>
-                <pre className="rounded-lg bg-gray-50 p-3 text-[11px] font-mono text-gray-700 border border-gray-200 overflow-x-auto">
+                <pre className="rounded-xl bg-gray-950 p-3 text-[11px] font-mono text-emerald-400 border border-gray-800 overflow-x-auto">
                   {JSON.stringify(plan.features_payload, null, 2)}
                 </pre>
               </div>
             </div>
 
             <div className="mt-6 pt-3 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-500">
-              <span>{plan.is_public ? 'Público en portal' : 'Membresía privada/oculta'}</span>
-              <span className={`font-semibold ${plan.is_active ? 'text-emerald-600' : 'text-gray-400'}`}>
-                {plan.is_active ? 'Activo' : 'Inactivo'}
-              </span>
+              <div className="flex items-center gap-2">
+                <span>{plan.is_public ? "Público" : "Privado/oculto"}</span>
+                <span>•</span>
+                <span
+                  className={`font-semibold ${plan.is_active ? "text-emerald-600" : "text-gray-400"}`}
+                >
+                  {plan.is_active ? "Activo" : "Inactivo"}
+                </span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleOpenEditPlan(plan)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 hover:text-blue-600 hover:border-blue-200 transition-colors shadow-2xs cursor-pointer"
+                title="Editar configuración y precio de este plan"
+              >
+                <PencilSquareIcon className="h-3.5 w-3.5 text-gray-500" />
+                <span>Editar Plan</span>
+              </button>
             </div>
           </div>
         ))}
@@ -384,23 +548,31 @@ export default function AdminProductsPage() {
             <form onSubmit={handleCreatePlan} className="mt-4 space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700">Nombre del Plan</label>
+                  <label className="block text-xs font-semibold text-gray-700">
+                    Nombre del Plan
+                  </label>
                   <input
                     type="text"
                     required
                     value={planForm.name}
-                    onChange={(e) => setPlanForm({ ...planForm, name: e.target.value })}
+                    onChange={(e) =>
+                      setPlanForm({ ...planForm, name: e.target.value })
+                    }
                     placeholder="Plan Crecimiento"
                     className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700">Slug (Identificador)</label>
+                  <label className="block text-xs font-semibold text-gray-700">
+                    Slug (Identificador)
+                  </label>
                   <input
                     type="text"
                     required
                     value={planForm.slug}
-                    onChange={(e) => setPlanForm({ ...planForm, slug: e.target.value })}
+                    onChange={(e) =>
+                      setPlanForm({ ...planForm, slug: e.target.value })
+                    }
                     placeholder="crm-crecimiento"
                     className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 font-mono focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                   />
@@ -409,22 +581,36 @@ export default function AdminProductsPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700">Precio Mensual (MXN)</label>
+                  <label className="block text-xs font-semibold text-gray-700">
+                    Precio Mensual (MXN)
+                  </label>
                   <input
                     type="number"
                     step="0.01"
                     min="0"
                     required
                     value={planForm.price_mxn}
-                    onChange={(e) => setPlanForm({ ...planForm, price_mxn: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) =>
+                      setPlanForm({
+                        ...planForm,
+                        price_mxn: parseFloat(e.target.value) || 0,
+                      })
+                    }
                     className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-700">Intervalo</label>
+                  <label className="block text-xs font-semibold text-gray-700">
+                    Intervalo
+                  </label>
                   <select
                     value={planForm.billing_interval}
-                    onChange={(e) => setPlanForm({ ...planForm, billing_interval: e.target.value })}
+                    onChange={(e) =>
+                      setPlanForm({
+                        ...planForm,
+                        billing_interval: e.target.value,
+                      })
+                    }
                     className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                   >
                     <option value="monthly">Mensual</option>
@@ -434,46 +620,267 @@ export default function AdminProductsPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700">Descripción</label>
+                <label className="block text-xs font-semibold text-gray-700">
+                  Descripción
+                </label>
                 <input
                   type="text"
                   value={planForm.description}
-                  onChange={(e) => setPlanForm({ ...planForm, description: e.target.value })}
+                  onChange={(e) =>
+                    setPlanForm({ ...planForm, description: e.target.value })
+                  }
                   placeholder="Hasta 3 líneas y 5 miembros..."
                   className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                 />
               </div>
 
-              <div>
-                <div className="flex items-center justify-between">
-                  <label className="block text-xs font-semibold text-gray-700">
-                    JSON de Configuración (features que procesa el CRM)
-                  </label>
-                  <span className="text-[10px] text-gray-400">Formato JSON válido</span>
-                </div>
-                <textarea
-                  rows={6}
-                  required
-                  value={planForm.features_json}
-                  onChange={(e) => setPlanForm({ ...planForm, features_json: e.target.value })}
-                  className="mt-1 w-full rounded-lg border border-gray-300 bg-gray-50 px-3 py-2 text-xs font-mono text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
-                />
+              <RawJsonEditor
+                value={planForm.features_json}
+                onChange={(val) =>
+                  setPlanForm({ ...planForm, features_json: val })
+                }
+                error={jsonError}
+                onErrorChange={setJsonError}
+                rows={7}
+                label="JSON de Configuración (features_payload)"
+                description="Parámetros que se despachan al CRM para este plan."
+              />
+
+              <div className="flex items-center gap-6 pt-1">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={planForm.is_public}
+                    onChange={(e) =>
+                      setPlanForm({ ...planForm, is_public: e.target.checked })
+                    }
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-xs font-medium text-gray-700">
+                    Público en portal
+                  </span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={planForm.is_active}
+                    onChange={(e) =>
+                      setPlanForm({ ...planForm, is_active: e.target.checked })
+                    }
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-xs font-medium text-gray-700">
+                    Plan Activo
+                  </span>
+                </label>
               </div>
 
               <div className="mt-6 flex justify-end gap-2 border-t border-gray-100 pt-4">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="rounded-lg px-3 py-2 text-xs font-semibold text-gray-500 hover:bg-gray-100 transition-colors"
+                  className="rounded-lg px-3 py-2 text-xs font-semibold text-gray-500 hover:bg-gray-100 transition-colors cursor-pointer"
                 >
                   Cancelar
                 </button>
                 <button
                   type="submit"
                   disabled={savingPlan}
-                  className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition-colors disabled:opacity-50 cursor-pointer"
                 >
-                  {savingPlan ? 'Guardando…' : 'Crear Plan'}
+                  {savingPlan ? "Guardando…" : "Crear Plan"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para Editar Plan con JSON Crudo */}
+      {editingPlan && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs overflow-y-auto">
+          <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl border border-gray-200 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="rounded-lg bg-blue-50 p-2 text-blue-600 border border-blue-100">
+                  <PencilSquareIcon className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-gray-900">
+                    Editar Plan: {editingPlan.name}
+                  </h3>
+                  <p className="text-xs text-gray-500 font-mono">
+                    slug: {editingPlan.slug}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingPlan(null)}
+                className="text-gray-400 hover:text-gray-600 text-xl leading-none p-1 cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+
+            {editJsonError && (
+              <div className="mt-3 rounded-lg bg-red-50 border border-red-200 p-2.5 text-xs text-red-700">
+                {editJsonError}
+              </div>
+            )}
+
+            <form onSubmit={handleUpdatePlan} className="mt-4 space-y-3.5">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700">
+                    Nombre Comercial
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editPlanForm.name}
+                    onChange={(e) =>
+                      setEditPlanForm({ ...editPlanForm, name: e.target.value })
+                    }
+                    className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700">
+                    Slug (Inmutable)
+                  </label>
+                  <input
+                    type="text"
+                    disabled
+                    value={editPlanForm.slug}
+                    className="mt-1 w-full rounded-lg border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-500 font-mono cursor-not-allowed"
+                    title="El slug no se puede modificar para preservar la integridad de suscripciones."
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700">
+                    Precio Mensual (MXN)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    required
+                    value={editPlanForm.price_mxn}
+                    onChange={(e) =>
+                      setEditPlanForm({
+                        ...editPlanForm,
+                        price_mxn: parseFloat(e.target.value) || 0,
+                      })
+                    }
+                    className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700">
+                    Intervalo de Facturación
+                  </label>
+                  <select
+                    value={editPlanForm.billing_interval}
+                    onChange={(e) =>
+                      setEditPlanForm({
+                        ...editPlanForm,
+                        billing_interval: e.target.value,
+                      })
+                    }
+                    className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  >
+                    <option value="monthly">Mensual</option>
+                    <option value="annual">Anual</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700">
+                  Descripción Comercial
+                </label>
+                <textarea
+                  rows={2}
+                  value={editPlanForm.description}
+                  onChange={(e) =>
+                    setEditPlanForm({
+                      ...editPlanForm,
+                      description: e.target.value,
+                    })
+                  }
+                  placeholder="Descripción que se muestra en landings y portal..."
+                  className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                />
+              </div>
+
+              {/* Editor Raw con botón de formateo automático */}
+              <RawJsonEditor
+                value={editPlanForm.features_json}
+                onChange={(val) =>
+                  setEditPlanForm({ ...editPlanForm, features_json: val })
+                }
+                error={editJsonError}
+                onErrorChange={setEditJsonError}
+                rows={9}
+                label="Configuración de Features (JSON)"
+                description="Modifica las cuotas y parámetros raw. Pulsa 'Dar Formato' para auto-indentar antes de guardar."
+              />
+
+              <div className="flex items-center gap-6 pt-1">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editPlanForm.is_public}
+                    onChange={(e) =>
+                      setEditPlanForm({
+                        ...editPlanForm,
+                        is_public: e.target.checked,
+                      })
+                    }
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-xs font-medium text-gray-700">
+                    Público en portal / catálogo
+                  </span>
+                </label>
+
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editPlanForm.is_active}
+                    onChange={(e) =>
+                      setEditPlanForm({
+                        ...editPlanForm,
+                        is_active: e.target.checked,
+                      })
+                    }
+                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-xs font-medium text-gray-700">
+                    Plan Activo
+                  </span>
+                </label>
+              </div>
+
+              <div className="mt-6 flex justify-end gap-2 border-t border-gray-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setEditingPlan(null)}
+                  className="rounded-lg px-3.5 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={updatingPlan}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {updatingPlan ? "Guardando cambios…" : "Actualizar Plan"}
                 </button>
               </div>
             </form>
@@ -506,12 +913,19 @@ export default function AdminProductsPage() {
 
             <form onSubmit={handleUpdateProduct} className="mt-4 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-700">Nombre del Producto</label>
+                <label className="block text-xs font-semibold text-gray-700">
+                  Nombre del Producto
+                </label>
                 <input
                   type="text"
                   required
                   value={editProductForm.name}
-                  onChange={(e) => setEditProductForm({ ...editProductForm, name: e.target.value })}
+                  onChange={(e) =>
+                    setEditProductForm({
+                      ...editProductForm,
+                      name: e.target.value,
+                    })
+                  }
                   placeholder="IQMX CRM Oficial"
                   className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                 />
@@ -524,12 +938,18 @@ export default function AdminProductsPage() {
                 <input
                   type="url"
                   value={editProductForm.service_url}
-                  onChange={(e) => setEditProductForm({ ...editProductForm, service_url: e.target.value })}
+                  onChange={(e) =>
+                    setEditProductForm({
+                      ...editProductForm,
+                      service_url: e.target.value,
+                    })
+                  }
                   placeholder="https://crm.iqissmexico.com"
                   className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                 />
                 <p className="mt-1 text-[11px] text-gray-500">
-                  Esta es la URL pública que verán los clientes en el portal para ingresar al microservicio.
+                  Esta es la URL pública que verán los clientes en el portal
+                  para ingresar al microservicio.
                 </p>
               </div>
 
@@ -540,18 +960,51 @@ export default function AdminProductsPage() {
                 <input
                   type="text"
                   value={editProductForm.provision_endpoint}
-                  onChange={(e) => setEditProductForm({ ...editProductForm, provision_endpoint: e.target.value })}
+                  onChange={(e) =>
+                    setEditProductForm({
+                      ...editProductForm,
+                      provision_endpoint: e.target.value,
+                    })
+                  }
                   placeholder="/api/provision/tenant"
                   className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 font-mono focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700">Descripción</label>
+                <label className="block text-xs font-semibold text-gray-700">
+                  Ruta de Landing Page Pública (ej. /landingpage/crm)
+                </label>
+                <input
+                  type="text"
+                  value={editProductForm.landing_path}
+                  onChange={(e) =>
+                    setEditProductForm({
+                      ...editProductForm,
+                      landing_path: e.target.value,
+                    })
+                  }
+                  placeholder="/landingpage/crm"
+                  className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 font-mono focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                />
+                <p className="mt-1 text-[11px] text-gray-500">
+                  Si tiene landing page, el catálogo mostrará el botón hacia esta ruta. Si se deja vacío, el botón permitirá cotizar por WhatsApp bajo demanda.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700">
+                  Descripción
+                </label>
                 <textarea
                   rows={2}
                   value={editProductForm.description}
-                  onChange={(e) => setEditProductForm({ ...editProductForm, description: e.target.value })}
+                  onChange={(e) =>
+                    setEditProductForm({
+                      ...editProductForm,
+                      description: e.target.value,
+                    })
+                  }
                   placeholder="Descripción comercial o técnica..."
                   className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
                 />
@@ -562,10 +1015,18 @@ export default function AdminProductsPage() {
                   type="checkbox"
                   id="product_is_active"
                   checked={editProductForm.is_active}
-                  onChange={(e) => setEditProductForm({ ...editProductForm, is_active: e.target.checked })}
+                  onChange={(e) =>
+                    setEditProductForm({
+                      ...editProductForm,
+                      is_active: e.target.checked,
+                    })
+                  }
                   className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
-                <label htmlFor="product_is_active" className="text-xs font-medium text-gray-700">
+                <label
+                  htmlFor="product_is_active"
+                  className="text-xs font-medium text-gray-700"
+                >
                   Producto Activo en Catálogo
                 </label>
               </div>
@@ -583,7 +1044,7 @@ export default function AdminProductsPage() {
                   disabled={savingProduct}
                   className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
-                  {savingProduct ? 'Guardando…' : 'Guardar Cambios'}
+                  {savingProduct ? "Guardando…" : "Guardar Cambios"}
                 </button>
               </div>
             </form>

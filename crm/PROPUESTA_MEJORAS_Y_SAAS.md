@@ -1,167 +1,159 @@
-# Propuesta de Mejoras, Evolución a SaaS y Automatizacion
+# Arquitectura de Tareas Programadas (Scheduler), Recordatorios y Automatizaciones SaaS
 
-Este documento consolida el análisis técnico y la hoja de ruta para evolucionar el CRM hacia una arquitectura SaaS Multi-Tenant centralizada, controlada directamente desde el servidor principal (**iqissmexico.com**), así como las mejoras operativas del asistente de IA y el módulo de tareas.
-
----
-
-## 1. Arquitectura SaaS Multi-Tenant y Aprovisionamiento Centralizado
-
-### Objetivo
-
-Permitir que los clientes que se registren en la web principal (`iqissmexico.com`) puedan aprovisionar automáticamente su espacio en el CRM sin intervención manual, vinculando su cuenta, sus líneas de WhatsApp, su equipo de trabajo y su token de webhook a su organización.
-
-### Lo que ya tenemos listo para reutilizar (Sin romper el sistema)
-
-- **Aislamiento en Base de Datos:** Todas las tablas (`conversation`, `contact`, `message`, `meta_credentials`, `agent_profile`, `kb_entry`, `pipeline_stage`, `booking`, etc.) ya cuentan con la columna `organization_id` e índices de partición.
-- **Consultas Seguras (`scoped`):** Toda consulta SQL en el CRM ya pasa obligatoriamente por `scoped(columna, session.organizationId)`, impidiendo por diseño la fuga de datos entre empresas.
-- **Webhooks Multi-Tenant:** Cada organización ya genera y almacena su propio `webhookToken` en la base de datos (`/api/webhooks/wa/[webhookToken]`).
-- **Aprovisionamiento Idempotente de Líneas:** Ya existe el endpoint `/api/settings/whatsapp/provision` para conectar números de Meta a una organización sin duplicados.
+Este documento define la arquitectura y hoja de ruta técnica para el **Módulo de Tareas Programadas (Schedule), Recordatorios Multilínea y Evaluaciones de IA** en IQISS CRM.
 
 ---
 
-### Nuevos Endpoints a Desarrollar en el CRM
+## 1. Contexto y Soporte Multi-Tenant / Multi-Línea
 
-#### A. Creación de Empresa y Usuario Propietario (`POST /api/provision/tenant`)
-
-Permite que el servidor central cree una cuenta nueva en el CRM en cuanto el usuario se registra o adquiere el servicio en `iqissmexico.com`.
-
-- **Autenticación:** `x-api-key: <PROVISION_SECRET_KEY>`
-- **Payload recibido desde el servidor central:**
-  ```json
-  {
-    "externalCustomerId": "iqmx_usr_98124",
-    "companyName": "Ferretería El Martillo",
-    "ownerEmail": "admin@elmartillo.com",
-    "ownerName": "Carlos Mendoza",
-    "password": "PasswordSeguro123!"
-  }
-  ```
-- **Lógica interna en el CRM:**
-  1. Inserta la nueva `organization` guardando en metadata su `externalCustomerId`.
-  2. Crea el `user` y la relación `member` con rol `owner`.
-  3. Siembra automáticamente las etapas base del embudo (`pipeline_stage`).
-  4. Crea el perfil predeterminado de Asistente IA (`agent_profile`).
-  5. Genera el `webhookToken` persistente para la organización.
-- **Respuesta devuelta al servidor central:**
-  ```json
-  {
-    "ok": true,
-    "organizationId": "org_abc123",
-    "ownerUserId": "usr_xyz789",
-    "webhookToken": "whtk_4a781b99c0d12e...",
-    "webhookUrl": "https://crm.iqissmexico.com/api/webhooks/wa/whtk_4a781b99c0d12e..."
-  }
-  ```
-  _Con esta respuesta, el servidor central autoconfigura el reenvío de Meta Webhooks de forma 100% transparente._
+A diferencia del proyecto base original (diseñado para un solo cliente y un solo número por canal), **IQISS CRM opera como SaaS Multi-Tenant**:
+- Cada organización (`organization_id`) puede tener **múltiples líneas y números de WhatsApp oficiales** conectados simultáneamente (`meta_credentials`).
+- Cada organización puede contar con múltiples sucursales, doctores o agentes comerciales.
+- Por tanto, cualquier tarea programada o recordatorio debe **ejecutarse con aislamiento estricto por tenant** y despacharse a través de la **línea de WhatsApp correcta** (la línea con la que el cliente o paciente inició la conversación o en la que se agendó la cita).
 
 ---
 
-## 2. Control de Ciclo de Vida, Cobros y Suspensión de la Organización
+## 2. Motor de Tareas Autodescriptivas (Arquitectura Plugin-like)
 
-### Objetivo
+Para permitir que el sistema crezca sin duplicar formularios ni rehacer interfaces, las tareas residirán en un directorio dedicado del CRM (ej. `src/server/tasks/definitions/`).
 
-Permitir que el servidor principal suspenda o reactive el acceso al CRM según el estado de la suscripción, pagos o periodos de prueba.
+### Estructura de una Definición de Tarea (`TaskDefinition`)
 
-### Mecanismo de Control (`PATCH /api/provision/tenant/:organizationId/status`)
+Cada script de tarea exporta un contrato autodescriptivo que el sistema lee dinámicamente:
 
-- **Estados posibles de la organización:**
-  - `trial`: Periodo de prueba activo.
-  - `active`: Suscripción de pago al corriente.
-  - `suspended`: Pago vencido, prueba finalizada o suspendido voluntariamente.
-  - `cancelled`: Cuenta dada de baja definitiva.
+```typescript
+export interface TaskDefinition<TConfig = Record<string, any>> {
+  /** Identificador único de la tarea en el catálogo */
+  id: string; // Ej: "booking_reminder", "inactive_lead_followup", "ai_conversation_audit"
+  
+  /** Título y descripción presentados al usuario en la UI */
+  name: string;
+  description: string;
+  category: "citas" | "seguimiento_ventas" | "calidad_ia";
 
-- **Payload del servidor central:**
-  ```json
-  {
-    "status": "suspended",
-    "reason": "trial_expired"
-  }
-  ```
+  /** Esquema de configuración (Zod / JSON Schema) que genera automáticamente los inputs del formulario en el frontend */
+  configSchema: z.ZodType<TConfig>;
 
-### Impacto de la Suspensión en el CRM:
+  /** Definición de campos UI para renderizado automático de formularios */
+  uiFields: {
+    key: keyof TConfig;
+    label: string;
+    type: "number" | "select_template" | "select_channel" | "hours" | "boolean";
+    placeholder?: string;
+    description?: string;
+    defaultValue?: any;
+  }[];
 
-1. **En el Inicio de Sesión (Login / Navegación):**
-   - El middleware y la sesión (`requireSession`) verifican el estado de la organización del usuario.
-   - Si está `suspended` o `cancelled`, bloquea la entrada al panel y muestra una pantalla clara:
-     > _"El periodo de prueba o suscripción de tu empresa ha finalizado. Actualiza tu plan en iqissmexico.com para reactivar tu acceso."_
-2. **En la Ingesta de Mensajes (Webhooks):**
-   - Cuando el webhook recibe un mensaje de WhatsApp para una organización suspendida:
-     - Responde inmediatamente `HTTP 200 OK` (para que Meta considere entregado el webhook y no genere reintentos en bucle).
-     - **Descarta el procesamiento:** No guarda nuevos mensajes, no activa el motor de IA y **no gasta tokens de inferencia en OpenRouter**.
+  /** Frecuencia de chequeo recomendada o cron */
+  defaultCadenceMinutes: number; // Ej: 1, 5, 15, 60
 
----
-
-## 3. Optimización del Flujo de IA y Handoff (Corrección Detectada)
-
-### Causa Raíz Detectada:
-
-En la prueba donde el bot contestó _"lo revisaré con el equipo"_ pero nunca se pausó, el fallo radicó en la directriz del System Prompt ([`src/server/ai/prompts.ts`](file:///Users/laclavees12345/code/wa_crm/web/src/server/ai/prompts.ts)):
-
-- El prompt indicaba: _"Si la pregunta NO está cubierta por el conocimiento → responde que lo confirmarás **o** escala"_.
-- El modelo LLM eligió la acción `{"action":"reply"}` con un texto prometiendo revisar, en lugar de emitir la acción `{"action":"handoff"}`.
-- Como la acción fue un `reply`, el código no activó el handoff ni pausó la IA.
-
-### Solución a Implementar:
-
-1. **Modificación de la Regla en el Prompt:**
-   - Hacer obligatorio el handoff: _"Si no conoces la respuesta, no la encuentras en la Base de Conocimiento o mencionas que consultarás con un compañero/equipo, DEBES emitir obligatoriamente `action: "handoff"`"_.
-2. **Detector de Texto Saliente (Doble Seguridad):**
-   - Si el texto de respuesta generado por el bot contiene frases como _"lo consulto con el equipo"_, _"un asesor te contactará"_ o _"lo reviso"_, el pipeline forzará automáticamente `applyHandoff(conversationId, organizationId, "modelo")` para garantizar la pausa inmediata.
-
----
-
-## 4. Módulo de Tareas (Tasks) con Asistentes "Tool"
-
-Aprovechando el campo `type: "tool"` ya existente en la tabla `agent_profile`, se propone la creación de un orquestador de tareas internas:
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    MÓDULO DE TAREAS (TASKS)                 │
-├──────────────────────────────┬──────────────────────────────┤
-│      POR EVENTOS (Background)│     PROGRAMADAS (Schedules)  │
-│  - Clasificación de pipeline │  - Auditor nocturno (00:00)  │
-│  - Detector de frustración   │  - Alerta leads desatendidos │
-│  - Extracción de datos lead  │  - Reactivación leads fríos  │
-└──────────────────────────────┴──────────────────────────────┘
+  /** Lógica de ejecución para una organización */
+  run(context: TaskExecutionContext<TConfig>): Promise<TaskExecutionResult>;
+}
 ```
 
-### A. Tareas Disparadas por Eventos (Post-Turno)
+---
 
-- **Clasificador Automático de Pipeline:**
-  - Corre de fondo cuando termina la interacción del cliente.
-  - Evalúa si el prospecto confirmó interés, pidió cotización o cerró compra, y ejecuta `move_stage` en la base de datos sin sobrecargar al bot conversacional.
-- **Auditor de Escalado / Sentimiento:**
-  - Revisa si el bot no pudo resolver la duda para forzar el apagado de la IA y notificar al equipo de ventas.
+## 3. Catálogo de Tareas Precargadas Iniciales
 
-### B. Tareas Programadas (Schedules / Cron)
+### A. Recordatorios de Citas Médicas / Servicios (`booking_reminder`)
+- **Propósito:** Notificar al paciente/cliente con anticipación configurable para confirmar su asistencia y reducir el ausentismo.
+- **Configuración configurable por el cliente en el panel:**
+  - **Tiempo de anticipación:** (Ej. `36` horas, `24` horas, `2` horas, `1` hora antes de la cita).
+  - **Plantilla de WhatsApp:** Selector de plantillas aprobadas en Meta (`schema.template`) con botones interactivos (Quick Reply: "Confirmar" / "Reagendar").
+  - **Línea de WhatsApp emisora:** La misma línea oficial en la que se reservó la cita o una línea de notificaciones predeterminada de la empresa.
+  - **Mapeo de variables:** `{{1}}` Nombre del paciente, `{{2}}` Fecha y hora local, `{{3}}` Especialista / Sucursal.
+- **Lógica de ejecución:**
+  1. Busca citas en estado `agendada` cuyo `scheduled_at` coincida con la ventana de envío (`scheduled_at - X horas <= NOW()`).
+  2. Verifica que no se haya enviado previamente este recordatorio para esa cita (idempotencia en tabla de despachos).
+  3. Despacha vía `sendTemplate()` y registra el log de entrega.
 
-- **Auditor Nocturno de Desatendidos (00:00 hrs):**
-  - Revisa conversaciones donde el cliente envió el último mensaje y nadie respondió (`lastInboundAt > lastOutboundAt`).
-  - Genera un reporte interno en el CRM con los leads prioritarios que quedaron esperando.
-- **Reactivación de Cotizaciones Frías:**
-  - Identifica leads con más de 48 horas sin actividad en la etapa "Cotización" para sugerir plantillas de seguimiento.
+### B. Reactivación de Prospectos Desatendidos / Inactivos (`inactive_lead_followup`)
+- **Propósito:** Recuperar oportunidades que quedaron pausadas porque el cliente no contestó la última cotización o mensaje.
+- **Configuración por el cliente:**
+  - **Horas de inactividad:** (Ej. `24` horas, `48` horas, `72` horas sin respuesta).
+  - **Etapa del embudo aplicable:** (Ej. Solo en etapa *"Cotización"* o *"Interesado"*).
+  - **Plantilla de seguimiento:** Plantilla oficial aprobada por Meta para reabrir ventana de conversación.
+- **Lógica de ejecución:**
+  1. Identifica conversaciones donde el último mensaje fue saliente (`last_outbound_at > last_inbound_at`) y han transcurrido más de X horas sin respuesta.
+  2. Comprueba que no se haya enviado ya una reactivación en los últimos N días.
+  3. Envía la plantilla aprobada y registra la nota interna en el historial.
+
+### C. Auditor Nocturno de Calidad y Calificación de la IA (`ai_conversation_audit`)
+- **Propósito:** Evaluar cómo está respondiendo el agente de IA en conversaciones reales para asignarle una calificación de 0 a 100 y detectar quejas o desvíos.
+- **Configuración por el cliente:**
+  - **Hora de ejecución:** (Ej. `23:30` hrs todos los días).
+  - **Criterio de muestra:** Últimas 20 conversaciones atendidas por la IA en el día.
+- **Lógica de ejecución:**
+  1. Extrae las conversaciones del día donde participó la IA.
+  2. El modelo Juez de IA analiza el hilo contra la Base de Conocimiento del negocio.
+  3. Genera un reporte de calidad en el panel: score promedio, hallazgos de mejora y alertas de clientes insatisfechos.
 
 ---
 
-## 5. Nuevas Aplicaciones para el Laboratorio
+## 4. Despachador Temporal (Scheduler tipo Laravel) vía Coolify
 
-Actualmente el Laboratorio evalúa conversaciones sintéticas con jueces de IA. Se proponen 3 extensiones de alto valor:
+Dado que el CRM está desplegado en **Coolify**:
 
-1. **Playground Interactivo en Vivo:**
-   - Un simulador de chat en el panel para conversar con el bot en tiempo real antes de publicarlo a WhatsApp.
-   - Panel lateral de depuración que muestra el JSON generado, la Base de Conocimiento consultada y las variables del lead extraídas.
-2. **Generador Automático de Base de Conocimiento:**
-   - Permite pegar catálogos, listas de precios o textos largos de la empresa.
-   - Un agente tipo "tool" extrae automáticamente las mejores preguntas y respuestas estructuradas para nutrirlas a la BD con un solo clic.
-3. **Auditor de Calidad de Conversaciones Reales:**
-   - Permite seleccionar un rango de fechas y auditar conversaciones reales de WhatsApp mediante el modelo juez para detectar posibles fallas, respuestas lentas o quejas de clientes.
+```
+ ┌─────────────────────────────────────────────────────────────┐
+ │                      COOLIFY CRON                           │
+ │                Ejecución: * * * * * (Cada minuto)           │
+ └──────────────────────────────┬──────────────────────────────┘
+                                │ curl / POST con CRON_SECRET
+                                ▼
+ ┌─────────────────────────────────────────────────────────────┐
+ │                   API: /api/cron/schedule                   │
+ ├─────────────────────────────────────────────────────────────┤
+ │ 1. Verifica token seguro (Bearer CRON_SECRET).              │
+ │ 2. Obtiene organizaciones activas (status = 'active/trial').│
+ │ 3. Lee tareas habilitadas por cada organización.            │
+ │ 4. Evalúa condiciones de tiempo y despacha los jobs.        │
+ │ 5. Guarda log de auditoría (tiempo de corrida, enviados).   │
+ └─────────────────────────────────────────────────────────────┘
+```
+
+### Características del Despachador:
+1. **Ejecución por Minuto (`* * * * *`):** Coolify dispara una llamada HTTP segura a `POST /api/cron/schedule` o ejecuta `pnpm schedule:run`.
+2. **Candados Anti-Colisión (Locking):**
+   - Para evitar que dos corridas simultáneas envíen mensajes duplicados si un proceso tarda más de un minuto, se utiliza bloqueo a nivel de base de datos (`pg_try_advisory_lock` o `FOR UPDATE SKIP LOCKED`).
+3. **Control de Cuotas y Errores:**
+   - Si una línea de WhatsApp tiene el token revocado o saldo insuficiente, registra el fallo sin detener el despacho de las demás organizaciones.
 
 ---
 
-## Conclusión
+## 5. Eventos Internos y Triggers en Tiempo Real (Post-Turno)
 
-La arquitectura actual del CRM está extraordinariamente bien posicionada para dar el salto a SaaS:
+Además de las tareas basadas en tiempo (cron), el sistema cuenta con **triggers inmediatos por eventos**:
 
-- No requiere migración destructiva de tablas.
-- Los webhooks ya son independientes por empresa.
-- El control de acceso, cobros y aprovisionamiento se gestiona limpiamente mediante endpoints dedicados conectados a **iqissmexico.com**.
+1. **Post-Interacción del Cliente (Event-Driven):**
+   - Al cerrarse un turno de mensajes, se dispara en background la evaluación del clasificador de embudo para mover el contacto a *"Interesado"* o *"Cotizado"*.
+2. **Recepción de Botón Interactivo de WhatsApp:**
+   - Si el paciente presiona el botón **"Confirmar"** en la plantilla de recordatorio:
+     - El webhook actualiza la cita a confirmada en la agenda en tiempo real.
+     - Responde un acuse inmediato por WhatsApp: *"¡Muchas gracias! Tu cita ha quedado confirmada. Te esperamos."*
+   - Si presiona **"Reagendar"**:
+     - Cancela el espacio actual, cancela futuros recordatorios y la IA retoma la conversación ofreciendo los nuevos horarios libres.
+
+---
+
+## 6. Modelo de Base de Datos Propuesto
+
+### Tabla: `organization_task_config`
+Configuraciones personalizadas de cada empresa para cada tarea del catálogo:
+- `id`: string (`tsk_...`).
+- `organization_id`: relación con la organización.
+- `task_id`: identificador de la tarea (`"booking_reminder"`, `"inactive_lead_followup"`, etc.).
+- `is_enabled`: booleano (encendida/apagada).
+- `config_payload`: JSON con los valores de los inputs (horas de anticipación, `template_id`, `line_id`).
+- `last_run_at`: timestamp de última ejecución.
+
+### Tabla: `task_execution_log`
+Historial y trazabilidad para el cliente y el administrador:
+- `id`: string (`log_...`).
+- `organization_id`: empresa.
+- `task_id`: tarea ejecutada.
+- `status`: `"success" | "warning" | "error"`.
+- `items_processed`: cantidad de recordatorios o mensajes despachados.
+- `details`: resumen o errores reportados por Meta Graph API.
+- `created_at`: fecha y hora del evento.

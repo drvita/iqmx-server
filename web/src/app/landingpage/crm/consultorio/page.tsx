@@ -1,66 +1,20 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import React from "react";
 import Link from "next/link";
 import {
   CalendarDaysIcon,
   ClockIcon,
   BellAlertIcon,
-  CheckIcon,
-  CreditCardIcon,
   PhoneXMarkIcon,
   ArrowRightIcon,
   UserGroupIcon,
   ShieldCheckIcon,
-  StarIcon,
 } from "@heroicons/react/24/outline";
-import { saveCheckoutIntent } from "@/utils/checkoutIntent";
-
-type Plan = {
-  id: number;
-  product_id: number;
-  name: string;
-  slug: string;
-  description: string | null;
-  price_mxn: number;
-  billing_interval: string;
-  features_payload: any;
-};
+import MembershipPlans from "@/components/landing/MembershipPlans";
+import LandingFaqSection from "@/components/landing/LandingFaqSection";
 
 export default function ConsultorioLandingPage() {
-  const router = useRouter();
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [loadingPlans, setLoadingPlans] = useState(true);
-
-  useEffect(() => {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
-    fetch(`${apiUrl}/api/public/products/crm/plans?agenda=true`)
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data) => setPlans(data))
-      .catch(() => setPlans([]))
-      .finally(() => setLoadingPlans(false));
-  }, []);
-
-  const handleSelectPlan = (plan: Plan) => {
-    const token =
-      typeof window !== "undefined"
-        ? localStorage.getItem("iqmx_portal_token")
-        : null;
-    saveCheckoutIntent({
-      plan_id: plan.id,
-      plan_name: plan.name,
-      price_mxn: plan.price_mxn,
-      product_slug: "crm",
-    });
-
-    if (!token) {
-      router.push("/portal/login?redirect=checkout");
-    } else {
-      router.push("/portal/dashboard?pending_checkout=1");
-    }
-  };
-
   const scrollToPlans = () => {
     document.getElementById("planes")?.scrollIntoView({ behavior: "smooth" });
   };
@@ -86,17 +40,16 @@ export default function ConsultorioLandingPage() {
 
               <p className="text-lg text-teal-100 max-w-xl leading-relaxed">
                 Automatiza el <strong>agendamiento de citas 24/7</strong> por
-                WhatsApp, reduce el <strong>ausentismo hasta un 80%</strong> con
-                recordatorios inteligentes y libera a tu recepcionista de las
-                llamadas repetitivas.
+                WhatsApp, <strong>confirma pacientes al instante</strong> en tu
+                agenda y libera a tu recepcionista de las llamadas repetitivas.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-3 pt-2">
                 <button
                   onClick={scrollToPlans}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-6 py-3.5 text-sm font-bold text-teal-950 shadow-lg hover:bg-teal-50 transition-all hover:shadow-xl"
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-6 py-3.5 text-sm font-bold text-teal-950 shadow-lg hover:bg-teal-50 transition-all hover:shadow-xl cursor-pointer"
                 >
-                  <span>Ver Planes para Consultorios</span>
+                  <span>Ver Membresías para Consultorios</span>
                   <ArrowRightIcon className="h-4 w-4" />
                 </button>
               </div>
@@ -138,13 +91,13 @@ export default function ConsultorioLandingPage() {
                     {
                       time: "10:30",
                       patient: "Juan Ramírez",
-                      status: "Recordatorio enviado",
+                      status: "Confirmada por chat",
                       color: "amber",
                     },
                     {
                       time: "12:00",
                       patient: "Ana Martínez",
-                      status: "Agendada por IA",
+                      status: "Agendada por asistente virtual",
                       color: "blue",
                     },
                     {
@@ -260,7 +213,7 @@ export default function ConsultorioLandingPage() {
                   El paciente escribe a tu WhatsApp
                 </h3>
                 <p className="mt-1 text-sm text-gray-600 leading-relaxed">
-                  A cualquier hora: 2 AM, domingo, feriado. El asistente de IA
+                  A cualquier hora: 2 AM, domingo, feriado. El asistente virtual
                   lo recibe de inmediato, le hace preguntas sobre su necesidad y
                   le muestra los horarios disponibles en tiempo real.
                 </p>
@@ -289,13 +242,16 @@ export default function ConsultorioLandingPage() {
               </div>
               <div>
                 <h3 className="text-base font-bold text-gray-900">
-                  Recordatorio automático con confirmación
+                  Confirmación inmediata de cita y ficha digital
                 </h3>
                 <p className="mt-1 text-sm text-gray-600 leading-relaxed">
-                  24 horas y 2 horas antes de la cita, recibe un mensaje con
-                  botones:
-                  <strong> «Confirmar» o «Reagendar»</strong>. Si cancela, el
-                  espacio se libera automáticamente.
+                  Al agendar, el paciente recibe la confirmación con fecha, hora
+                  y ubicación en su WhatsApp al momento. Además, tu equipo puede
+                  enviar avisos y reactivaciones con plantillas oficiales
+                  aprobadas.{" "}
+                  <span className="text-xs text-teal-700 font-semibold block mt-1">
+                    (Próximamente: recordatorios automáticos programados 24h y 2h antes).
+                  </span>
                 </p>
               </div>
             </div>
@@ -310,7 +266,7 @@ export default function ConsultorioLandingPage() {
                 </h3>
                 <p className="mt-1 text-sm text-gray-600 leading-relaxed">
                   Antes de la consulta, la IA recopila motivo de visita,
-                  alergias y síntomas. El doctor{" "}
+                  alergias y síntomas básicos. El doctor{" "}
                   <strong>llega preparado</strong> y ahorra hasta 10 minutos por
                   paciente.
                 </p>
@@ -321,7 +277,7 @@ export default function ConsultorioLandingPage() {
           <div className="text-center mt-12">
             <button
               onClick={scrollToPlans}
-              className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-6 py-3 text-sm font-bold text-white shadow-md hover:bg-teal-700 transition-colors"
+              className="inline-flex items-center gap-2 rounded-xl bg-teal-600 px-6 py-3 text-sm font-bold text-white shadow-md hover:bg-teal-700 transition-colors cursor-pointer"
             >
               <span>Activar Agenda Inteligente en Mi Consultorio</span>
               <ArrowRightIcon className="h-4 w-4" />
@@ -361,10 +317,11 @@ export default function ConsultorioLandingPage() {
               </h3>
             </div>
             <p className="text-sm text-gray-600 leading-relaxed">
-              Diseñado contemplando las mejores prácticas de resguardo de
-              información clínica (<strong>NOM-024-SSA3</strong> y estándares{" "}
-              <strong>HIPAA</strong>). Las conversaciones y datos de tus
-              pacientes permanecen cifrados y seguros en todo momento.
+              Diseñado con controles y protocolos de seguridad orientados al
+              resguardo responsable de información clínica y mejores prácticas
+              de privacidad (cifrado de datos en reposo y tránsito alineado a
+              criterios <strong>NOM-024-SSA3</strong>). Las conversaciones y
+              registros de tus pacientes permanecen protegidos y confidenciales.
             </p>
           </div>
         </div>
@@ -393,181 +350,19 @@ export default function ConsultorioLandingPage() {
         </div>
       </section>
 
-      {/* ─── PLANES Y CHECKOUT ─── */}
-      <section
+      {/* ─── MEMBRESÍAS Y PLANES PARA CONSULTORIOS (COMPONENTE MODULAR) ─── */}
+      <MembershipPlans
+        theme="teal"
+        sector="health"
+        endpointAgenda={true}
+        includeFree={false}
         id="planes"
-        className="py-20 px-4 sm:px-6 lg:px-8 bg-gray-50 border-t border-gray-200"
-      >
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center max-w-2xl mx-auto mb-12">
-            <span className="text-xs font-bold text-teal-600 uppercase tracking-wider">
-              Membresías
-            </span>
-            <h2 className="mt-2 text-3xl font-extrabold text-gray-900">
-              Elige tu plan y activa tu agenda inteligente
-            </h2>
-            <p className="mt-2 text-sm text-gray-600">
-              Pagos recurrentes mensuales seguros con Mercado Pago. Cancela
-              cuando quieras.
-            </p>
-          </div>
+        title="Elige tu plan y activa tu agenda inteligente"
+        subtitle="Pagos mensuales seguros procesados con Mercado Pago. Cancela cuando quieras sin penalización ni plazos forzosos."
+      />
 
-          {loadingPlans ? (
-            <div className="p-16 text-center text-gray-400">
-              <div className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-teal-600 border-t-transparent" />
-              <p className="mt-3 text-xs">Cargando membresías…</p>
-            </div>
-          ) : plans.length > 0 ? (
-            <div
-              className={`grid gap-8 max-w-4xl mx-auto ${plans.length === 1 ? "grid-cols-1 max-w-md" : plans.length === 2 ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1 md:grid-cols-3"}`}
-            >
-              {plans.map((p, idx) => {
-                const isPopular = idx === plans.length - 1;
-                const hasAgenda = p.features_payload?.agenda_enabled;
-                return (
-                  <div
-                    key={p.id}
-                    className={`rounded-3xl bg-white p-8 flex flex-col justify-between shadow-sm transition-all hover:shadow-lg relative ${
-                      isPopular
-                        ? "border-2 border-teal-600 ring-2 ring-teal-100"
-                        : "border border-gray-200"
-                    }`}
-                  >
-                    {isPopular && (
-                      <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                        <span className="inline-flex items-center gap-1 rounded-full bg-teal-600 px-3 py-1 text-[10px] font-bold text-white uppercase shadow-sm">
-                          <StarIcon className="h-3 w-3" /> Recomendado para
-                          Consultorios
-                        </span>
-                      </div>
-                    )}
-
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900">
-                        {p.name}
-                      </h3>
-                      <p className="mt-1 text-sm text-gray-500">
-                        {p.description}
-                      </p>
-
-                      <div className="mt-6 flex items-baseline gap-1">
-                        <span className="text-4xl font-extrabold text-gray-900">
-                          ${p.price_mxn.toFixed(0)}
-                        </span>
-                        <span className="text-sm text-gray-500 font-medium">
-                          MXN / mes
-                        </span>
-                      </div>
-
-                      <ul className="mt-6 space-y-3 border-t border-gray-100 pt-6">
-                        <li className="flex items-center gap-2 text-sm text-gray-700">
-                          <CheckIcon className="h-4 w-4 text-teal-600 shrink-0" />
-                          <span>
-                            Hasta{" "}
-                            <strong>
-                              {p.features_payload?.max_whatsapp_accounts ?? 1}
-                            </strong>{" "}
-                            {(p.features_payload?.max_whatsapp_accounts ?? 1) === 1
-                              ? "línea"
-                              : "líneas"}{" "}
-                            de WhatsApp
-                          </span>
-                        </li>
-                        <li className="flex items-center gap-2 text-sm text-gray-700">
-                          <CheckIcon className="h-4 w-4 text-teal-600 shrink-0" />
-                          <span>
-                            {p.features_payload?.max_team_members === null ? (
-                              <strong>Miembros de equipo sin límite</strong>
-                            ) : (
-                              <>
-                                Hasta{" "}
-                                <strong>
-                                  {p.features_payload?.max_team_members ?? 5}
-                                </strong>{" "}
-                                miembros del equipo
-                              </>
-                            )}
-                          </span>
-                        </li>
-                        <li className="flex items-center gap-2 text-sm text-gray-700">
-                          <CheckIcon className="h-4 w-4 text-teal-600 shrink-0" />
-                          <span>
-                            {p.features_payload?.max_contacts === null ? (
-                              <strong>Pacientes / contactos sin límite</strong>
-                            ) : (
-                              <>
-                                Hasta{" "}
-                                <strong>
-                                  {(
-                                    p.features_payload?.max_contacts ?? 500
-                                  ).toLocaleString()}
-                                </strong>{" "}
-                                pacientes registrados
-                              </>
-                            )}
-                          </span>
-                        </li>
-                        <li className="flex items-center gap-2 text-sm text-gray-700">
-                          <CheckIcon className="h-4 w-4 text-teal-600 shrink-0" />
-                          <span>Asistente de IA 24/7</span>
-                        </li>
-                        <li className="flex items-center gap-2 text-sm text-gray-700">
-                          <CheckIcon className="h-4 w-4 text-emerald-600 shrink-0" />
-                          <span className="font-semibold text-emerald-700">
-                            Agenda de citas y recordatorios incluida
-                          </span>
-                        </li>
-                        {p.features_payload?.lab_enabled && (
-                          <li className="flex items-center gap-2 text-sm text-gray-700">
-                            <CheckIcon className="h-4 w-4 text-purple-600 shrink-0" />
-                            <span className="font-semibold text-purple-700">
-                              Laboratorio de evaluación IA
-                            </span>
-                          </li>
-                        )}
-                        {p.features_payload?.attribution_enabled && (
-                          <li className="flex items-center gap-2 text-sm text-gray-700">
-                            <CheckIcon className="h-4 w-4 text-purple-600 shrink-0" />
-                            <span className="font-semibold text-purple-700">
-                              Atribución Meta CAPI
-                            </span>
-                          </li>
-                        )}
-                      </ul>
-                    </div>
-
-                    <button
-                      onClick={() => handleSelectPlan(p)}
-                      className={`mt-8 w-full inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3.5 text-sm font-bold shadow-md transition-all hover:shadow-lg ${
-                        isPopular
-                          ? "bg-teal-600 text-white hover:bg-teal-700"
-                          : "bg-gray-900 text-white hover:bg-gray-800"
-                      }`}
-                    >
-                      <CreditCardIcon className="h-4 w-4" />
-                      <span>Contratar Ahora</span>
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center max-w-lg mx-auto shadow-xs">
-              <h3 className="text-base font-bold text-gray-900">
-                Próximamente
-              </h3>
-              <p className="mt-2 text-sm text-gray-600">
-                Estamos preparando los planes para consultorios. Pronto podrás
-                contratar directamente aquí.
-              </p>
-            </div>
-          )}
-
-          <p className="text-center text-xs text-gray-400 mt-8">
-            Todos los planes incluyen soporte y actualizaciones automáticas.
-          </p>
-        </div>
-      </section>
+      {/* ─── PREGUNTAS FRECUENTES (FAQ & SEO SALUD) ─── */}
+      <LandingFaqSection theme="teal" sector="health" id="faq" />
 
       {/* ─── CTA FINAL ─── */}
       <section className="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-br from-teal-950 to-teal-800 text-white text-center">
@@ -582,9 +377,9 @@ export default function ConsultorioLandingPage() {
           </p>
           <button
             onClick={scrollToPlans}
-            className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-bold text-teal-950 shadow-xl hover:bg-teal-50 transition-all hover:shadow-2xl"
+            className="inline-flex items-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-bold text-teal-950 shadow-xl hover:bg-teal-50 transition-all hover:shadow-2xl cursor-pointer"
           >
-            <span>Ver Planes y Contratar</span>
+            <span>Ver Membresías Disponibles</span>
             <ArrowRightIcon className="h-5 w-5" />
           </button>
         </div>

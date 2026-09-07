@@ -21,6 +21,11 @@ export default function Footer() {
                                 </Link>
                             </li>
                             <li>
+                                <Link href="/productos" className="text-gray-400 hover:text-white">
+                                    Catálogo de Productos
+                                </Link>
+                            </li>
+                            <li>
                                 <a href="/aboutus" className="text-gray-400 hover:text-white">
                                     Nosotros
                                 </a>

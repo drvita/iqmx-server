@@ -9,6 +9,51 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [1.7.0] - 2026-09-07
+
+### Añadido
+
+- **Edición Integral de Planes de Membresía (`/admin/products`)**:
+  - Modal interactivo para modificar planes existentes: nombre comercial, descripción, precio en MXN, intervalo de facturación (`billing_interval`), visibilidad en catálogo (`is_public`) y estado (`is_active`).
+  - El identificador único (`slug`) se presenta protegido en solo lectura para salvaguardar la coherencia de suscripciones activas y webhooks.
+  - Soporte en backend: endpoint `PATCH /api/admin/catalog/plans/{plan_id}` ampliado en [api/app/api/admin_catalog.py](file:///Users/laclavees12345/code/iqissmexico/main/api/app/api/admin_catalog.py) con soporte para mutar `billing_interval`.
+- **Componente Reutilizable `RawJsonEditor` (`RawJsonEditor.tsx`)**:
+  - Nuevo componente modular en [web/src/components/admin/RawJsonEditor.tsx](file:///Users/laclavees12345/code/iqissmexico/main/web/src/components/admin/RawJsonEditor.tsx).
+  - Incluye botón de auto-formateo instantáneo (*"Dar Formato"* / *Prettify*), área de texto monoespaciada estilo terminal oscuro (`bg-gray-950 text-emerald-400 font-mono`) y banner reactivo con validación de sintaxis JSON.
+  - Reutilizado tanto en la creación y edición de planes de `/admin/products` como en el modal de sobreescritura de cuotas en `/admin/crm`.
+- **Configuración de `landing_path` en Catálogo de Productos**:
+  - Exposición y persistencia de la columna `landing_path` en el backend administrativo (`ProductResponse`, `CreateProductRequest`, `UpdateProductRequest`).
+  - Incorporación del input correspondiente en el modal *"Configurar Producto y URLs"* de `/admin/products` para vincular dinámicamente cualquier producto a su landing page pública.
+- **Página Dedicada de Catálogo Completo (`/productos`)**:
+  - Nueva ruta accesible en [web/src/app/productos/page.tsx](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/productos/page.tsx) para consultar el portafolio completo de plataformas SaaS y desarrollos a la medida sin saturar la página de inicio.
+  - Sección inferior de asesoría técnica para cotizaciones personalizadas vía WhatsApp Business y acceso directo al portal de clientes.
+- **Componente Modular `ProductCatalogGrid` (`ProductCatalogGrid.tsx`)**:
+  - Componente adaptable en [web/src/components/landing/ProductCatalogGrid.tsx](file:///Users/laclavees12345/code/iqissmexico/main/web/src/components/landing/ProductCatalogGrid.tsx) con soporte para dos modos de visualización:
+    - Modo `carousel`: carrusel horizontal interactivo con tarjetas compactas y flechas de navegación para la Home (`/`).
+    - Modo `grid`: cuadrícula de 2 columnas con tarjetas detalladas y botones de acción directos para `/productos`.
+  - Detección inteligente de destino: si el producto cuenta con `landing_path`, ofrece acceso a su solución y planes; si es nulo, ofrece botón de cotización por WhatsApp con mensaje prellenado.
+- **Sección de Preguntas Frecuentes y Transparencia Comercial (`LandingFaqSection.tsx`)**:
+  - Componente en [web/src/components/landing/LandingFaqSection.tsx](file:///Users/laclavees12345/code/iqissmexico/main/web/src/components/landing/LandingFaqSection.tsx) abordando la reapertura de la ventana de 24h, gestión de plantillas oficiales de Meta y esquema transparente de IA con Bring Your Own Key (BYOK).
+
+### Modificado
+
+- **Rediseño Institucional y Neutral de la Página Principal (`/`)**:
+  - Reestructuración de [web/src/app/page.tsx](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/page.tsx) hacia un enfoque corporativo e institucional para IQISSMexico.
+  - Eliminación de secciones estáticas redundantes, consolidando la presentación del portafolio en el nuevo carrusel horizontal dinámico.
+  - Tarjetas del carrusel simplificadas sin botones internos para evitar sobrecargar la vista vertical.
+  - Botón directo hacia el catálogo completo con texto claro y sin paréntesis: *"Ver todas las soluciones y productos →"*.
+  - Incorporación de sección *"Quiénes Somos"* destacando trayectoria (+15 años desde 2008 en Colima) con enlace a `/aboutus`.
+  - Canales de contacto directo: WhatsApp oficial (`+52 314 156 0219`), correo (`info@iqissmexico.com`) y enlaces discretos a políticas en el footer.
+- **Especialización y Coherencia en Landings del CRM (`/landingpage/crm` y `/landingpage/crm/consultorio`)**:
+  - Componente unificado [MembershipPlans.tsx](file:///Users/laclavees12345/code/iqissmexico/main/web/src/components/landing/MembershipPlans.tsx) con cálculo unívoco del badge *"MÁS POPULAR"* (Plan Basic+ para CRM General, Plan Pro para Consultorios).
+  - Eliminación de menciones erróneas de citas médicas en CRM general, reservándolas para la landing de salud con aviso de recordatorios automáticos *(Próximamente)*.
+  - Tratamiento independiente para el plan de prueba gratuita (Trial).
+- **Navegación Global (`Navbar.tsx` y `Footer.tsx`)**:
+  - Incorporación del enlace a `/productos` en la barra superior y pie de página.
+  - Corrección de la ruta de consultorios hacia `/landingpage/crm/consultorio`.
+
+---
+
 ## [1.6.0] - 2026-09-06
 
 ### Añadido

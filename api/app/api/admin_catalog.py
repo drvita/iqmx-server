@@ -49,6 +49,7 @@ class ProductResponse(BaseModel):
     description: Optional[str] = None
     service_url: Optional[str] = None
     provision_endpoint: Optional[str] = None
+    landing_path: Optional[str] = None
     is_active: bool
     plans_count: int = 0
 
@@ -58,12 +59,14 @@ class CreateProductRequest(BaseModel):
     description: Optional[str] = None
     service_url: Optional[str] = None
     provision_endpoint: str = "/api/provision"
+    landing_path: Optional[str] = None
 
 class UpdateProductRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     service_url: Optional[str] = None
     provision_endpoint: Optional[str] = None
+    landing_path: Optional[str] = None
     is_active: Optional[bool] = None
 
 class CreatePlanRequest(BaseModel):
@@ -81,6 +84,7 @@ class UpdatePlanRequest(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     price_mxn: Optional[float] = None
+    billing_interval: Optional[str] = None
     features_payload: Optional[Dict[str, Any]] = None
     is_public: Optional[bool] = None
     is_active: Optional[bool] = None
@@ -103,6 +107,7 @@ def list_products(
             description=p.description,
             service_url=p.service_url,
             provision_endpoint=p.provision_endpoint,
+            landing_path=p.landing_path,
             is_active=p.is_active,
             plans_count=len(p.plans)
         ))
@@ -126,6 +131,7 @@ def create_product(
         description=req.description.strip() if req.description else None,
         service_url=req.service_url.strip() if req.service_url else None,
         provision_endpoint=req.provision_endpoint.strip(),
+        landing_path=req.landing_path.strip() if req.landing_path else None,
         is_active=True
     )
     db.add(product)
@@ -139,6 +145,7 @@ def create_product(
         description=product.description,
         service_url=product.service_url,
         provision_endpoint=product.provision_endpoint,
+        landing_path=product.landing_path,
         is_active=product.is_active,
         plans_count=0
     )
@@ -163,6 +170,8 @@ def update_product(
         product.service_url = req.service_url.strip() if req.service_url else None
     if req.provision_endpoint is not None:
         product.provision_endpoint = req.provision_endpoint.strip() if req.provision_endpoint else None
+    if req.landing_path is not None:
+        product.landing_path = req.landing_path.strip() if req.landing_path else None
     if req.is_active is not None:
         product.is_active = req.is_active
 
@@ -176,6 +185,7 @@ def update_product(
         description=product.description,
         service_url=product.service_url,
         provision_endpoint=product.provision_endpoint,
+        landing_path=product.landing_path,
         is_active=product.is_active,
         plans_count=len(product.plans)
     )
@@ -275,6 +285,8 @@ def update_plan(
         plan.price_mxn = Decimal(str(req.price_mxn))
     if req.features_payload is not None:
         plan.features_payload = req.features_payload
+    if req.billing_interval is not None:
+        plan.billing_interval = req.billing_interval.strip()
     if req.is_public is not None:
         plan.is_public = req.is_public
     if req.is_active is not None:
