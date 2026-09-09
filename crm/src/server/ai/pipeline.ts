@@ -16,7 +16,7 @@ import {
 } from "@/server/ai/actions";
 import { matchesHandoffIntent } from "@/server/ai/handoff";
 import { buildAgentSystemPrompt } from "@/server/ai/prompts";
-import { agendaEnabled } from "@/server/agenda/flag";
+import { isAgendaEnabled } from "@/server/agenda/flag";
 import { bookSlot, offerSlots } from "@/server/agenda/agent";
 import { sendTypingIndicator } from "@/server/whatsapp/typing";
 
@@ -222,7 +222,7 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
     .where(eq(schema.pipelineStage.organizationId, organizationId))
     .orderBy(asc(schema.pipelineStage.position));
 
-  const agenda = agendaEnabled();
+  const agenda = await isAgendaEnabled(organizationId);
   const messages: ChatMessage[] = [
     {
       role: "system",

@@ -3,7 +3,7 @@ import { getDb, schema } from "@/lib/db";
 import { apiError } from "@/lib/api";
 import { scoped } from "@/lib/db/tenant";
 import { requireBotKey, resolveInstanceOrg } from "@/server/bot/auth";
-import { agendaDisabledResponse, agendaEnabled } from "@/server/agenda/flag";
+import { agendaDisabledResponse, isAgendaEnabled } from "@/server/agenda/flag";
 import { computeAvailability } from "@/server/agenda/availability";
 import { getSettings } from "@/server/agenda/settings";
 import { daysWithAgenda, spreadByDay } from "@/server/agenda/spread";
@@ -37,10 +37,6 @@ function clamp(raw: string | null, l: { min: number; max: number; def: number })
 }
 
 export async function GET(req: Request) {
-  // La bandera se evalúa ANTES que la llave: si esta instancia no tiene
-  // agenda, el endpoint no existe — no hay nada que autenticar.
-  if (!agendaEnabled()) return agendaDisabledResponse();
-
   const denied = requireBotKey(req);
   if (denied) return denied;
 
@@ -48,6 +44,7 @@ export async function GET(req: Request) {
   if (!organizationId) {
     return apiError(409, "no_org", "La instancia aún no tiene organización");
   }
+  if (!(await isAgendaEnabled(organizationId))) return agendaDisabledResponse();
 
   const url = new URL(req.url);
   const conversationId = url.searchParams.get("conversationId");

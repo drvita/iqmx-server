@@ -49,7 +49,7 @@ export function agendaEnabled(): boolean {
 export async function isAgendaEnabled(organizationId?: string | null): Promise<boolean> {
   if (organizationId) {
     const { isAgendaEnabledForOrg } = await import("@/server/settings/limits");
-    return await isAgendaEnabledForOrg(organizationId);
+    return (await isAgendaEnabledForOrg(organizationId)) || agendaEnabled();
   }
   return agendaEnabled();
 }

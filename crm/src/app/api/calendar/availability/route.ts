@@ -1,6 +1,6 @@
 import { withAuth } from "@/lib/api";
 import { dayIsoInTz, timeInTz, dayLabelInTz } from "@/lib/time/slots";
-import { agendaDisabledResponse, agendaEnabled } from "@/server/agenda/flag";
+import { agendaDisabledResponse, isAgendaEnabled } from "@/server/agenda/flag";
 import { computeAvailability } from "@/server/agenda/availability";
 import { getSettings } from "@/server/agenda/settings";
 
@@ -18,7 +18,7 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
  * no un error.
  */
 export const GET = withAuth(async (session, req: Request) => {
-  if (!agendaEnabled()) return agendaDisabledResponse();
+  if (!(await isAgendaEnabled(session.organizationId))) return agendaDisabledResponse();
 
   const url = new URL(req.url);
   const from = url.searchParams.get("from");

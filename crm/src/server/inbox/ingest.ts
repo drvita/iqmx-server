@@ -18,7 +18,7 @@ import {
   type ResolvedIdentity,
 } from "@/server/inbox/identity";
 import { applyStatusUpdate } from "@/server/inbox/status";
-import { atribucionEnabled } from "@/server/attribution/flag";
+import { isAtribucionEnabled } from "@/server/attribution/flag";
 import { recordAttribution } from "@/server/attribution/store";
 import { onLeadActivity } from "@/server/inbox/lead-activity";
 import { maybeRunAgentTurn } from "@/server/ai/trigger";
@@ -437,7 +437,7 @@ export async function ingestInboundMessage(input: {
   // así un reintento de Meta que llegue con el referral no lo pierde por
   // haberse cortado antes en el dedup. Solo con la bandera encendida: una
   // instancia que no atribuye no guarda identificadores de clic (ADR-001).
-  if (input.referral && atribucionEnabled()) {
+  if (input.referral && (await isAtribucionEnabled(organizationId))) {
     await recordAttribution({
       organizationId,
       contactId: contact.id,

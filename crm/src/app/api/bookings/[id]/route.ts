@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { parseBody, withAuth } from "@/lib/api";
-import { agendaDisabledResponse, agendaEnabled } from "@/server/agenda/flag";
+import { agendaDisabledResponse, isAgendaEnabled } from "@/server/agenda/flag";
 import {
   cancelBooking,
   markBookingStatus,
@@ -28,7 +28,7 @@ const patchSchema = z.discriminatedUnion("action", [
  * el enlace que el proveedor no entregó.
  */
 export const PATCH = withAuth(async (session, req: Request, ctx: Params) => {
-  if (!agendaEnabled()) return agendaDisabledResponse();
+  if (!(await isAgendaEnabled(session.organizationId))) return agendaDisabledResponse();
   const { id } = await ctx.params;
   const body = await parseBody(req, patchSchema);
   if (!body.ok) return body.response;

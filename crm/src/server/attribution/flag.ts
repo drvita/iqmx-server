@@ -45,7 +45,7 @@ export function atribucionEnabled(): boolean {
 export async function isAtribucionEnabled(organizationId?: string | null): Promise<boolean> {
   if (organizationId) {
     const { isAttributionEnabledForOrg } = await import("@/server/settings/limits");
-    return await isAttributionEnabledForOrg(organizationId);
+    return (await isAttributionEnabledForOrg(organizationId)) || atribucionEnabled();
   }
   return atribucionEnabled();
 }

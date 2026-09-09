@@ -230,3 +230,80 @@ En un entorno SaaS multi-tenant:
 - **Configuración por Organización:** Cada organización podrá habilitar/deshabilitar el entendimiento de notas de voz e imágenes desde la configuración de su Asistente IA (`agent_profile.ai_voice_enabled`, `agent_profile.ai_vision_enabled`).
 - **Protección contra abuso:** Limitar la duración máxima de notas de voz procesables (ej. máx. 90 segundos) y el tamaño de imágenes enviadas al modelo para prevenir consumos excesivos de créditos de API.
 
+---
+
+## 8. Arquitectura para Evaluación Dinámica y Benchmarking Multi-Tenant en el Laboratorio (`/lab`)
+
+### 8.1 Diagnóstico del Problema: Guiones Fijos vs Realidad SaaS
+El módulo del Laboratorio fue originalmente diseñado con 6 personas de prueba cuyos guiones están **estáticos y cableados en código (`src/server/lab/personas.ts`)** con productos de una ferretería (taladros inalámbricos, martillos, lijadoras, tiner).
+
+En un CRM SaaS multi-empresa:
+- Si una empresa de jugos y pulpas congeladas (**Icefrut**) corre el Laboratorio, el cliente simulado pregunta: *"¿Tienen taladros inalámbricos disponibles?"*.
+- El agente responde con total precisión: *"Lamento no poder ayudarte con taladros; somos un taller de jugos naturales... ¿te conecto con un asesor?"*.
+- **El problema:** El Juez de IA evalúa que el agente "no logró cerrar la venta" y califica la prueba con semáforo rojo/amarillo. El benchmark queda falseado y pierde utilidad para cualquier negocio que no sea una ferretería.
+
+---
+
+### 8.2 Análisis Comparativo de Alternativas
+
+| Enfoque | Pros | Contras | Veredicto |
+| :--- | :--- | :--- | :--- |
+| **Opción 1: Preguntas estáticas por negocio** | Fácil de implementar para un solo cliente. | Rompe la arquitectura multi-tenant; requiere tocar código cada vez que se registra una empresa nueva. | ❌ Inviable para SaaS. |
+| **Opción 2: Simulación dinámica Modelo contra Modelo (LLM-as-User)** | Conversaciones muy fluidas y orgánicas. | **No determinista:** El examen cambia en cada corrida, impidiendo comparar si el score subió o bajó por mérito del agente. Multiplica por 2 o 3 el costo de API y latencia por corrida. Riesgo de bucles de cortesía. | 🟡 Costosa e inestable como métrica. |
+| **Opción 3 (Recomendada): Banco de Pruebas Adaptado al Dominio (Domain-Adapted Synthetic Personas)** | **Determinista:** Permite comparar deltas de score de forma científica. **Económica:** Se genera una sola vez. **100% personalizada** a los productos de la empresa. | Requiere un paso inicial de generación / seeding al configurar el KB. | 🟢 **Solución Óptima de Ingeniería.** |
+
+---
+
+### 8.3 Solución Recomendada: Arquetipos Abstractos + Generación Determinista
+
+```
+ ┌────────────────────────────────────────────────────────┐
+ │   Base de Conocimiento (KB) & Catálogo de la Empresa   │
+ │        (Pulpas congeladas, envíos a Colima, etc.)      │
+ └───────────────────────────┬────────────────────────────┘
+                             │
+                             ▼ Generador de Escenarios (LLM rápido: Gemini Flash)
+ ┌────────────────────────────────────────────────────────┐
+ │        6 Guiones Personalizados para la Empresa        │
+ ├────────────────────────────────────────────────────────┤
+ │ 1. Comprador decidido ──► Compra 5L de pulpa de mango. │
+ │ 2. Preguntón precios  ──► Pregunta piña, fresa, limón. │
+ │ 3. Cliente molesto    ──► Paquete llegó descongelado.  │
+ │ 4. Fuera de KB        ──► Pregunta por refacciones.    │
+ │ 5. Pide humano        ──► Asunto urgente con pedido.   │
+ │ 6. Errores/modismos   ──► Jerga informal mexicana.     │
+ └───────────────────────────┬────────────────────────────┘
+                             │
+                             ▼ Persistidos en BD (crm.agent_test_persona)
+ ┌────────────────────────────────────────────────────────┐
+ │               Corridas del Laboratorio                 │
+ │       (Mismo examen determinista en cada corrida)      │
+ └────────────────────────────────────────────────────────┘
+```
+
+#### Reglas de Diseño de la Solución:
+
+1. **Arquetipos Semánticos Abstractos:**
+   Las 6 personas conservan su perfil psicológico, pero sus intenciones se definen de forma abstracta:
+   - `comprador_decidido`: Pregunta por disponibilidad del producto estrella, confirma precio y solicita datos para pago inmediato.
+   - `pregunton_precios`: Pide precios de 3 productos del catálogo sucesivamente, busca promociones y no concreta.
+   - `cliente_enojado`: Reporta una incidencia grave verosímil para el giro comercial (ej. producto derramado o retraso de entrega) exigiendo solución.
+   - `fuera_de_kb`: Plantea una duda ajena a la oferta del negocio para evaluar que el agente admita no saberlo sin inventar (anti-alucinación).
+   - `pide_humano`: Solicita explícitamente hablar con un agente humano tras el primer intercambio.
+   - `errores_modismos`: Formula preguntas con ortografía descuidada y modismos locales sobre productos del negocio.
+
+2. **Acción de Generación y Sincronización en la UI:**
+   - En la vista del Laboratorio (`/lab`) o en Configuración de IA, se incorpora la acción:
+     > 🪄 **"Generar escenarios de prueba para mi empresa"**
+   - El sistema analiza las entradas de `crm.kb_entry` de esa organización y utiliza un modelo rápido (ej. `google/gemini-2.0-flash-001`) para sintetizar los 6 guiones en formato JSON.
+   - Los guiones se guardan en la base de datos vinculados al `organization_id`.
+
+3. **Ejecución del Runner del Laboratorio:**
+   - Al ejecutar `startRun(organizationId)` en `src/server/lab/runner.ts`, el motor consulta primero si existen guiones personalizados en la BD para esa organización.
+   - Si existen, corre el simulador con las preguntas adaptadas de esa empresa.
+   - Si aún no se han generado, utiliza el arquetipo base como fallback.
+
+4. **Beneficio para el Benchmark (Deltas Científicos):**
+   - Al ser guiones persistentes y fijos para esa empresa, cuando el Ingeniero o el usuario edita el prompt del agente, añade preguntas a su Base de Conocimiento o ajusta las instrucciones, la siguiente corrida evalúa exactamente las mismas situaciones. El puntaje (Score de 0 a 100) y el indicador de mejora (+5%, -10%) son **100% confiables y representativos**.
+
+

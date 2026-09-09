@@ -29,7 +29,7 @@ import {
   textFits,
   windowClosedMessage,
 } from "@/server/channels/capabilities";
-import { isChannelEnabled } from "@/server/channels/enabled";
+import { isChannelEnabledForOrg } from "@/server/channels/enabled";
 import { serializeMessage } from "@/server/inbox/ingest";
 import {
   saveMediaFile,
@@ -110,7 +110,7 @@ async function prepareSend(
   if (row.conversation.channel === "instagram") {
     // Una conversacion de un canal apagado puede existir (se apago despues de
     // recibirla): falla claro en vez de intentar un transporte que no aplica.
-    if (!isChannelEnabled("instagram")) {
+    if (!(await isChannelEnabledForOrg("instagram", organizationId))) {
       throw new SendError(
         "not_connected",
         "El canal de Instagram está desactivado en esta instancia"
@@ -143,7 +143,7 @@ async function prepareSend(
   // 017: Messenger, mismo trato que Instagram: transporte propio, ventana
   // propia (con etiqueta fuera de ella) y sin plantillas.
   if (row.conversation.channel === "messenger") {
-    if (!isChannelEnabled("messenger")) {
+    if (!(await isChannelEnabledForOrg("messenger", organizationId))) {
       throw new SendError(
         "not_connected",
         "El canal de Messenger está desactivado en esta instancia"

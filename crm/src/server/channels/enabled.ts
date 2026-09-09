@@ -64,7 +64,7 @@ export async function isChannelEnabledForOrg(
   organizationId?: string | null
 ): Promise<boolean> {
   const channels = await getOrganizationChannels(organizationId);
-  return channels.has(channel);
+  return channels.has(channel) || isChannelEnabled(channel);
 }
 
 /**

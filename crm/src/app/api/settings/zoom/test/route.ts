@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { apiError, parseBody, withAuth } from "@/lib/api";
-import { agendaDisabledResponse, agendaEnabled } from "@/server/agenda/flag";
+import { agendaDisabledResponse, isAgendaEnabled } from "@/server/agenda/flag";
 import { zoomConnector } from "@/server/agenda/connectors/zoom";
 import { getZoomCredentials } from "@/server/agenda/connectors/zoom-credentials";
 
@@ -18,7 +18,7 @@ const schema = z.object({
  * un secreto que la UI nunca le devolvió.
  */
 export const POST = withAuth(async (session, req: Request) => {
-  if (!agendaEnabled()) return agendaDisabledResponse();
+  if (!(await isAgendaEnabled(session.organizationId))) return agendaDisabledResponse();
   const body = await parseBody(req, schema);
   if (!body.ok) return body.response;
 

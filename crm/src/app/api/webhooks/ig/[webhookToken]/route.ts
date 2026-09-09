@@ -4,7 +4,7 @@ import { isValidSignature, isValidWebhookToken } from "@/server/inbox/webhook";
 import { processMetaInstagramPayload } from "@/server/instagram/ingest";
 import {
   channelDisabledResponse,
-  isChannelEnabled,
+  isChannelEnabledForOrg,
 } from "@/server/channels/enabled";
 import { isValidZernioSignature, zernioSignatureFrom } from "@/server/zernio";
 import { processZernioPayload, resolveZernioSecret } from "@/server/zernio/dispatch";
@@ -20,13 +20,16 @@ import { processZernioPayload, resolveZernioSecret } from "@/server/zernio/dispa
  */
 export const dynamic = "force-dynamic";
 
-import { isWebhookTokenValid } from "@/server/whatsapp/webhook-token";
+import { isWebhookTokenValid, getOrganizationByWebhookToken } from "@/server/whatsapp/webhook-token";
 
 type Params = { params: Promise<{ webhookToken: string }> };
 
 export async function GET(req: Request, { params }: Params) {
-  if (!isChannelEnabled("instagram")) return channelDisabledResponse();
   const { webhookToken } = await params;
+  const org = await getOrganizationByWebhookToken(webhookToken);
+  if (!org || !(await isChannelEnabledForOrg("instagram", org.id))) {
+    return channelDisabledResponse();
+  }
   if (!(await isWebhookTokenValid(webhookToken))) {
     return new Response(null, { status: 404 });
   }
@@ -44,8 +47,11 @@ export async function GET(req: Request, { params }: Params) {
 }
 
 export async function POST(req: Request, { params }: Params) {
-  if (!isChannelEnabled("instagram")) return channelDisabledResponse();
   const { webhookToken } = await params;
+  const org = await getOrganizationByWebhookToken(webhookToken);
+  if (!org || !(await isChannelEnabledForOrg("instagram", org.id))) {
+    return channelDisabledResponse();
+  }
   if (!(await isWebhookTokenValid(webhookToken))) {
     return new Response(null, { status: 404 });
   }

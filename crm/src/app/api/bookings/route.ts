@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { parseBody, withAuth } from "@/lib/api";
-import { agendaDisabledResponse, agendaEnabled } from "@/server/agenda/flag";
+import { agendaDisabledResponse, isAgendaEnabled } from "@/server/agenda/flag";
 import { listBookings } from "@/server/agenda/queries";
 import { createBlock, createSessionBooking } from "@/server/agenda/service";
 import { bookingErrorResponse, bookingPayload } from "@/server/agenda/http";
@@ -8,7 +8,7 @@ import { bookingErrorResponse, bookingPayload } from "@/server/agenda/http";
 export const dynamic = "force-dynamic";
 
 export const GET = withAuth(async (session) => {
-  if (!agendaEnabled()) return agendaDisabledResponse();
+  if (!(await isAgendaEnabled(session.organizationId))) return agendaDisabledResponse();
   const bookings = await listBookings(session.organizationId);
   return Response.json({ bookings });
 });
@@ -40,7 +40,7 @@ const postSchema = z.discriminatedUnion("kind", [
  * anti doble-booking sí aplican igual.
  */
 export const POST = withAuth(async (session, req: Request) => {
-  if (!agendaEnabled()) return agendaDisabledResponse();
+  if (!(await isAgendaEnabled(session.organizationId))) return agendaDisabledResponse();
   const body = await parseBody(req, postSchema);
   if (!body.ok) return body.response;
 

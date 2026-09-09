@@ -1,11 +1,14 @@
 import { notFound } from "next/navigation";
 import { MessengerClient } from "@/components/settings/messenger-client";
-import { isChannelEnabled } from "@/server/channels/enabled";
+import { isChannelEnabledForOrg } from "@/server/channels/enabled";
+import { getSessionOrNull } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
-export default function MessengerSettingsPage() {
-  // Sin el canal encendido esta pantalla no existe en esta instancia (ADR-001).
-  if (!isChannelEnabled("messenger")) notFound();
+export default async function MessengerSettingsPage() {
+  const session = await getSessionOrNull();
+  if (!session || !(await isChannelEnabledForOrg("messenger", session.organizationId))) {
+    notFound();
+  }
   return <MessengerClient />;
 }
