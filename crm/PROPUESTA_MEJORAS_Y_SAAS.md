@@ -157,3 +157,76 @@ Historial y trazabilidad para el cliente y el administrador:
 - `items_processed`: cantidad de recordatorios o mensajes despachados.
 - `details`: resumen o errores reportados por Meta Graph API.
 - `created_at`: fecha y hora del evento.
+
+---
+
+## 7. Arquitectura para Entendimiento y Procesamiento Multimedia (Audios e Imágenes) por la IA
+
+### 7.1 Diagnóstico del Estado Actual
+En la versión actual del CRM:
+1. **Filtro excluyente en el pipeline de IA:** En `src/server/ai/pipeline.ts`, el historial se construye con `history.filter((m) => m.text)`. Si un cliente envía una nota de voz o una fotografía sin caption, su campo `text` es `null`, quedando **completamente invisible para el LLM**.
+2. **Cliente de IA mono-modal:** `ChatMessage` en `src/lib/ai/index.ts` solo admite `{ role, content: string }`, careciendo de soporte para contenido estructurado o bloques de imágenes (`image_url`).
+3. **Ausencia de pipeline de transcripción:** No existe integración con motores de Speech-to-Text (STT) para notas de voz.
+
+---
+
+### 7.2 Procesamiento de Audios / Notas de Voz (Pipeline STT)
+
+WhatsApp envía todas las notas de voz en contenedor OGG con códec Opus (`audio/ogg; codecs=opus`).
+
+```
+  ┌────────────────────────┐       ┌────────────────────────┐       ┌────────────────────────┐
+  │  Webhook WhatsApp In   │       │ Descarga a Disco Local │       │  Servicio STT Ultrarrápido │
+  │ (Mensaje tipo 'audio') │ ────► │  /data/media/{org}/{id}│ ────► │ (Groq Whisper / OpenAI)│
+  └────────────────────────┘       └────────────────────────┘       └───────────┬────────────┘
+                                                                                │
+                                                                                ▼ Transcripción
+  ┌────────────────────────┐       ┌────────────────────────┐       ┌────────────────────────┐
+  │   Turno de IA Agente   │ ◄──── │ Inyección en Contexto  │ ◄──── │ Guardar en media_asset │
+  │ (Conoce qué dijo el cl)│       │ [Nota de voz]: "..."   │       │    columna transcription│
+  └────────────────────────┘       └────────────────────────┘       └────────────────────────┘
+```
+
+#### Requisitos y Reglas de Implementación:
+1. **Motor STT con soporte nativo Opus:** Utilizar APIs que acepten directamente `audio/ogg` sin requerir transcodificación previa en el servidor (ej. **Groq Whisper**, con tiempos de respuesta < 400 ms, o la API de OpenAI Whisper). Esto evita instalar binarios pesados como `ffmpeg` en el contenedor de producción.
+2. **Sincronización con la ventana de coalescencia (`AGENT_COALESCE_MS`):**
+   - El CRM agrupa mensajes entrantes durante 6 segundos antes de disparar el LLM (`src/server/ai/trigger.ts`).
+   - La transcripción debe ejecutarse en segundo plano al llegar el mensaje. Si la transcripción aún no concluye al expirar la ventana de coalescencia, el inicio del turno de IA debe retrasarse hasta que el audio esté transcrito o se alcance un timeout máximo (ej. 4 segundos).
+3. **Manejo de audio inaudible o ruido:** Si el audio contiene solo silencio, ruido de fondo o no se detecta voz, el STT inyectará la etiqueta controlada `[Nota de voz del cliente inaudible o vacía]`, permitiendo que el LLM responda amablemente: *"Disculpa, no alcancé a escuchar bien tu audio, ¿me lo podrías repetir o escribir?"*.
+
+---
+
+### 7.3 Procesamiento de Imágenes (Visión Multimodal)
+
+Para que el asistente de IA comprenda imágenes (fotos de productos, recetas, fallas mecánicas, comprobantes):
+
+#### Opción A: Multimodalidad Directa al LLM (Recomendada)
+Aprovechar las capacidades multimodales nativas de los modelos en OpenRouter (Claude 3.5 Sonnet, GPT-4o, Gemini 2.0 Flash):
+- **Extensión del adaptador `ChatMessage`:** Permitir que `content` acepte tanto `string` como un arreglo de partes (`{ type: "text", text: "..." } | { type: "image_url", image_url: { url: "data:image/jpeg;base64,..." } }`).
+- **Inyección condicional:** Si el mensaje del cliente contiene una imagen en `/data/media`, se lee el archivo y se envía codificado en base64 en el último turno del usuario.
+- **Ventaja:** Máxima precisión y comprensión de contexto sin pérdida de información por pre-resúmenes.
+
+#### Opción B: Pre-análisis / OCR Intermedio (Fallback)
+- Un modelo ligero de visión analiza la imagen en la ingesta y genera una descripción: `[Imagen adjunta: Foto de taladro Truper inalámbrico modelo 20V con batería dañada]`.
+- Se almacena en la columna `ai_description` y se pasa al LLM como texto plano.
+- **Ventaja:** Menor consumo de tokens si el historial es extenso; compatibilidad con modelos LLM sin visión.
+
+---
+
+### 7.4 Persistencia y Eficiencia (No pagar dos veces)
+
+Para evitar duplicidad de costos y latencia:
+1. **Nuevos campos en `crm.media_asset`:**
+   - `transcription: text("transcription")`: Texto transcrito de la nota de voz.
+   - `ai_description: text("ai_description")`: Análisis o descripción de la imagen.
+   - `processed_at: timestamp("processed_at")`: Fecha y hora de procesamiento.
+2. **Idempotencia:** Si una conversación es reabierta o el agente reintenta su respuesta tras un error, lee directamente el texto ya persistido en `media_asset` sin volver a consultar los servicios de STT o Visión.
+
+---
+
+### 7.5 Control de Cuotas y Costos SaaS por Organización
+
+En un entorno SaaS multi-tenant:
+- **Configuración por Organización:** Cada organización podrá habilitar/deshabilitar el entendimiento de notas de voz e imágenes desde la configuración de su Asistente IA (`agent_profile.ai_voice_enabled`, `agent_profile.ai_vision_enabled`).
+- **Protección contra abuso:** Limitar la duración máxima de notas de voz procesables (ej. máx. 90 segundos) y el tamaño de imágenes enviadas al modelo para prevenir consumos excesivos de créditos de API.
+

@@ -3,6 +3,7 @@ import { apiError, withAuth } from "@/lib/api";
 import { getDb, schema } from "@/lib/db";
 import { scoped } from "@/lib/db/tenant";
 import { isAiConfigured } from "@/lib/env";
+import { getOrganizationSettings } from "@/server/settings/service";
 import { RunConflictError, startRun } from "@/server/lab/runner";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +14,9 @@ export const GET = withAuth(async (session) => {
   if (!(await isLabEnabledForOrg(session.organizationId))) {
     return apiError(403, "feature_disabled", "El módulo de Laboratorio no está habilitado en tu membresía");
   }
+
+  const orgSettings = await getOrganizationSettings(session.organizationId);
+  const aiConfigured = Boolean(orgSettings.aiApiKeyEncrypted) || isAiConfigured();
 
   const db = getDb();
   const runs = await db
@@ -39,7 +43,7 @@ export const GET = withAuth(async (session) => {
           : null,
     };
   });
-  return Response.json({ runs: withDelta, aiConfigured: isAiConfigured() });
+  return Response.json({ runs: withDelta, aiConfigured });
 });
 
 export const POST = withAuth(async (session) => {
@@ -48,7 +52,10 @@ export const POST = withAuth(async (session) => {
     return apiError(403, "feature_disabled", "El módulo de Laboratorio no está habilitado en tu membresía");
   }
 
-  if (!isAiConfigured()) {
+  const orgSettings = await getOrganizationSettings(session.organizationId);
+  const aiConfigured = Boolean(orgSettings.aiApiKeyEncrypted) || isAiConfigured();
+
+  if (!aiConfigured) {
     return apiError(
       409,
       "ai_not_configured",
