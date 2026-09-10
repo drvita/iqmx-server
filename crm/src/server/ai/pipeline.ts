@@ -176,6 +176,15 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
     console.warn(`[agente] No se encontró perfil de asistente conversacional para org ${organizationId}`);
     return;
   }
+
+  // Si la conversación no tenía asistente explícito, vincular el perfil resuelto
+  if (!conversation.assistantId) {
+    await db
+      .update(schema.conversation)
+      .set({ assistantId: profile.id })
+      .where(eq(schema.conversation.id, conversationId));
+  }
+
   // El toggle global aplica a conversaciones reales; el Laboratorio evalúa el
   // comportamiento configurado aunque el agente aún no esté encendido.
   if (!conversation.isTest && !profile.enabled) {

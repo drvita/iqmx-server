@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AgendaDisabledForOrgError,
+  AssistantHasNoLinesError,
   getLabPersonasForOrg,
+  InsufficientConversationsError,
   NoAuditableConversationsError,
   NoConfiguredScenariosError,
   startRun,
@@ -107,30 +109,74 @@ describe("Laboratorio Multi-Tenant & Auditoría en Vivo", () => {
   });
 
   describe("startRun con modo live_audit", () => {
-    it("lanza NoAuditableConversationsError si no hay conversaciones reales sin juzgar", async () => {
+    it("lanza AssistantHasNoLinesError si el asistente no tiene líneas asignadas", async () => {
       selectQueue.push([]); // 1. existingOrgRun -> []
       selectQueue.push([]); // 2. globalRunning -> []
-      selectQueue.push([]); // 3. eligibleConversations -> []
+      selectQueue.push([]); // 3. metaLines -> [] (sin líneas)
 
       await expect(
-        startRun("org_1", { testType: "live_audit", sampleSize: 10 })
+        startRun("org_1", {
+          testType: "live_audit",
+          assistantId: "agp_no_lines",
+          sampleSize: 10,
+        })
+      ).rejects.toThrow(AssistantHasNoLinesError);
+    });
+
+    it("lanza NoAuditableConversationsError si tiene líneas pero 0 conversaciones", async () => {
+      selectQueue.push([]); // 1. existingOrgRun -> []
+      selectQueue.push([]); // 2. globalRunning -> []
+      selectQueue.push([{ phoneNumberId: "phone_123" }]); // 3. metaLines
+      selectQueue.push([]); // 4. eligibleConversations -> []
+
+      await expect(
+        startRun("org_1", {
+          testType: "live_audit",
+          assistantId: "agp_1",
+          sampleSize: 10,
+        })
       ).rejects.toThrow(NoAuditableConversationsError);
     });
 
-    it("inicia la auditoría si encuentra conversaciones reales pendientes", async () => {
+    it("lanza InsufficientConversationsError si el asistente tiene menos de 10 conversaciones reales", async () => {
       selectQueue.push([]); // 1. existingOrgRun -> []
       selectQueue.push([]); // 2. globalRunning -> []
-      const eligibleConversations = [
-        {
-          id: "cv_real_1",
-          contactId: "ct_1",
-          contactName: "Juan Pérez",
-          contactPhone: "5215512345678",
-        },
-      ];
-      selectQueue.push(eligibleConversations); // 3. eligibleConversations
+      selectQueue.push([{ phoneNumberId: "phone_123" }]); // 3. metaLines
+      // 5 conversaciones (menos de 10)
+      const fewConversations = Array.from({ length: 5 }, (_, i) => ({
+        id: `cv_real_${i}`,
+        contactId: `ct_${i}`,
+        contactName: `Cliente ${i}`,
+        contactPhone: `521550000000${i}`,
+      }));
+      selectQueue.push(fewConversations); // 4. eligibleConversations
 
-      const result = await startRun("org_1", { testType: "live_audit", sampleSize: 5 });
+      await expect(
+        startRun("org_1", {
+          testType: "live_audit",
+          assistantId: "agp_1",
+          sampleSize: 10,
+        })
+      ).rejects.toThrow(InsufficientConversationsError);
+    });
+
+    it("inicia la auditoría si encuentra al menos 10 conversaciones reales asociadas", async () => {
+      selectQueue.push([]); // 1. existingOrgRun -> []
+      selectQueue.push([]); // 2. globalRunning -> []
+      selectQueue.push([{ phoneNumberId: "phone_123" }]); // 3. metaLines
+      const twelveConversations = Array.from({ length: 12 }, (_, i) => ({
+        id: `cv_real_${i}`,
+        contactId: `ct_${i}`,
+        contactName: `Cliente ${i}`,
+        contactPhone: `521550000000${i}`,
+      }));
+      selectQueue.push(twelveConversations); // 4. eligibleConversations
+
+      const result = await startRun("org_1", {
+        testType: "live_audit",
+        assistantId: "agp_1",
+        sampleSize: 10,
+      });
       expect(result.runId).toBeDefined();
       expect(result.status).toBe("running");
 
@@ -142,26 +188,31 @@ describe("Laboratorio Multi-Tenant & Auditoría en Vivo", () => {
       const testCaseInsert = insertedRows.find(
         (i) =>
           Array.isArray(i.values) &&
-          i.values.some((v) => v.conversationId === "cv_real_1")
+          i.values.some((v) => v.conversationId === "cv_real_0")
       );
       expect(testCaseInsert).toBeDefined();
+      expect((testCaseInsert!.values as unknown[]).length).toBe(10); // Muestra acotada a 10
     });
 
     it("encola el benchmark en estado 'queued' si otra organización está corriendo en el servidor", async () => {
       selectQueue.push([]); // 1. existingOrgRun -> []
       selectQueue.push([{ id: "run_active_org1" }]); // 2. globalRunning (servidor ocupado)
-      selectQueue.push([
-        {
-          id: "cv_real_2",
-          contactId: "ct_2",
-          contactName: "María López",
-          contactPhone: "5215587654321",
-        },
-      ]); // 3. eligibleConversations
-      selectQueue.push([{ startedAt: new Date() }]); // 4. getQueuePosition target
-      selectQueue.push([{ id: "run_q1" }]); // 5. getQueuePosition ahead
+      selectQueue.push([{ phoneNumberId: "phone_123" }]); // 3. metaLines
+      const tenConversations = Array.from({ length: 10 }, (_, i) => ({
+        id: `cv_real_${i}`,
+        contactId: `ct_${i}`,
+        contactName: `Cliente ${i}`,
+        contactPhone: `521550000000${i}`,
+      }));
+      selectQueue.push(tenConversations); // 4. eligibleConversations
+      selectQueue.push([{ startedAt: new Date() }]); // 5. getQueuePosition target
+      selectQueue.push([{ id: "run_q1" }]); // 6. getQueuePosition ahead
 
-      const result = await startRun("org_2", { testType: "live_audit", sampleSize: 5 });
+      const result = await startRun("org_2", {
+        testType: "live_audit",
+        assistantId: "agp_1",
+        sampleSize: 10,
+      });
       expect(result.runId).toBeDefined();
       expect(result.status).toBe("queued");
       expect(result.queuePosition).toBe(1);

@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { publish } from "@/server/events/bus";
@@ -24,6 +24,8 @@ import {
 const RUN_TIMEOUT_MS = 10 * 60 * 1000;
 
 export class RunConflictError extends Error {}
+export class AssistantHasNoLinesError extends Error {}
+export class InsufficientConversationsError extends Error {}
 export class NoAuditableConversationsError extends Error {}
 export class NoConfiguredScenariosError extends Error {}
 export class AgendaDisabledForOrgError extends Error {}
@@ -164,8 +166,31 @@ export async function startRun(
   const initialStatus = shouldQueue ? ("queued" as const) : ("running" as const);
 
   if (testType === "live_audit") {
-    // MODO AUDITORÍA: Muestreo de conversaciones reales no juzgadas
-    const sampleLimit = Math.max(1, Math.min(options?.sampleSize ?? 10, 50));
+    // MODO AUDITORÍA: Muestreo de conversaciones reales de las cuentas asociadas al asistente
+    if (!options?.assistantId) {
+      throw new AssistantHasNoLinesError(
+        "Debes seleccionar un asistente para auditar sus conversaciones"
+      );
+    }
+
+    const metaLines = await db
+      .select({ phoneNumberId: schema.metaCredentials.phoneNumberId })
+      .from(schema.metaCredentials)
+      .where(
+        and(
+          eq(schema.metaCredentials.organizationId, organizationId),
+          eq(schema.metaCredentials.assistantId, options.assistantId)
+        )
+      );
+
+    const assignedPhoneIds = metaLines.map((l) => l.phoneNumberId).filter(Boolean);
+
+    if (assignedPhoneIds.length === 0) {
+      throw new AssistantHasNoLinesError(
+        "Este asistente no tiene líneas de WhatsApp asignadas ni mensajes aún."
+      );
+    }
+
     const eligibleConversations = await db
       .select({
         id: schema.conversation.id,
@@ -179,18 +204,29 @@ export async function startRun(
         and(
           eq(schema.conversation.organizationId, organizationId),
           eq(schema.conversation.isTest, false),
-          options?.assistantId ? eq(schema.conversation.assistantId, options.assistantId) : sql`true`,
-          isNull(schema.conversation.lastJudgedAt)
+          isNotNull(schema.conversation.lastMessageAt),
+          inArray(schema.conversation.phoneNumberId, assignedPhoneIds)
         )
       )
-      .orderBy(desc(schema.conversation.lastMessageAt))
-      .limit(sampleLimit);
+      .orderBy(
+        sql`${schema.conversation.lastJudgedAt} ASC NULLS FIRST`,
+        desc(schema.conversation.lastMessageAt)
+      );
 
     if (eligibleConversations.length === 0) {
       throw new NoAuditableConversationsError(
-        "No hay conversaciones reales pendientes de auditar"
+        "No se encontraron conversaciones reales en las cuentas asociadas a este asistente."
       );
     }
+
+    if (eligibleConversations.length < 10) {
+      throw new InsufficientConversationsError(
+        `No hay suficientes datos para elaborar una prueba de calidad. Se requieren al menos 10 conversaciones reales en las cuentas asociadas a este asistente (actualmente hay ${eligibleConversations.length}).`
+      );
+    }
+
+    const sampleLimit = Math.max(10, Math.min(options?.sampleSize ?? 10, 25));
+    const sampleConversations = eligibleConversations.slice(0, sampleLimit);
 
     try {
       const inserted = await db
@@ -213,7 +249,7 @@ export async function startRun(
     }
 
     await db.insert(schema.agentTestCase).values(
-      eligibleConversations.map((c) => ({
+      sampleConversations.map((c) => ({
         id: newId("testCase"),
         organizationId,
         runId,
@@ -227,7 +263,7 @@ export async function startRun(
 
     if (shouldQueue) {
       const queuePosition = await getQueuePosition(runId);
-      publishProgress(organizationId, runId, "queued", 0, eligibleConversations.length, undefined, {
+      publishProgress(organizationId, runId, "queued", 0, sampleConversations.length, undefined, {
         testType,
         suiteName: suiteTitle,
       });
@@ -237,13 +273,13 @@ export async function startRun(
     void executeLiveAudit(
       runId,
       organizationId,
-      eligibleConversations.map((c) => c.id),
+      sampleConversations.map((c) => c.id),
       options?.assistantId,
       testType,
       suiteTitle
     ).catch(async (err) => {
       console.error("[lab] auditoría falló:", err);
-      await failRun(runId, organizationId, String(err), eligibleConversations.length, { testType, suiteName: suiteTitle });
+      await failRun(runId, organizationId, String(err), sampleConversations.length, { testType, suiteName: suiteTitle });
     });
 
     return { runId, status: "running" };

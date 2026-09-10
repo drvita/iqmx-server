@@ -528,9 +528,10 @@ export function LabClient({ agendaEnabled = false }: { agendaEnabled?: boolean }
                   onChange={(e) => setSampleSize(Number(e.target.value))}
                   className="bg-transparent text-xs font-semibold text-foreground focus:outline-none cursor-pointer"
                 >
-                  <option value={5}>5 conversaciones</option>
                   <option value={10}>10 conversaciones</option>
+                  <option value={15}>15 conversaciones</option>
                   <option value={20}>20 conversaciones</option>
+                  <option value={25}>25 conversaciones</option>
                 </select>
               </div>
             )}
@@ -627,7 +628,7 @@ export function LabClient({ agendaEnabled = false }: { agendaEnabled?: boolean }
           <div className="mb-2 flex items-center justify-between text-sm">
             <span className="font-medium">
               {selectedSuite === "live_audit"
-                ? "Auditanado conversaciones reales de WhatsApp…"
+                ? "Auditando conversaciones reales de WhatsApp…"
                 : "Evaluando perfiles de clientes simulados…"}
             </span>
             <span className="text-muted-foreground">

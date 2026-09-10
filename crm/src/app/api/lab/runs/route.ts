@@ -6,7 +6,9 @@ import { isAiConfigured } from "@/lib/env";
 import { getOrganizationSettings } from "@/server/settings/service";
 import {
   AgendaDisabledForOrgError,
+  AssistantHasNoLinesError,
   getQueuePosition,
+  InsufficientConversationsError,
   NoAuditableConversationsError,
   NoConfiguredScenariosError,
   RunConflictError,
@@ -155,11 +157,25 @@ export const POST = withAuth(async (session, req: Request) => {
         "No hay preguntas configuradas para esta prueba. Primero abre 'Editar preguntas de prueba' y genera o personaliza las preguntas de tu negocio."
       );
     }
+    if (err instanceof AssistantHasNoLinesError) {
+      return apiError(
+        400,
+        "assistant_has_no_lines",
+        err.message || "Este asistente no tiene líneas de WhatsApp asignadas ni mensajes aún."
+      );
+    }
+    if (err instanceof InsufficientConversationsError) {
+      return apiError(
+        400,
+        "insufficient_conversations",
+        err.message || "No hay suficientes datos para elaborar una prueba de calidad (se requieren al menos 10 conversaciones reales)."
+      );
+    }
     if (err instanceof NoAuditableConversationsError) {
       return apiError(
         400,
         "no_conversations_to_audit",
-        "No se encontraron conversaciones reales pendientes de auditar en esta organización."
+        err.message || "No se encontraron conversaciones reales en las cuentas asociadas a este asistente."
       );
     }
     if (err instanceof AgendaDisabledForOrgError) {
