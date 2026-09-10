@@ -459,21 +459,23 @@ function AssistantEditor({
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">
+            <span className="text-xs text-muted-foreground font-medium">
               {toggling ? "Actualizando…" : form.enabled ? "Activo" : "Pausado"}
             </span>
             <button
+              type="button"
               role="switch"
               disabled={toggling}
               aria-checked={form.enabled}
+              aria-label={form.enabled ? "Desactivar asistente" : "Activar asistente"}
               onClick={() => void handleToggle()}
-              className={`relative h-6 w-11 rounded-full transition-colors ${
-                form.enabled ? "bg-primary" : "bg-secondary"
-              } ${toggling ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+                form.enabled ? "bg-primary" : "bg-muted-foreground/30 hover:bg-muted-foreground/40"
+              } ${toggling ? "opacity-60 cursor-not-allowed" : ""}`}
             >
               <span
-                className={`absolute top-0.5 h-5 w-5 rounded-full bg-knob transition-transform ${
-                  form.enabled ? "translate-x-5" : "translate-x-0.5"
+                className={`pointer-events-none block h-5 w-5 rounded-full bg-white dark:bg-zinc-100 shadow-md ring-0 transition-transform ${
+                  form.enabled ? "translate-x-5" : "translate-x-0"
                 }`}
               />
             </button>
@@ -526,6 +528,16 @@ function AssistantEditor({
           </>
         )}
 
+        {form.type === "conversational" && (
+          <div className="rounded-lg border border-primary/20 bg-primary/5 p-3.5 text-xs text-muted-foreground leading-relaxed flex items-start gap-2.5">
+            <Sparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+            <div>
+              <span className="font-semibold text-foreground">Tip de configuración:</span>{" "}
+              El CRM ya coordina automáticamente la <strong>agenda de citas</strong> (según Ajustes → Agenda), la <strong>base de conocimiento</strong>, el <strong>pipeline de ventas</strong> y la <strong>transferencia a humanos</strong> cuando el cliente lo solicita. No necesitas redactar horarios ni catálogos aquí: enfócate en el objetivo comercial, la personalidad del negocio y cómo deseas que atienda a tus prospectos.
+            </div>
+          </div>
+        )}
+
         <div className="space-y-1.5">
           <Label htmlFor="asst-instructions">
             {form.type === "conversational"
@@ -547,7 +559,12 @@ function AssistantEditor({
 
         {form.type === "conversational" && (
           <div className="space-y-1.5">
-            <Label htmlFor="asst-escalation">Reglas de Escalado a Humano</Label>
+            <div className="flex flex-col gap-0.5">
+              <Label htmlFor="asst-escalation">Reglas de Escalado a Humano</Label>
+              <span className="text-[11px] text-muted-foreground">
+                El sistema transfiere automáticamente si el cliente pide un asesor humano o fuera de ventana. Especifica aquí condiciones adicionales propias de tu negocio.
+              </span>
+            </div>
             <Textarea
               id="asst-escalation"
               rows={3}

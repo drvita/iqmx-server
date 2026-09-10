@@ -9,6 +9,47 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [1.8.0] - 2026-09-10
+
+### Añadido
+
+- **Encolamiento Cross-Tenant y Protección de Servidor en el Laboratorio (`/lab`)**:
+  - Implementación de estado `"queued"` y cálculo dinámico de `queuePosition` en el esquema [crm/src/lib/db/schema.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/db/schema.ts) y motor [crm/src/server/lab/runner.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/lab/runner.ts).
+  - Regla de negocio global: el servidor ejecuta **1 benchmark a la vez** para priorizar los recursos en la atención de WhatsApp en tiempo real.
+  - Despachador automático FIFO (`processNextQueuedRun`): al finalizar una corrida (exitosa o fallida), el servidor toma automáticamente el siguiente benchmark en cola y lo inicia.
+  - Banner interactivo en la interfaz [crm/src/components/lab/lab-client.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/lab/lab-client.tsx) informando el turno de espera al usuario.
+- **Acceso y Visibilidad Condicional al Benchmark de Agenda y Citas (`agenda_flow`)**:
+  - Evaluación dinámica de la suscripción y límites de la organización mediante `isAgendaEnabled(organizationId)` de [crm/src/server/agenda/flag.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/agenda/flag.ts).
+  - La tarjeta de Pruebas de Agenda y Citas en `/lab` solo se renderiza si el inquilino tiene el módulo de agenda habilitado en sus configuraciones o membresía.
+  - Blindaje en endpoints de backend ([/api/lab/runs](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/lab/runs/route.ts), [/api/lab/scenarios](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/lab/scenarios/route.ts) y [/api/lab/scenarios/generate](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/lab/scenarios/generate/route.ts)) rechazando peticiones con código `403` si la agenda está deshabilitada.
+- **Guías Contextuales y Tips en Configuración de Asistentes (`/agent`)**:
+  - Banner informativo visual en [crm/src/components/agent/agent-client.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/agent/agent-client.tsx) orientando al usuario sobre la orquestación automática de agenda, catálogo de productos y escalado a humanos.
+  - Helper text aclaratorio en el campo de reglas de escalado a humano para prevenir duplicidad de instrucciones en el System Prompt central.
+- **Estandarización de Agentes y Skills Multi-Arnés**:
+  - Actualización de directrices maestras en [AGENTS.md](file:///Users/laclavees12345/code/iqissmexico/main/AGENTS.md) y [.agents/rules/iqmx-rules.md](file:///Users/laclavees12345/code/iqissmexico/main/.agents/rules/iqmx-rules.md) con el ciclo de vida del CRM multi-tenant, puertos reservados y estándares visuales.
+  - Creación de la skill [.agents/skills/crm-developer-flow/SKILL.md](file:///Users/laclavees12345/code/iqissmexico/main/.agents/skills/crm-developer-flow/SKILL.md) para desarrollo, testing unitario, compilación y Docker.
+  - Migración y disponibilidad general de las skills [.agents/skills/whatsapp-saas-meta-infra](file:///Users/laclavees12345/code/iqissmexico/main/.agents/skills/whatsapp-saas-meta-infra/SKILL.md) y [.agents/skills/whatsapp-meta-app-review](file:///Users/laclavees12345/code/iqissmexico/main/.agents/skills/whatsapp-meta-app-review/SKILL.md).
+
+### Modificado
+
+- **Concurrencia Controlada (2 en 2) en Simulaciones de Laboratorio**:
+  - Procesamiento de personajes en lotes controlados de 2 (`CONCURRENCY_LIMIT = 2`) en [crm/src/server/lab/runner.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/lab/runner.ts), optimizando tiempos de respuesta iniciales y emitiendo progreso en vivo inmediato por SSE.
+  - Preservación de la salvaguarda de seguridad inmutable de 10 minutos con `Promise.race` para evitar bloqueos por indisponibilidad de APIs externas.
+- **Sanitización Estética de Nombres de Perfiles**:
+  - Supresión de prefijos de asistente (`${assistantId}:`) y reemplazo de guiones bajos (`_`) por espacios con capitalización limpia tanto en la API como en las tarjetas de resultados de [crm/src/components/lab/lab-client.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/lab/lab-client.tsx).
+- **Aislamiento Intra-Tenant y Detección de Preguntas sin Configurar**:
+  - Restricción estricta de 1 benchmark activo a la vez por inquilino (`RunConflictError`).
+  - Rechazo anticipado (`NoConfiguredScenariosError`) si el inquilino no ha personalizado ni generado preguntas, eliminando el uso de datos mock de negocios ajenos.
+- **Limpieza de Estado en Modal de Preguntas**:
+  - Implementación de `resetFormState()` y sincronización reactiva en [crm/src/components/lab/scenario-editor.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/lab/scenario-editor.tsx) para evitar que persistan preguntas de benchmarks previamente abiertos.
+
+### Corregido
+
+- **Componente Switch de Activación de Asistentes en `/agent`**:
+  - Corrección de maquetación en [crm/src/components/agent/agent-client.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/agent/agent-client.tsx) estandarizando con el patrón shadcn/ui y Tailwind (`inline-flex`, `border-2 border-transparent`, thumb blanco `shadow-md` y traslación matemática `translate-x-0` a `translate-x-5`), eliminando el corte en el borde del switch.
+
+---
+
 ## [1.7.0] - 2026-09-07
 
 ### Añadido
