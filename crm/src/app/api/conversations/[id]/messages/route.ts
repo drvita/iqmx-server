@@ -3,6 +3,8 @@ import { apiError, parseBody, withAuth } from "@/lib/api";
 import { getConversation, listMessages } from "@/server/inbox/queries";
 import { serializeMessage } from "@/server/inbox/ingest";
 import { SendError, sendStructured, sendText } from "@/server/inbox/send";
+import { getAttributionForConversation } from "@/server/attribution/store";
+import type { MessageDto } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -16,13 +18,58 @@ export const GET = withAuth(async (session, req: Request, ctx: Params) => {
   const url = new URL(req.url);
   const sinceParam = url.searchParams.get("since");
   const since = sinceParam ? new Date(sinceParam) : undefined;
-  const messages = await listMessages(
-    session.organizationId,
-    id,
-    since && !Number.isNaN(since.getTime()) ? since : undefined
+
+  const [messages, attribution] = await Promise.all([
+    listMessages(
+      session.organizationId,
+      id,
+      since && !Number.isNaN(since.getTime()) ? since : undefined
+    ),
+    !since ? getAttributionForConversation(session.organizationId, id) : null,
+  ]);
+
+  const serialized: MessageDto[] = messages.map((r) =>
+    serializeMessage(r.message, r.media)
   );
+
+  if (attribution) {
+    const raw = (attribution.raw ?? {}) as Record<string, unknown>;
+    const adMessage: MessageDto = {
+      id: `ad_${attribution.id}`,
+      conversationId: id,
+      direction: "in",
+      type: "ad_referral",
+      text: attribution.headline ?? "Anuncio de Meta",
+      status: "delivered",
+      error: null,
+      aiGenerated: false,
+      origin: "meta_ad",
+      media: null,
+      createdAt: attribution.createdAt.toISOString(),
+      ad: {
+        id: attribution.id,
+        headline: attribution.headline,
+        body: attribution.body,
+        sourceId: attribution.sourceId,
+        sourceType: attribution.sourceType,
+        sourceUrl: attribution.sourceUrl,
+        mediaType: attribution.mediaType,
+        imageUrl:
+          (raw.image_url as string | undefined) ??
+          (raw.thumbnail_url as string | undefined) ??
+          null,
+        videoUrl: (raw.video_url as string | undefined) ?? null,
+      },
+    };
+
+    serialized.push(adMessage);
+    serialized.sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
+  }
+
   return Response.json({
-    messages: messages.map((r) => serializeMessage(r.message, r.media)),
+    messages: serialized,
   });
 });
 

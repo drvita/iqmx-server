@@ -16,6 +16,7 @@ import {
 import type { MessageDto, MessageMediaDto } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { formatBytes, mediaLabel } from "./helpers";
+import { AdReferralCard } from "./ad-referral-card";
 
 function StatusTicks({ status }: { status: MessageDto["status"] }) {
   const cls = "h-[13px] w-[13px]";
@@ -214,13 +215,16 @@ export function MessageThread({ messages }: { messages: MessageDto[] }) {
                 </span>
               </div>
             )}
-            <div
-              className={cn(
-                "flex",
-                out ? "justify-end" : "justify-start",
-                grouped ? "mt-[3px]" : "mt-2.5"
-              )}
-            >
+            {m.type === "ad_referral" ? (
+              <AdReferralCard ad={m.ad} />
+            ) : (
+              <div
+                className={cn(
+                  "flex",
+                  out ? "justify-end" : "justify-start",
+                  grouped ? "mt-[3px]" : "mt-2.5"
+                )}
+              >
               <div
                 className={cn(
                   // En el teléfono la burbuja necesita casi todo el renglón:
@@ -292,9 +296,10 @@ export function MessageThread({ messages }: { messages: MessageDto[] }) {
                 )}
               </div>
             </div>
-          </div>
-        );
-      })}
+          )}
+        </div>
+      );
+    })}
     </div>
   );
 }

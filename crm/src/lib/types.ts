@@ -45,6 +45,18 @@ export type MessageMediaDto = {
   payload: unknown;
 };
 
+export type AdReferralDto = {
+  id: string;
+  headline: string | null;
+  body: string | null;
+  sourceId: string | null;
+  sourceType: string | null;
+  sourceUrl: string | null;
+  mediaType: string | null;
+  imageUrl: string | null;
+  videoUrl: string | null;
+};
+
 export type MessageDto = {
   id: string;
   conversationId: string;
@@ -56,8 +68,9 @@ export type MessageDto = {
   error: string | null;
   aiGenerated: boolean;
   /** 008 — Origen del saliente (en entrantes viene 'operator' y se ignora). */
-  origin: "ai" | "operator" | "manual" | "template";
+  origin: "ai" | "operator" | "manual" | "template" | "meta_ad";
   media: MessageMediaDto | null;
+  ad?: AdReferralDto | null;
   createdAt: string;
 };
 
