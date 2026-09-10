@@ -655,6 +655,7 @@ export function LabClient({ agendaEnabled = false }: { agendaEnabled?: boolean }
         {detail ? (
           <Report
             detail={detail}
+            assistantId={detail.run.assistantId ?? selectedAssistantId}
             onApplied={() => void refetchDetail(detail.run.id)}
           />
         ) : (
@@ -897,12 +898,16 @@ function ScoreBadge({ run }: { run: Run }) {
 
 function Report({
   detail,
+  assistantId,
   onApplied,
 }: {
   detail: { run: Run; cases: Case[] };
+  assistantId?: string | null;
   onApplied: () => void;
 }) {
   const { run, cases } = detail;
+  const targetAssistantId = run.assistantId ?? assistantId;
+
   return (
     <div className="space-y-4">
       <Card>
@@ -943,7 +948,12 @@ function Report({
 
       <div className="space-y-3">
         {cases.map((c) => (
-          <CaseCard key={c.id} testCase={c} onApplied={onApplied} />
+          <CaseCard
+            key={c.id}
+            testCase={c}
+            assistantId={targetAssistantId}
+            onApplied={onApplied}
+          />
         ))}
       </div>
     </div>
@@ -962,9 +972,11 @@ function cleanPersonaLabel(raw: string): string {
 
 function CaseCard({
   testCase,
+  assistantId,
   onApplied,
 }: {
   testCase: Case;
+  assistantId?: string | null;
   onApplied: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -997,6 +1009,7 @@ function CaseCard({
         kind: "qa",
         question: sug.pregunta,
         answer: sug.respuesta,
+        assistantId: assistantId || undefined,
       }),
     }).catch(() => null);
     setKbLoading(false);

@@ -47,6 +47,9 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 - **Componente Switch de Activación de Asistentes en `/agent`**:
   - Corrección de maquetación en [crm/src/components/agent/agent-client.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/agent/agent-client.tsx) estandarizando con el patrón shadcn/ui y Tailwind (`inline-flex`, `border-2 border-transparent`, thumb blanco `shadow-md` y traslación matemática `translate-x-0` a `translate-x-5`), eliminando el corte en el borde del switch.
+- **Asignación y Visibilidad de Sugerencias de Base de Conocimiento (KB)**:
+  - Corrección en la aplicación de sugerencias desde el Laboratorio ([crm/src/components/lab/lab-client.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/lab/lab-client.tsx)): ahora envía explícitamente el `assistantId` evaluado al invocar `POST /api/kb`.
+  - Ampliación en las consultas de [crm/src/app/api/kb/route.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/kb/route.ts) y [crm/src/app/api/kb/size/route.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/kb/size/route.ts) para incluir entradas globales (`assistantId IS NULL`), garantizando coherencia con el System Prompt del bot y permitiendo que cualquier sugerencia agregada se refleje de inmediato en la interfaz de `/agent`.
 
 ---
 

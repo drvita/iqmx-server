@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { apiError, parseBody, withAuth } from "@/lib/api";
 import { getDb, schema } from "@/lib/db";
@@ -14,7 +14,12 @@ export const GET = withAuth(async (session, req: Request) => {
   const db = getDb();
   const conditions = [scoped(schema.kbEntry.organizationId, session.organizationId)];
   if (assistantId) {
-    conditions.push(eq(schema.kbEntry.assistantId, assistantId));
+    conditions.push(
+      or(
+        eq(schema.kbEntry.assistantId, assistantId),
+        isNull(schema.kbEntry.assistantId)
+      )!
+    );
   }
 
   const entries = await db
@@ -66,6 +71,7 @@ export const POST = withAuth(async (session, req: Request) => {
 
 const updateSchema = z.object({
   id: z.string().min(1, "id es requerido"),
+  assistantId: z.string().min(1).optional().nullable(),
   kind: z.enum(["qa", "block"]).optional(),
   question: z.string().trim().min(1).max(500).optional().nullable(),
   answer: z.string().trim().min(1).max(4000).optional().nullable(),
@@ -80,6 +86,7 @@ export const PUT = withAuth(async (session, req: Request) => {
   const updated = await db
     .update(schema.kbEntry)
     .set({
+      ...(body.data.assistantId !== undefined ? { assistantId: body.data.assistantId } : {}),
       ...(body.data.kind ? { kind: body.data.kind } : {}),
       ...(body.data.question !== undefined ? { question: body.data.question } : {}),
       ...(body.data.answer !== undefined ? { answer: body.data.answer } : {}),

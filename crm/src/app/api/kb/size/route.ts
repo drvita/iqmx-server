@@ -1,4 +1,4 @@
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull, or } from "drizzle-orm";
 import { withAuth } from "@/lib/api";
 import { getDb, schema } from "@/lib/db";
 import { scoped } from "@/lib/db/tenant";
@@ -19,7 +19,12 @@ export const GET = withAuth(async (session, req: Request) => {
   const db = getDb();
   const conditions = [scoped(schema.kbEntry.organizationId, session.organizationId)];
   if (assistantId) {
-    conditions.push(eq(schema.kbEntry.assistantId, assistantId));
+    conditions.push(
+      or(
+        eq(schema.kbEntry.assistantId, assistantId),
+        isNull(schema.kbEntry.assistantId)
+      )!
+    );
   }
 
   const entries = await db
