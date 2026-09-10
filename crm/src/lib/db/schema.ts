@@ -351,6 +351,10 @@ export const conversation = pgTable(
     channelThreadRef: text("channel_thread_ref"),
     /** Línea / número de WhatsApp por el que vive esta conversación. */
     phoneNumberId: text("phone_number_id"),
+    /** Asistente conversacional asignado al hilo (o seleccionado en pruebas de laboratorio). */
+    assistantId: text("assistant_id").references(() => agentProfile.id, {
+      onDelete: "set null",
+    }),
     aiEnabled: boolean("ai_enabled").notNull().default(true),
     handoffAt: timestamp("handoff_at"),
     handoffReason: text("handoff_reason", {
@@ -368,6 +372,7 @@ export const conversation = pgTable(
     lastInboundAt: timestamp("last_inbound_at"),
     lastMessageAt: timestamp("last_message_at"),
     unreadCount: integer("unread_count").notNull().default(0),
+    lastJudgedAt: timestamp("last_judged_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
@@ -690,9 +695,15 @@ export const agentTestRun = pgTable(
     organizationId: text("organization_id")
       .notNull()
       .references(() => organization.id, { onDelete: "cascade" }),
-    status: text("status", { enum: ["running", "done", "failed"] })
+    status: text("status", { enum: ["queued", "running", "done", "failed"] })
       .notNull()
       .default("running"),
+    testType: text("test_type").notNull().default("sandbox"),
+    suiteName: text("suite_name"),
+    /** Asistente conversacional específico evaluado en esta corrida (opcional). */
+    assistantId: text("assistant_id").references(() => agentProfile.id, {
+      onDelete: "set null",
+    }),
     score: integer("score"),
     error: text("error"),
     startedAt: timestamp("started_at").notNull().defaultNow(),
@@ -930,6 +941,68 @@ export const agentTestCase = pgTable(
   },
   (t) => [index("test_case_run_idx").on(t.runId)]
 );
+
+export const labScenario = pgTable(
+  "lab_scenario",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    /** Asistente al que pertenece este escenario personalizado (opcional). */
+    assistantId: text("assistant_id").references(() => agentProfile.id, {
+      onDelete: "cascade",
+    }),
+    testType: text("test_type").notNull().default("sandbox"),
+    key: text("key").notNull(),
+    label: text("label").notNull(),
+    description: text("description"),
+    syntheticPhone: text("synthetic_phone").notNull(),
+    contactName: text("contact_name").notNull(),
+    script: jsonb("script").$type<string[]>().notNull(),
+    expectedOutcome: jsonb("expected_outcome").$type<{
+      shouldHandoff?: boolean;
+      requireKbMatch?: boolean;
+      forbiddenTerms?: string[];
+      targetStage?: string;
+    }>(),
+    isCustom: boolean("is_custom").notNull().default(false),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("lab_scenario_org_type_idx").on(t.organizationId, t.testType),
+    index("lab_scenario_org_asst_idx").on(t.organizationId, t.assistantId),
+    uniqueIndex("lab_scenario_org_key_uq").on(t.organizationId, t.key),
+  ]
+);
+
+export const labSuiteConfig = pgTable(
+  "lab_suite_config",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    enabledSuites: jsonb("enabled_suites")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'["sandbox", "live_audit"]'::jsonb`),
+    defaultAuditSampleSize: integer("default_audit_sample_size").notNull().default(10),
+    lastGeneratedAt: timestamp("last_generated_at"),
+    judgeModelOverride: text("judge_model_override"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("lab_suite_config_org_uq").on(t.organizationId),
+  ]
+);
+
+export type LabScenario = typeof labScenario.$inferSelect;
+export type NewLabScenario = typeof labScenario.$inferInsert;
+export type LabSuiteConfig = typeof labSuiteConfig.$inferSelect;
+export type NewLabSuiteConfig = typeof labSuiteConfig.$inferInsert;
 
 /* ============================================================
  * 016 — Atribución de anuncios y Conversions API

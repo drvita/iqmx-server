@@ -28,6 +28,8 @@ export type SseEvent =
         status: string;
         progress: { done: number; total: number };
         score?: number | null;
+        testType?: string;
+        suiteName?: string | null;
       };
     };
 

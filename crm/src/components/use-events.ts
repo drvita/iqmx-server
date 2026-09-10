@@ -17,6 +17,8 @@ export type EventHandlers = {
     status: string;
     progress: { done: number; total: number };
     score?: number | null;
+    testType?: string;
+    suiteName?: string | null;
   }) => void;
   /** 015 — Algo cambió en la agenda (también cuando agenda la IA). */
   onBookingUpdated?: (data: { bookingId: string }) => void;

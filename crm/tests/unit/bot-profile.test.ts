@@ -58,6 +58,7 @@ function qa(question: string, answer: string): KbEntry {
     question,
     answer,
     content: null,
+    assistantId: null,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

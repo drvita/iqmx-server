@@ -31,6 +31,38 @@ export const GET = withAuth(async (session, _req: Request, ctx: Params) => {
     .where(eq(schema.agentTestCase.runId, id))
     .orderBy(asc(schema.agentTestCase.createdAt));
 
+  // Obtener labels personalizados de labScenario para esta organización
+  const customScenarios = await db
+    .select({
+      key: schema.labScenario.key,
+      label: schema.labScenario.label,
+    })
+    .from(schema.labScenario)
+    .where(eq(schema.labScenario.organizationId, session.organizationId));
+
+  const customLabelMap = new Map<string, string>();
+  for (const s of customScenarios) {
+    customLabelMap.set(s.key, s.label);
+    if (s.key.includes(":")) {
+      customLabelMap.set(s.key.split(":")[1]!, s.label);
+    }
+  }
+
+  function formatPersonaLabel(rawPersona: string): string {
+    if (customLabelMap.has(rawPersona)) return customLabelMap.get(rawPersona)!;
+    const shortKey = rawPersona.includes(":") ? rawPersona.split(":").pop()! : rawPersona;
+    if (customLabelMap.has(shortKey)) return customLabelMap.get(shortKey)!;
+
+    if (PERSONA_LABELS[rawPersona]) return PERSONA_LABELS[rawPersona]!;
+    if (PERSONA_LABELS[shortKey]) return PERSONA_LABELS[shortKey]!;
+
+    // Formatear eliminando guiones bajos y capitalizando palabras
+    return shortKey
+      .split("_")
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(" ");
+  }
+
   return Response.json({
     run: {
       id: run.id,
@@ -43,7 +75,7 @@ export const GET = withAuth(async (session, _req: Request, ctx: Params) => {
     cases: cases.map((c) => ({
       id: c.id,
       persona: c.persona,
-      personaLabel: PERSONA_LABELS[c.persona] ?? c.persona,
+      personaLabel: formatPersonaLabel(c.persona),
       status: c.status,
       veredicto: c.veredicto,
       hallazgos: c.hallazgos ?? [],

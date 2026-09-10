@@ -36,6 +36,9 @@ const prefixes = {
   user: "usr",
   account: "acc",
   settings: "set",
+  // laboratorio multi-tenant
+  labScenario: "scen",
+  labSuiteConfig: "lcfg",
 } as const;
 
 export type IdKind = keyof typeof prefixes;

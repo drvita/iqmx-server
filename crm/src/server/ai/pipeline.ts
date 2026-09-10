@@ -116,9 +116,13 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
     return;
   }
 
-  // Si la conversación tiene una línea de WhatsApp asociada, validar si la IA está encendida en esa línea
+  // Resolver el asistente conversacional asignado:
+  // 1. Si la conversación tiene un asistente explícito asignado (ej. pruebas de laboratorio), usarlo prioritariamente.
+  // 2. Si tiene una línea de WhatsApp asociada, usar el asistente configurado en esa línea.
   let targetAssistantId: string | null = null;
-  if (conversation.phoneNumberId) {
+  if (conversation.assistantId) {
+    targetAssistantId = conversation.assistantId;
+  } else if (conversation.phoneNumberId) {
     const creds = await db
       .select({
         aiEnabled: schema.metaCredentials.aiEnabled,
