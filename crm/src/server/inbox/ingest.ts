@@ -374,12 +374,7 @@ async function ingestManualEcho(
       handoffReason: "manual_reply",
       updatedAt: new Date(),
     })
-    .where(
-      and(
-        eq(schema.conversation.id, conversation.id),
-        sql`${schema.conversation.handoffAt} is null`
-      )
-    )
+    .where(eq(schema.conversation.id, conversation.id))
     .returning();
   if (paused[0]) {
     console.log(

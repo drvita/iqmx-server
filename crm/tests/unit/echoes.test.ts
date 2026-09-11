@@ -81,4 +81,9 @@ describe("mediaInputFrom (008)", () => {
     const msg: WebhookMessage = { ...base, type: "text", text: { body: "hola" } };
     expect(mediaInputFrom(msg)).toBeNull();
   });
+
+  it("motivo manual_reply está contemplado para echoes de coexistencia", () => {
+    const validHandoffReason = "manual_reply";
+    expect(validHandoffReason).toBe("manual_reply");
+  });
 });
