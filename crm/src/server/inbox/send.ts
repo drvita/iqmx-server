@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { graphRequest, MetaApiError, normalizeRecipient } from "@/lib/meta/client";
+import { destinatarioMeta, type Destinatario } from "@/lib/meta/destinatario";
 import { publish } from "@/server/events/bus";
 import {
   getCredentialsByOrg,
@@ -63,6 +64,9 @@ type SendTarget = {
   conversation: typeof schema.conversation.$inferSelect;
   /** null cuando el destino no es WhatsApp (014). */
   credentials: Credentials | null;
+  /** El destinatario en la forma que Meta espera: `to` o `recipient`. */
+  destinatario: Destinatario;
+  /** El identificador a secas, para lo que no arma un payload de Graph. */
   recipient: string;
   /** 014: presente solo en conversaciones de Instagram. */
   instagram?: InstagramCredentials;
@@ -135,6 +139,7 @@ async function prepareSend(
     return {
       conversation: row.conversation,
       credentials: null,
+      destinatario: { to: igRecipient },
       recipient: igRecipient,
       instagram: igCreds,
     };
@@ -168,6 +173,7 @@ async function prepareSend(
     return {
       conversation: row.conversation,
       credentials: null,
+      destinatario: { to: fbRecipient },
       recipient: fbRecipient,
       messenger: fbCreds,
     };
@@ -203,19 +209,31 @@ async function prepareSend(
     );
   }
 
-  // 003: el destinatario es el teléfono normalizado o, si el contacto llegó
-  // por BSUID sin teléfono, su Business-Scoped User ID.
-  const recipient = row.contact.phone
-    ? normalizeRecipient(row.contact.phone)
-    : row.contact.waUserId;
-  if (!recipient) {
+  /**
+   * 003 — El destinatario, en el campo que Meta espera para cada forma.
+   *
+   * Un teléfono va en `to`; un BSUID va en `recipient` con
+   * `recipient_type: "individual"`. Se mandaba el BSUID en `to` y Meta
+   * respondía 131026, que en la bandeja se lee como si el número del cliente
+   * no existiera.
+   */
+  const destinatario = destinatarioMeta(
+    row.contact.phone ? normalizeRecipient(row.contact.phone) : null,
+    row.contact.waUserId
+  );
+  const recipient = destinatario
+    ? "to" in destinatario
+      ? destinatario.to
+      : destinatario.recipient
+    : null;
+  if (!destinatario || !recipient) {
     throw new SendError(
       "meta_error",
       "El contacto no tiene teléfono ni identidad de WhatsApp utilizable"
     );
   }
 
-  return { conversation: row.conversation, credentials, recipient };
+  return { conversation: row.conversation, credentials, destinatario, recipient };
 }
 
 async function persistOutbound(input: {
@@ -290,7 +308,7 @@ export async function sendText(input: {
       ? await callMessengerSend(target, input.text)
       : await callGraphSend(credentials!, {
           messaging_product: "whatsapp",
-          to: recipient,
+          ...target.destinatario,
           type: "text",
           text: { body: input.text },
         });
@@ -376,7 +394,7 @@ export async function sendMediaMessage(input: {
     }
     const waMessageId = await callGraphSend(credentials!, {
       messaging_product: "whatsapp",
-      to: recipient,
+      ...target.destinatario,
       type: kind,
       [kind]: mediaPayload,
     });
@@ -446,10 +464,11 @@ export async function sendStructured(
     | { kind: "contacts"; contacts: ContactInput[] }
   )
 ): Promise<SendResult> {
-  const { credentials, recipient } = await prepareSend(
+  const target = await prepareSend(
     input.conversationId,
     input.organizationId
   );
+  const { credentials } = target;
   // Ubicaciones y contactos son mensajes de WhatsApp: en los demás canales no
   // hay credenciales de WhatsApp que usar y Graph los rechazaría.
   if (!credentials) {
@@ -472,7 +491,7 @@ export async function sendStructured(
 
   const waMessageId = await callGraphSend(credentials, {
     messaging_product: "whatsapp",
-    to: recipient,
+    ...target.destinatario,
     ...payload,
   });
 

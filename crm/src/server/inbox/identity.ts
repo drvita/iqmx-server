@@ -182,6 +182,21 @@ export async function getOrCreateContactByIdentity(
     if (resolved.waUserId && !existing.waUserId)
       patch.waUserId = resolved.waUserId;
     if (resolved.phone && !existing.phone) patch.phone = resolved.phone;
+    /**
+     * El nombre del perfil se mantiene al día (#51).
+     *
+     * No se toca si lo escribió una persona: el operador que renombró a
+     * alguien como "Juan - obra Polanco" no puede perder ese trabajo con el
+     * siguiente mensaje. Esa es toda la razón de que exista `nameSource`.
+     */
+    const delPerfil = resolved.profileName?.trim();
+    if (
+      delPerfil &&
+      existing.nameSource === "perfil" &&
+      delPerfil !== existing.name
+    ) {
+      patch.name = delPerfil;
+    }
     if (existing.archivedAt) patch.archivedAt = null;
     if (Object.keys(patch).length > 0) {
       patch.updatedAt = new Date();

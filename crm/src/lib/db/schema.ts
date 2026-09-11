@@ -146,6 +146,15 @@ export const contact = pgTable(
     /** Business-Scoped User ID si se conoce (003). */
     waUserId: text("wa_user_id"),
     name: text("name").notNull(),
+    /**
+     * Quién puso este nombre.
+     *
+     * `perfil` = lo trajo WhatsApp y se mantiene al día solo;
+     * `manual` = lo escribió una persona en el CRM y nadie lo pisa.
+     */
+    nameSource: text("name_source", { enum: ["perfil", "manual"] })
+      .notNull()
+      .default("perfil"),
     notes: text("notes"),
     /**
      * Ficha de calificación que levanta un cerebro externo por

@@ -22,6 +22,7 @@ import { isAtribucionEnabled } from "@/server/attribution/flag";
 import { recordAttribution } from "@/server/attribution/store";
 import { onLeadActivity } from "@/server/inbox/lead-activity";
 import { maybeRunAgentTurn } from "@/server/ai/trigger";
+import { cancelAgentTurn } from "@/server/ai/pipeline";
 
 /** Tipos de contenido soportados; el resto se ignora sin error. */
 const SUPPORTED_TYPES = new Set([
@@ -364,6 +365,9 @@ async function ingestManualEcho(
     .update(schema.conversation)
     .set({ lastMessageAt: waTimestamp, updatedAt: new Date() })
     .where(eq(schema.conversation.id, conversation.id));
+
+  // Cancela cualquier turno pendiente del agente en memoria (debounce).
+  cancelAgentTurn(conversation.id);
 
   // Pausa automática de la IA, idempotente y atómica (solo si no hay handoff).
   const paused = await db
