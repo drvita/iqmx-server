@@ -107,7 +107,8 @@ describe("sandbox del Laboratorio en el pipeline del agente", () => {
         },
       ], // historial
       [], // kb
-      [] // etapas
+      [], // etapas
+      [] // lead
     );
 
     const { runAgentTurn } = await import("@/server/ai/pipeline");

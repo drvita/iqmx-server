@@ -246,6 +246,20 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
     .where(eq(schema.pipelineStage.organizationId, organizationId))
     .orderBy(asc(schema.pipelineStage.position));
 
+  const leadRow = await db
+    .select({ stageId: schema.lead.stageId })
+    .from(schema.lead)
+    .where(
+      scoped(
+        schema.lead.organizationId,
+        organizationId,
+        eq(schema.lead.contactId, conversation.contactId)
+      )
+    )
+    .limit(1);
+  const currentStage =
+    stages.find((s) => s.id === leadRow[0]?.stageId)?.name ?? null;
+
   const agenda = await isAgendaEnabled(organizationId);
 
   /**
@@ -269,7 +283,13 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
   const messages: ChatMessage[] = [
     {
       role: "system",
-      content: buildAgentSystemPrompt({ profile, kb, stages, agenda }),
+      content: buildAgentSystemPrompt({
+        profile,
+        kb,
+        stages,
+        currentStage,
+        agenda,
+      }),
     },
     ...history
       .filter((m) => m.text)

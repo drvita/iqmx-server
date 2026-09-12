@@ -26,6 +26,7 @@ export function buildAgentSystemPrompt(input: {
   profile: AgentProfile;
   kb: KbEntry[];
   stages: { name: string }[];
+  currentStage?: string | null;
   /**
    * 015 — ¿esta instancia tiene agenda? Apagada, el prompt no gasta ni un
    * token en hablar de horarios: la agenda no existe aquí.
@@ -34,6 +35,9 @@ export function buildAgentSystemPrompt(input: {
 }): string {
   const { profile } = input;
   const stageNames = input.stages.map((s) => s.name).join(" | ");
+  const currentStageLine = input.currentStage
+    ? `Etapa actual del lead: ${input.currentStage}`
+    : null;
   const agendaLines = input.agenda
     ? [
         '- {"action":"offer_slots","reply":"..."} — ofrecer horarios para agendar (reply es solo la frase de entrada; los horarios los pone el sistema).',
@@ -57,6 +61,7 @@ export function buildAgentSystemPrompt(input: {
     profile.greeting ? `Saludo sugerido para conversaciones nuevas: ${profile.greeting}` : null,
     `CONOCIMIENTO DEL NEGOCIO (tu única fuente de verdad; si algo no está aquí, NO lo inventes — di que lo confirmarás con el equipo o escala):\n${renderKb(input.kb)}`,
     `Etapas del pipeline disponibles: ${stageNames}`,
+    currentStageLine,
     [
       "En cada turno respondes ÚNICAMENTE un objeto JSON con UNA acción:",
       '- {"action":"none"} — no responder nada.',
