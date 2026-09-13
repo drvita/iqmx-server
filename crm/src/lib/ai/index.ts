@@ -15,7 +15,12 @@ export type ChatMessage = {
 
 export type ChatJsonResult<T> =
   | { ok: true; data: T; raw: string }
-  | { ok: false; error: "not_configured" | "provider_error" | "invalid_output"; detail: string };
+  | {
+      ok: false;
+      error: "not_configured" | "provider_error" | "invalid_output";
+      detail: string;
+      raw?: string;
+    };
 
 const MAX_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 500;
@@ -81,6 +86,7 @@ export async function chatJson<T>(
   }
 
   let lastDetail = "";
+  let lastRaw: string | undefined = undefined;
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     const attemptMessages: ChatMessage[] =
       attempt === 1
@@ -88,9 +94,9 @@ export async function chatJson<T>(
         : [
             ...messages,
             {
-              role: "system",
+              role: "user",
               content:
-                "STRICT: tu respuesta anterior no fue JSON válido según el esquema. Responde ÚNICAMENTE el objeto JSON, sin explicaciones ni markdown.",
+                `STRICT: tu respuesta anterior no fue JSON válido (${lastDetail}). Responde ÚNICAMENTE el objeto JSON, sin explicaciones ni markdown.`,
             },
           ];
     try {
@@ -101,6 +107,7 @@ export async function chatJson<T>(
         token,
         baseUrl
       );
+      lastRaw = raw;
       const extracted = extractJson(raw);
       if (extracted === null) {
         lastDetail = `sin JSON extraíble (raw=${truncate(raw)})`;
@@ -128,6 +135,7 @@ export async function chatJson<T>(
       ? "invalid_output"
       : "provider_error",
     detail: lastDetail,
+    raw: lastRaw,
   };
 }
 
@@ -136,7 +144,8 @@ async function callProvider(
   messages: ChatMessage[],
   timeoutMs = 60_000,
   token?: string | null,
-  baseUrl?: string | null
+  baseUrl?: string | null,
+  jsonMode = true
 ): Promise<string> {
   const env = getEnv();
   const effectiveBaseUrl = baseUrl || env.OPENROUTER_BASE_URL;
@@ -144,6 +153,10 @@ async function callProvider(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
+    const payload: Record<string, unknown> = { model, messages };
+    if (jsonMode) {
+      payload.response_format = { type: "json_object" };
+    }
     const res = await fetch(`${effectiveBaseUrl}/v1/chat/completions`, {
       method: "POST",
       headers: {
@@ -151,11 +164,15 @@ async function callProvider(
         Authorization: `Bearer ${effectiveToken}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ model, messages }),
+      body: JSON.stringify(payload),
       signal: controller.signal,
     });
     if (!res.ok) {
       const text = await res.text().catch(() => "");
+      // Fallback si un modelo o proveedor específico no soporta response_format
+      if (jsonMode && res.status === 400 && /response_format|json_object/i.test(text)) {
+        return callProvider(model, messages, timeoutMs, token, baseUrl, false);
+      }
       throw new Error(`proveedor respondió ${res.status}: ${truncate(text)}`);
     }
     const json = (await res.json()) as {
@@ -175,6 +192,7 @@ async function callProvider(
  * Extracción robusta de JSON de una respuesta de modelo:
  * 1) bloque ```json ... ``` (o ``` ... ```), 2) el texto completo,
  * 3) del primer `{` al último `}`.
+ * Incluye sanitización tolerante para saltos de línea sin escapar y comas finales.
  */
 export function extractJson(raw: string): unknown | null {
   const candidates: string[] = [];
@@ -187,13 +205,32 @@ export function extractJson(raw: string): unknown | null {
     candidates.push(raw.slice(first, last + 1));
   }
   for (const c of candidates) {
+    // 1. Intento estándar directo
     try {
       return JSON.parse(c);
+    } catch {
+      // siguiente intento de reparación
+    }
+
+    // 2. Reparar saltos de línea literales dentro de cadenas y comas finales
+    try {
+      const sanitized = sanitizeJson(c);
+      return JSON.parse(sanitized);
     } catch {
       // siguiente candidato
     }
   }
   return null;
+}
+
+function sanitizeJson(str: string): string {
+  // Reemplazar comas finales antes de } o ]
+  let cleaned = str.replace(/,\s*([\}\]])/g, "$1");
+  // Escapar saltos de línea y tabulaciones dentro de comillas
+  cleaned = cleaned.replace(/"(?:[^"\\]|\\.)*"/g, (match) =>
+    match.replace(/\n/g, "\\n").replace(/\r/g, "\\r").replace(/\t/g, "\\t")
+  );
+  return cleaned;
 }
 
 function truncate(s: string, n = 300): string {

@@ -52,7 +52,11 @@ export function buildAgentSystemPrompt(input: {
       ]
     : [];
   return [
-    `Eres "${profile.name}", el asistente de WhatsApp de este negocio. Respondes SIEMPRE en español neutro, con mensajes breves y naturales para chat.`,
+    `Eres "${profile.name}", el asistente virtual de WhatsApp de este negocio.`,
+    `REGLA TÉCNICA OBLIGATORIA DE FORMATO:
+Tu salida en CADA turno debe ser EXCLUSIVAMENTE un único objeto JSON válido que represente la acción a tomar.
+NUNCA respondas con texto conversacional suelto o sin estructurar.
+Toda respuesta humana hacia el cliente debe ir SIEMPRE en español neutro, con mensajes breves y naturales para chat, dentro de la propiedad "text" o "reply" del objeto JSON.`,
     profile.tone ? `Tono: ${profile.tone}` : null,
     profile.instructions ? `Instrucciones del negocio:\n${profile.instructions}` : null,
     profile.escalationRules
@@ -63,7 +67,8 @@ export function buildAgentSystemPrompt(input: {
     `Etapas del pipeline disponibles: ${stageNames}`,
     currentStageLine,
     [
-      "En cada turno respondes ÚNICAMENTE un objeto JSON con UNA acción:",
+      "FORMATO OBLIGATORIO DE RESPUESTA:",
+      "En cada turno respondes ÚNICAMENTE un objeto JSON válido con UNA acción:",
       '- {"action":"none"} — no responder nada.',
       '- {"action":"reply","text":"..."} — responder al cliente.',
       '- {"action":"update_lead","note":"...","reply":"..."} — guardar una nota del lead (reply opcional).',
@@ -75,7 +80,7 @@ export function buildAgentSystemPrompt(input: {
       "- Si la pregunta NO está cubierta por el conocimiento → NO inventes: responde que lo confirmarás o escala.",
       "- Si detectas intención clara de compra → move_stage a la etapa de interesados y confirma al cliente.",
       ...agendaRules,
-      "- JSON puro, sin markdown ni texto adicional.",
+      "- Salida técnica estricta: ÚNICAMENTE el objeto JSON en crudo. NUNCA texto libre, explicaciones ni markdown envolvente.",
     ].join("\n"),
   ]
     .filter(Boolean)

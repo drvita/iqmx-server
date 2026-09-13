@@ -295,7 +295,10 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
       .filter((m) => m.text)
       .map((m) => ({
         role: m.direction === "in" ? ("user" as const) : ("assistant" as const),
-        content: m.text!,
+        content:
+          m.direction === "out"
+            ? formatAssistantHistoryMessage(m.text!)
+            : m.text!,
       })),
     /**
      * Va AL FINAL, después del historial: es el estado de AHORA, y ponerlo
@@ -311,17 +314,33 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
 
   console.log(`[agente] Ejecutando LLM para conversación ${conversationId} (org: ${organizationId}, asistente: '${profile.name}')`);
   const result = await chatJson(agentActionSchema(agenda), messages, { organizationId });
-  if (!result.ok) {
-    console.error(`[agente] Fallo al generar respuesta de IA (${result.error}): ${result.detail}`);
-    if (result.error === "not_configured") return;
-    // Fallo persistente del proveedor o salida imposible → escalar (FR-022).
-    console.error(`[agente] fallo del proveedor (raw): ${result.detail}`);
-    await applyHandoff(conversationId, organizationId, "error");
-    return;
-  }
-  console.log(`[agente] IA respondió exitosamente con acción: '${result.data.action}'`);
+  let action: AgentActionType;
 
-  let action: AgentActionType = result.data;
+  if (!result.ok) {
+    // Si el LLM devolvió texto conversacional legítimo en texto plano, rescatarlo
+    // como respuesta al cliente (o handoff si pide humano) en lugar de abortar y silenciar.
+    const fallbackText = result.raw ? extractConversationalText(result.raw) : null;
+    if (fallbackText) {
+      console.warn(
+        `[agente] Recuperando respuesta de texto plano como acción conversacional: "${fallbackText.slice(0, 100)}…"`
+      );
+      if (matchesHandoffIntent(fallbackText)) {
+        action = { action: "handoff", reason: "cliente", farewell: fallbackText };
+      } else {
+        action = { action: "reply", text: fallbackText };
+      }
+    } else {
+      console.error(`[agente] Fallo al generar respuesta de IA (${result.error}): ${result.detail}`);
+      if (result.error === "not_configured") return;
+      // Fallo persistente del proveedor o salida imposible → escalar (FR-022).
+      console.error(`[agente] fallo del proveedor (raw): ${result.detail}`);
+      await applyHandoff(conversationId, organizationId, "error");
+      return;
+    }
+  } else {
+    action = result.data;
+  }
+  console.log(`[agente] IA respondió exitosamente con acción: '${action.action}'`);
 
   // 015 — Agenda. Un fallo del motor degrada el turno (el agente responde sin
   // agendar), nunca lo tumba: quedarse callado es peor que no agendar.
@@ -525,3 +544,60 @@ async function appendLeadNote(
     })
     .where(eq(schema.contact.id, contact.id));
 }
+
+/**
+ * Normaliza los mensajes del asistente en el historial para que el modelo
+ * siempre observe salidas estructuradas en JSON (consistencia few-shot).
+ */
+export function formatAssistantHistoryMessage(text: string): string {
+  const trimmed = text.trim();
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    try {
+      JSON.parse(trimmed);
+      return trimmed;
+    } catch {
+      // Si no es JSON válido, envolver abajo
+    }
+  }
+  return JSON.stringify({ action: "reply", text: trimmed });
+}
+
+/**
+ * Rescata texto conversacional emitido directamente por el modelo cuando
+ * no produjo el envoltorio JSON {"action":"reply", ...}.
+ */
+export function extractConversationalText(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+
+  // 1. Si viene con bloque de código markdown ``` ... ```
+  const fence = trimmed.match(/```(?:[a-z0-9_-]+)?\s*([\s\S]*?)```/i);
+  const textCandidate = fence?.[1]?.trim() ?? trimmed;
+
+  // 2. Si parece JSON (completo o trunco) con propiedad "text" o "reply"
+  const propMatch = textCandidate.match(/"(?:text|reply)"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"?/);
+  if (propMatch?.[1]) {
+    const rawVal = propMatch[1].replace(/["}\]\s]+$/, "");
+    try {
+      return JSON.parse(`"${rawVal}"`);
+    } catch {
+      return rawVal.replace(/\\n/g, "\n").replace(/\\"/g, '"');
+    }
+  }
+
+  // 3. Si no tiene llaves JSON envolventes y es texto conversacional limpio
+  if (!textCandidate.startsWith("{") && !textCandidate.endsWith("}")) {
+    if (
+      textCandidate.startsWith("<") ||
+      textCandidate.length < 3 ||
+      textCandidate.toLowerCase() === "null" ||
+      textCandidate.toLowerCase() === "undefined"
+    ) {
+      return null;
+    }
+    return textCandidate;
+  }
+
+  return null;
+}
+

@@ -21,6 +21,19 @@ describe("extractJson (extracción robusta)", () => {
   it("sin JSON → null", () => {
     expect(extractJson("no tengo nada que decir")).toBeNull();
   });
+
+  it("JSON con saltos de línea literales dentro de strings", () => {
+    const raw = '{"action":"reply","text":"Línea 1\nLínea 2 con viñetas\n* Jugo 1"}';
+    expect(extractJson(raw)).toEqual({
+      action: "reply",
+      text: "Línea 1\nLínea 2 con viñetas\n* Jugo 1",
+    });
+  });
+
+  it("JSON con comas finales (trailing comma)", () => {
+    const raw = '{"action":"reply","text":"hola",}';
+    expect(extractJson(raw)).toEqual({ action: "reply", text: "hola" });
+  });
 });
 
 describe("chatJson (reintentos y errores tipados)", () => {
@@ -90,7 +103,22 @@ describe("chatJson (reintentos y errores tipados)", () => {
 
     const result = await chatJson(schema, [{ role: "user", content: "hola" }]);
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error).toBe("invalid_output");
+    if (!result.ok) {
+      expect(result.error).toBe("invalid_output");
+      expect(result.raw).toBe('{"action":"otra_cosa"}');
+    }
+  });
+
+  it("envía response_format json_object al proveedor", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(providerResponse('{"action":"reply","text":"ok"}'));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await chatJson(schema, [{ role: "user", content: "hola" }]);
+    expect(result.ok).toBe(true);
+    const firstBody = JSON.parse(fetchMock.mock.calls[0]![1]!.body as string);
+    expect(firstBody.response_format).toEqual({ type: "json_object" });
   });
 
   it("sin token → not_configured sin tocar la red", async () => {
@@ -103,5 +131,40 @@ describe("chatJson (reintentos y errores tipados)", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.error).toBe("not_configured");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("Pipeline Helpers: formatAssistantHistoryMessage y extractConversationalText", () => {
+  it("formatAssistantHistoryMessage envuelve texto en JSON reply", async () => {
+    const { formatAssistantHistoryMessage } = await import(
+      "@/server/ai/pipeline"
+    );
+    expect(formatAssistantHistoryMessage("Hola")).toBe(
+      JSON.stringify({ action: "reply", text: "Hola" })
+    );
+    // Si ya era JSON, no lo re-envuelve
+    const alreadyJson = '{"action":"reply","text":"Hola"}';
+    expect(formatAssistantHistoryMessage(alreadyJson)).toBe(alreadyJson);
+  });
+
+  it("extractConversationalText rescata texto conversacional de salidas no estructuradas", async () => {
+    const { extractConversationalText } = await import("@/server/ai/pipeline");
+    const raw1 =
+      "¡No te preocupes! Nuestras entregas son 100% garantizadas y puntuales en los horarios que elijas (8-10am o 6-8pm).";
+    expect(extractConversationalText(raw1)).toBe(raw1);
+
+    const rawMarkdown = "```\nClaro, tenemos tres sabores disponibles\n```";
+    expect(extractConversationalText(rawMarkdown)).toBe(
+      "Claro, tenemos tres sabores disponibles"
+    );
+
+    const brokenJson = '{"action":"reply","text":"Hola, ¿en qué puedo ayudarte?';
+    expect(extractConversationalText(brokenJson)).toBe(
+      "Hola, ¿en qué puedo ayudarte?"
+    );
+
+    // Objetos no conversacionales
+    expect(extractConversationalText("{}")).toBeNull();
+    expect(extractConversationalText("")).toBeNull();
   });
 });
