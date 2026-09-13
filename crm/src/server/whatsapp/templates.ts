@@ -69,6 +69,82 @@ export function serializeTemplate(t: TemplateRow) {
   };
 }
 
+/**
+ * Busca una plantilla APROBADA por ID o por Nombre/Idioma dentro de la organización.
+ * Útil para APIs externas, bots y microservicios.
+ */
+export async function resolveApprovedTemplate(
+  organizationId: string,
+  selector: {
+    templateId?: string;
+    templateName?: string;
+    language?: string;
+    phoneNumberId?: string;
+  }
+): Promise<TemplateRow> {
+  const db = getDb();
+  if (selector.templateId) {
+    const rows = await db
+      .select()
+      .from(schema.template)
+      .where(
+        scoped(
+          schema.template.organizationId,
+          organizationId,
+          eq(schema.template.id, selector.templateId)
+        )
+      )
+      .limit(1);
+    const t = rows[0];
+    if (!t) {
+      throw new TemplateError(
+        "not_found",
+        `Plantilla con ID '${selector.templateId}' no encontrada`
+      );
+    }
+    if (t.status !== "approved") {
+      throw new TemplateError(
+        "invalid",
+        `La plantilla '${t.name}' no está aprobada (estado actual: ${t.status})`
+      );
+    }
+    return t;
+  }
+
+  if (selector.templateName) {
+    const name = selector.templateName.trim().toLowerCase();
+    const language = selector.language?.trim() || "es_MX";
+
+    const conditions = [
+      scoped(schema.template.organizationId, organizationId),
+      eq(schema.template.name, name),
+      eq(schema.template.language, language),
+      eq(schema.template.status, "approved"),
+    ];
+
+    if (selector.phoneNumberId) {
+      conditions.push(eq(schema.template.phoneNumberId, selector.phoneNumberId));
+    }
+
+    const rows = await db
+      .select()
+      .from(schema.template)
+      .where(and(...conditions))
+      .limit(1);
+
+    const t = rows[0];
+    if (!t) {
+      throw new TemplateError(
+        "not_found",
+        `No se encontró una plantilla aprobada con nombre '${name}' e idioma '${language}'`
+      );
+    }
+    return t;
+  }
+
+  throw new TemplateError("invalid", "Debes especificar templateId o templateName");
+}
+
 /** Crea la plantilla y la manda a aprobación de Meta (FR-050) para una línea específica. */
 export async function createTemplate(
   organizationId: string,

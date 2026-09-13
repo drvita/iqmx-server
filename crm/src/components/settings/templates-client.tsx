@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Phone, RefreshCw } from "lucide-react";
+import { Check, Copy, Phone, RefreshCw } from "lucide-react";
 import type { TemplateDto } from "@/lib/types";
 import { countVariables, validateBodyVariables } from "@/lib/templates";
 import { Badge } from "@/components/ui/badge";
@@ -191,6 +191,13 @@ export function TemplatesClient() {
                   Razón del rechazo: {t.rejectionReason}
                 </p>
               )}
+              <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-2.5 text-xs text-muted-foreground">
+                <span className="font-mono text-[11px]">ID: {t.id}</span>
+                <CopyButton text={t.id} label="Copiar ID" />
+                <span className="text-border">·</span>
+                <span className="font-mono text-[11px]">Nombre: {t.name}</span>
+                <CopyButton text={t.name} label="Copiar Nombre" />
+              </div>
             </div>
           );
         })}
@@ -201,6 +208,37 @@ export function TemplatesClient() {
         )}
       </div>
     </div>
+  );
+}
+
+function CopyButton({ text, label }: { text: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = () => {
+    void navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title={`Copiar ${label}`}
+      className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[11px] font-medium text-muted-foreground transition hover:bg-accent hover:text-accent-foreground"
+    >
+      {copied ? (
+        <>
+          <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+          <span className="text-emerald-600 dark:text-emerald-400 font-semibold">Copiado</span>
+        </>
+      ) : (
+        <>
+          <Copy className="h-3 w-3" />
+          <span>{label}</span>
+        </>
+      )}
+    </button>
   );
 }
 

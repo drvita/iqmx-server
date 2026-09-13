@@ -13,6 +13,20 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Añadido
 
+- **Soporte Multi-Número y Multi-WABA para Plantillas de WhatsApp**:
+  - Migración idempotente en [crm/drizzle/0018_template_multi_number.sql](file:///Users/laclavees12345/code/iqissmexico/main/crm/drizzle/0018_template_multi_number.sql) y [crm/src/lib/db/schema.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/db/schema.ts), agregando `phone_number_id` y `waba_id` a la tabla `template` con índice único multi-WABA por `(organization_id, COALESCE(waba_id, ''), name, language)`.
+  - Creación con línea de WhatsApp obligatoria (cero asignaciones por default) en [crm/src/server/whatsapp/templates.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/whatsapp/templates.ts) y [crm/src/app/api/templates/route.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/templates/route.ts).
+  - Sincronización multi-WABA en `syncTemplates` consultando todas las cuentas comerciales activas de la organización o filtrando por línea.
+  - Pruebas automatizadas en [crm/tests/unit/templates-multi-number.test.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/tests/unit/templates-multi-number.test.ts).
+- **Envío de Plantillas desde Cerebros y Bots Externos (`/api/bot/*`)**:
+  - Nuevo endpoint especializado [crm/src/app/api/bot/messages/template/route.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/bot/messages/template/route.ts) autenticado por `X-API-Key` (validación en tiempo constante).
+  - Destino flexible por `conversationId`, `contactId` o directamente por `phone` (dando de alta el contacto y la conversación automáticamente bajo la línea de la plantilla).
+  - Identificación amigable por `templateId` (ID interno) o por `templateName` (nombre oficial en Meta, con idioma por defecto `es_MX`).
+  - Soporte polimórfico en [crm/src/app/api/bot/messages/route.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/bot/messages/route.ts) para enviar texto libre o plantillas en el mismo endpoint.
+  - Documentación técnica lista para desarrolladores e integradores terceros en [crm/docs/bot-templates-api.md](file:///Users/laclavees12345/code/iqissmexico/main/crm/docs/bot-templates-api.md).
+  - Pruebas automatizadas en [crm/tests/unit/bot-template-send.test.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/tests/unit/bot-template-send.test.ts).
+- **Acciones Rápidas de Copiado de Identificadores en `/settings/templates`**:
+  - Botones dedicados con feedback visual para **Copiar ID** y **Copiar Nombre** en cada tarjeta de plantilla en [crm/src/components/settings/templates-client.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/settings/templates-client.tsx).
 - **Filtro Interactivo por Cuenta de WhatsApp en la Bandeja (`/inbox`)**:
   - Selector rápido tipo pills en la cabecera de la lista en [crm/src/components/inbox/conversation-list.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/conversation-list.tsx), permitiendo filtrar conversaciones entre *"Todas las cuentas"* o líneas específicas (ej. *"ice frut"*, *"iqiss mexico"*).
   - Cada pill incluye el indicador de color determinista y el conteo dinámico de conversaciones en tiempo real.
@@ -25,11 +39,22 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Modificado
 
+- **Selector Obligatorio de Línea y Filtros en `/settings/templates`**:
+  - Integración de selector obligatorio de número en el formulario de creación y filtro dinámico por cuenta en [crm/src/components/settings/templates-client.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/settings/templates-client.tsx).
+  - Visualización del número y etiqueta asociada a cada plantilla en sus tarjetas de detalle, resguardando la privacidad de tokens de Meta.
+- **Filtrado Dinámico en Bandeja e Inicio de Conversaciones**:
+  - En [crm/src/components/inbox/template-sender.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/template-sender.tsx) y [crm/src/components/inbox/composer.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/composer.tsx), el selector en conversaciones fuera de la ventana de 24 h filtra automáticamente para mostrar solo plantillas aprobadas de la línea activa.
+  - En [crm/src/app/api/contacts/[id]/start-conversation/route.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/contacts/[id]/start-conversation/route.ts) y [crm/src/components/contacts/start-conversation.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/contacts/start-conversation.tsx), la conversación se inicia y asocia automáticamente con el número autorizado de la plantilla elegida, sin pedir redundancias al operador.
 - **Diferenciación Visual Inmediata de Cuentas en la Lista de Conversaciones**:
   - Indicador de acento vertical en el margen izquierdo de cada tarjeta de conversación en [crm/src/components/inbox/conversation-list.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/conversation-list.tsx) con el color de la línea correspondiente, facilitando el escaneo visual rápido en organizaciones multi-línea.
   - Estandarización de [crm/src/components/inbox/line-badge.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/line-badge.tsx) con icono telefónico (`Phone`), separando la identidad de la línea respecto a las etapas del pipeline (`Nuevo`, `Cliente`) y etiquetas de atención humana para evitar confusiones.
 - **Identificación de Línea Receptora en la Cabecera del Chat Activo**:
   - En [crm/src/components/inbox/inbox-client.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/inbox-client.tsx), se incorporó el distintivo de la línea telefónica junto al nombre del contacto para que el operador confirme siempre desde qué cuenta está respondiendo.
+
+### Corregido
+
+- **Envío Erróneo de Plantillas a través de Líneas por Defecto en Instancias Multi-Línea**:
+  - En [crm/src/server/whatsapp/templates.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/whatsapp/templates.ts), `sendTemplate` resolvía credenciales siempre de la línea default ignorando el número del hilo; ahora resuelve con precisión por la línea autorizada de la conversación (`conversation.phoneNumberId`).
 
 ---
 
