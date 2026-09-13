@@ -394,9 +394,9 @@ export async function retryConversion(
  * para fijar en un test la conversión centavos → unidades: Meta espera unidades
  * de la moneda (450.50) y la base guarda centavos enteros (45050).
  *
- * Meta CAPI exige OBLIGATORIAMENTE el parámetro `currency` en el evento `Purchase`
- * (subcódigo 2804010). Si no viene divisa en el lead, se asigna `DEFAULT_CURRENCY` ("MXN").
- * Sin monto (o en cero) no se manda `value` para no desinformar al optimizador de Meta.
+ * Meta CAPI exige OBLIGATORIAMENTE los parámetros `currency` y `value` en el evento
+ * `Purchase`. Si no viene divisa en el lead, se asigna `DEFAULT_CURRENCY` ("MXN").
+ * Si el monto no fue definido o es <= 0, se asigna un valor por defecto de 1.
  */
 export function purchaseCustomData(amount: {
   amountCents: number | null;
@@ -405,14 +405,15 @@ export function purchaseCustomData(amount: {
   const currency =
     (amount.currency && amount.currency.trim().toUpperCase()) ||
     DEFAULT_CURRENCY;
-  const res: Record<string, unknown> = {
+  const value =
+    amount.amountCents !== null && amount.amountCents > 0
+      ? amount.amountCents / 100
+      : 1;
+  return {
     lead_stage: "won",
     currency,
+    value,
   };
-  if (amount.amountCents !== null && amount.amountCents > 0) {
-    res.value = amount.amountCents / 100;
-  }
-  return res;
 }
 
 /**

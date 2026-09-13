@@ -40,9 +40,10 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 - **Error de Dataset Desvinculado de WABA en Organizaciones Multi-Línea (Subcódigo 2804132)**:
   - Solución al error donde un evento con `whatsapp_business_account_id` de una cuenta secundaria era enviado al dataset de la cuenta primaria, permitiendo que cada conversación reporte exclusivamente a su propio Dataset en Meta.
-- **Omisión de Divisa Obligatoria en Eventos Purchase (Subcódigo 2804010)**:
-  - En [crm/src/server/attribution/conversions.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/attribution/conversions.ts), `purchaseCustomData` ahora garantiza que el parámetro `currency` viaje siempre en el payload para cumplir con el esquema mandatorio de Meta para ventas.
-  - Asignación automática de `DEFAULT_CURRENCY` (`"MXN"` desde [crm/src/lib/money.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/money.ts)) cuando el lead en base de datos no tiene una divisa registrada explícitamente.
+- **Omisión de Parámetros Obligatorios (Divisa y Valor) en Eventos Purchase**:
+  - En [crm/src/server/attribution/conversions.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/attribution/conversions.ts), `purchaseCustomData` ahora garantiza que viajen siempre `currency` y `value` para satisfacer el esquema estricto de Meta para compras.
+  - Asignación automática de `DEFAULT_CURRENCY` (`"MXN"` desde [crm/src/lib/money.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/money.ts)) cuando el lead no tiene divisa explícita.
+  - Asignación automática de `value: 1` cuando el monto del trato no fue capturado o es `<= 0`, previniendo errores de parámetro faltante en Meta.
 
 ---
 
