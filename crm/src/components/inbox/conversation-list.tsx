@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Search, Sparkles, UserRound, X } from "lucide-react";
-import type { ConversationDto } from "@/lib/types";
+import type { ConversationDto, ConversationLineDto } from "@/lib/types";
 import { CHANNEL_LABEL, type Channel } from "@/lib/channels";
 import { ChannelBadge } from "@/components/channel-badge";
 import { matchesQuery } from "@/lib/search";
@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { ContactAvatar } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
 import { formatTime, previewText } from "./helpers";
-import { LineBadge } from "./line-badge";
+import { LineBadge, getLineColor } from "./line-badge";
 
 /* Puntos de etapa con la paleta de la landing: azul, ámbar, verde WhatsApp. */
 const STAGE_DOT: Record<string, string> = {
@@ -63,6 +63,7 @@ function EmptyState({ onSeeded }: { onSeeded: () => void }) {
 export function ConversationList({
   conversations: conversationsProp,
   channels,
+  lines = [],
   selectedId,
   onSelect,
   onSeeded,
@@ -70,6 +71,8 @@ export function ConversationList({
   conversations: ConversationDto[] | null;
   /** Canales encendidos en esta instancia (ADR-001). */
   channels: readonly Channel[];
+  /** Cuentas / líneas telefónicas a las que tiene acceso el usuario. */
+  lines?: readonly ConversationLineDto[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   onSeeded: () => void;
@@ -78,6 +81,7 @@ export function ConversationList({
   const [filter, setFilter] = useState<"all" | "unread">("all");
   const [stage, setStage] = useState<string>("all");
   const [inbox, setInbox] = useState<Channel | "all">("all");
+  const [lineFilter, setLineFilter] = useState<string | "all">("all");
   const inputRef = useRef<HTMLInputElement>(null);
 
   /**
@@ -94,10 +98,11 @@ export function ConversationList({
 
   const loading = conversationsProp === null;
   const conversations = conversationsProp ?? [];
-  // Solo NOMBRE y TELÉFONO, como cualquier filtro de contactos. Antes también
-  // miraba el preview, y como el agente nombra al dueño en sus propios
-  // mensajes, buscar ese nombre devolvía media bandeja. Encima era una
-  // búsqueda de mensajes a medias: solo el último de cada hilo, no el historial.
+
+  // Regla de rol y multi-cuenta: solo se muestra el filtro si el usuario tiene acceso a 2 o más líneas
+  const showLineFilter = (lines?.length ?? 0) > 1;
+
+  // Solo NOMBRE y TELÉFONO, como cualquier filtro de contactos.
   const searched = conversations.filter(
     (c) =>
       matchesQuery(query, {
@@ -105,17 +110,28 @@ export function ConversationList({
         phone: c.contact.phone,
       }) && (stage === "all" || c.stageName === stage)
   );
-  // La bandeja elegida es el filtro de AFUERA: "Todas" y "No leídas" cuentan
-  // dentro de ella, no sobre la suma de los dos canales.
+
+  // Filtro por canal (WhatsApp, Instagram, etc.)
   const inInbox =
     inbox === "all" ? searched : searched.filter((c) => c.channel === inbox);
+
+  // Filtro por cuenta / línea de WhatsApp
+  const inLine =
+    !showLineFilter || lineFilter === "all"
+      ? inInbox
+      : inInbox.filter((c) => c.phoneNumberId === lineFilter);
+
   const inboxCount = (ch: Channel) =>
     searched.filter((c) => c.channel === ch).length;
-  const unreadCount = inInbox.filter((c) => c.unreadCount > 0).length;
+
+  const lineCount = (phoneNumberId: string) =>
+    inInbox.filter((c) => c.phoneNumberId === phoneNumberId).length;
+
+  const unreadCount = inLine.filter((c) => c.unreadCount > 0).length;
   const visible =
-    filter === "unread" ? inInbox.filter((c) => c.unreadCount > 0) : inInbox;
-  // Con un solo canal encendido no hay bandejas que distinguir: ni marca en
-  // los renglones ni filtro. La pantalla queda exactamente como antes de 014.
+    filter === "unread" ? inLine.filter((c) => c.unreadCount > 0) : inLine;
+
+  // Con un solo canal encendido no hay bandejas que distinguir.
   const multiChannel = channels.length > 1;
 
   // Etapas presentes en la bandeja, en el orden en que llegan del pipeline.
@@ -191,10 +207,79 @@ export function ConversationList({
         </div>
       </header>
 
+      {/* Selector de cuenta de WhatsApp: se muestra SOLO si el usuario tiene acceso a 2 o más cuentas */}
+      {showLineFilter && (
+        <div className="flex items-center gap-1.5 overflow-x-auto border-b bg-subtle/35 px-4 py-2 scrollbar-none">
+          <button
+            onClick={() => setLineFilter("all")}
+            aria-pressed={lineFilter === "all"}
+            className={cn(
+              "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11.5px] font-semibold transition-colors",
+              lineFilter === "all"
+                ? "border-brand bg-brand text-brand-fg shadow-xs"
+                : "border-border-strong bg-background text-text-2 hover:border-text-3"
+            )}
+          >
+            Todas las cuentas
+            <span
+              className={cn(
+                "rounded-full px-1.5 text-[10.5px]",
+                lineFilter === "all"
+                  ? "bg-brand-veil text-brand-fg"
+                  : "bg-secondary text-text-3"
+              )}
+            >
+              {inInbox.length}
+            </span>
+          </button>
+          {lines.map((l) => {
+            const active = lineFilter === l.phoneNumberId;
+            const count = lineCount(l.phoneNumberId);
+            const colors = getLineColor(l.phoneNumberId ?? l.name);
+            return (
+              <button
+                key={l.phoneNumberId}
+                onClick={() => setLineFilter(active ? "all" : l.phoneNumberId)}
+                aria-pressed={active}
+                style={
+                  active
+                    ? {
+                        backgroundColor: colors.bg,
+                        borderColor: colors.accentBorder,
+                        color: colors.text,
+                      }
+                    : undefined
+                }
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11.5px] font-semibold transition-colors",
+                  active
+                    ? "shadow-xs"
+                    : "border-border-strong bg-background text-text-2 hover:border-text-3"
+                )}
+              >
+                <span
+                  className="h-2 w-2 rounded-full shrink-0 shadow-xs"
+                  style={{ backgroundColor: colors.dot }}
+                />
+                <span className="truncate max-w-[120px]">{l.name}</span>
+                <span
+                  className={cn(
+                    "rounded-full px-1.5 text-[10.5px]",
+                    active ? "bg-background/80" : "bg-secondary text-text-3"
+                  )}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <div className="flex items-center gap-1.5 border-b px-4 py-2.5">
         {(
           [
-            { id: "all", label: "Todas", count: inInbox.length },
+            { id: "all", label: "Todas", count: inLine.length },
             { id: "unread", label: "No leídas", count: unreadCount },
           ] as const
         ).map((f) => (
@@ -256,11 +341,21 @@ export function ConversationList({
             {visible.map((c) => {
               const unread = c.unreadCount > 0;
               const active = selectedId === c.id;
+              const lineColor =
+                showLineFilter && c.phoneNumberId
+                  ? getLineColor(c.phoneNumberId ?? c.lineName ?? "")
+                  : null;
+
               return (
                 <li key={c.id} className="relative border-b border-border">
-                  {active && (
+                  {active ? (
                     <span className="absolute inset-y-0 left-0 w-[3px] bg-brand" />
-                  )}
+                  ) : lineColor ? (
+                    <span
+                      className="absolute inset-y-0 left-0 w-[3px] opacity-80"
+                      style={{ backgroundColor: lineColor.dot }}
+                    />
+                  ) : null}
                   <button
                     onClick={() => onSelect(c.id)}
                     className={cn(
@@ -311,31 +406,36 @@ export function ConversationList({
                           </span>
                         )}
                       </span>
-                      <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                        {c.lineName && (
-                          <LineBadge
-                            name={c.lineName}
-                            seed={c.phoneNumberId ?? c.lineName}
-                            size="xs"
-                          />
-                        )}
-                        {c.stageName && (
-                          <span className="inline-flex items-center gap-1.5 rounded-full border border-border-strong bg-background px-2 py-0.5 text-[11px] font-medium text-text-2">
-                            <span
-                              className="h-[7px] w-[7px] rounded-full"
-                              style={{
-                                background: STAGE_DOT[c.stageName] ?? STAGE_DOT_FALLBACK,
-                              }}
+                      <span className="mt-1.5 flex flex-wrap items-center justify-between gap-1.5">
+                        <span className="flex items-center gap-1.5">
+                          {c.lineName && (
+                            <LineBadge
+                              name={c.lineName}
+                              seed={c.phoneNumberId ?? c.lineName}
+                              size="xs"
+                              showIcon
                             />
-                            {c.stageName}
-                          </span>
-                        )}
-                        {c.handoffAt && (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-warning-soft bg-warning-tint px-2 py-0.5 text-[11px] text-warning-text">
-                            <UserRound className="h-3 w-3" strokeWidth={1.7} />
-                            Atención humana
-                          </span>
-                        )}
+                          )}
+                        </span>
+                        <span className="flex items-center gap-1.5">
+                          {c.stageName && (
+                            <span className="inline-flex items-center gap-1.5 rounded-full border border-border-strong bg-background px-2 py-0.5 text-[11px] font-medium text-text-2">
+                              <span
+                                className="h-[7px] w-[7px] rounded-full"
+                                style={{
+                                  background: STAGE_DOT[c.stageName] ?? STAGE_DOT_FALLBACK,
+                                }}
+                              />
+                              {c.stageName}
+                            </span>
+                          )}
+                          {c.handoffAt && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-warning-soft bg-warning-tint px-2 py-0.5 text-[11px] text-warning-text">
+                              <UserRound className="h-3 w-3" strokeWidth={1.7} />
+                              Atención humana
+                            </span>
+                          )}
+                        </span>
                       </span>
                     </span>
                   </button>

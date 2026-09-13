@@ -25,6 +25,14 @@ export type ConversationDto = {
   preview: string | null;
 };
 
+/** Línea/cuenta de WhatsApp disponible para el usuario en la bandeja de entrada. */
+export type ConversationLineDto = {
+  phoneNumberId: string;
+  name: string;
+  displayPhone: string | null;
+  isDefault: boolean;
+};
+
 /** 008 — Adjunto de un mensaje, para previsualización en el hilo. */
 export type MessageMediaDto = {
   assetId: string;

@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { ChevronLeft, PanelRight } from "lucide-react";
 import { cn, formatPhone } from "@/lib/utils";
 import { ContactAvatar } from "@/components/avatar";
-import type { ConversationDto, MessageDto } from "@/lib/types";
+import type { ConversationDto, ConversationLineDto, MessageDto } from "@/lib/types";
 import { CHANNEL_LABEL, type Channel } from "@/lib/channels";
 import { ChannelBadge } from "@/components/channel-badge";
 import { useEvents } from "@/components/use-events";
@@ -13,6 +13,7 @@ import { ConversationList } from "./conversation-list";
 import { MessageThread } from "./message-thread";
 import { Composer } from "./composer";
 import { ContactPanel } from "./contact-panel";
+import { LineBadge } from "./line-badge";
 
 /**
  * Texto que ya salió del compositor pero cuyo POST todavía viaja. Existe solo
@@ -40,6 +41,7 @@ export function InboxClient({ channels }: { channels: readonly Channel[] }) {
   const [conversations, setConversations] = useState<ConversationDto[] | null>(
     null
   );
+  const [lines, setLines] = useState<ConversationLineDto[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageDto[]>([]);
   const [pending, setPending] = useState<PendingOut[]>([]);
@@ -75,8 +77,12 @@ export function InboxClient({ channels }: { channels: readonly Channel[] }) {
   const refetchConversations = useCallback(async () => {
     const res = await fetch("/api/conversations").catch(() => null);
     if (!res?.ok) return;
-    const data = (await res.json()) as { conversations: ConversationDto[] };
+    const data = (await res.json()) as {
+      conversations: ConversationDto[];
+      lines?: ConversationLineDto[];
+    };
     setConversations(data.conversations);
+    if (data.lines) setLines(data.lines);
     lastFetchRef.current = new Date().toISOString();
   }, []);
 
@@ -283,6 +289,7 @@ export function InboxClient({ channels }: { channels: readonly Channel[] }) {
         <ConversationList
           conversations={conversations}
           channels={channels}
+          lines={lines}
           selectedId={selectedId}
           onSelect={select}
           onSeeded={() => void refetchConversations()}
@@ -313,10 +320,20 @@ export function InboxClient({ channels }: { channels: readonly Channel[] }) {
                   size="md"
                 />
                 <div className="min-w-0">
-                  <p className="flex min-w-0 items-center gap-1.5 text-[15px] font-bold leading-tight tracking-tight">
-                    {multiChannel && <ChannelBadge channel={selected.channel} />}
-                    <span className="truncate">{selected.contact.name}</span>
-                  </p>
+                  <div className="flex min-w-0 items-center gap-2">
+                    <p className="flex min-w-0 items-center gap-1.5 text-[15px] font-bold leading-tight tracking-tight">
+                      {multiChannel && <ChannelBadge channel={selected.channel} />}
+                      <span className="truncate">{selected.contact.name}</span>
+                    </p>
+                    {selected.lineName && (
+                      <LineBadge
+                        name={selected.lineName}
+                        seed={selected.phoneNumberId ?? selected.lineName}
+                        size="xs"
+                        showIcon
+                      />
+                    )}
+                  </div>
                   <p
                     className={cn(
                       "mt-0.5 font-mono text-[10.5px] tracking-[0.04em]",
