@@ -9,6 +9,43 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [1.9.0] - 2026-09-12
+
+### Añadido
+
+- **Reintento Manual de Conversiones Fallidas en `/settings/ads`**:
+  - Implementación de la acción de reintento (`retryConversion`) en [crm/src/server/attribution/conversions.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/attribution/conversions.ts) para eventos en estado `failed`.
+  - Endpoint dedicado `POST /api/settings/capi/events` en [crm/src/app/api/settings/capi/events/route.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/settings/capi/events/route.ts) con validación por Zod y autenticación de sesión (`withAuth`).
+  - Botón interactivo de *"Reintentar"* con feedback visual de carga por fila en la tabla de *"Actividad reciente"* en [crm/src/components/settings/ads-client.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/settings/ads-client.tsx).
+- **Descubrimiento y Vinculación Automática de Datasets de WhatsApp (`GET /api/settings/capi/waba-dataset`)**:
+  - Nuevo endpoint en [crm/src/app/api/settings/capi/waba-dataset/route.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/settings/capi/waba-dataset/route.ts) que consulta la API de Meta Graph para obtener o vincular el Dataset asociado a cada WhatsApp Business Account (WABA).
+  - Función `getOrLinkWabaDataset` en [crm/src/lib/meta/capi.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/meta/capi.ts) con estrategia en dos fases (`GET /{wabaId}/dataset` y respaldo `POST /{wabaId}/dataset`), caché en memoria (TTL: 1 hora) y soporte de `fallbackToken`.
+  - Acción *"Detectar de WhatsApp"* en el formulario de configuración de CAPI en [crm/src/components/settings/ads-client.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/settings/ads-client.tsx).
+- **Soporte Multi-WABA y Enrutamiento Dinámico de Conversiones**:
+  - Detección de organizaciones multi-línea con diferentes identificadores de WABA en `listCredentialsByOrg`.
+  - Tarjeta informativa en la interfaz de `/settings/ads` cuando se detecta más de una cuenta de WhatsApp, desglosando la línea, su WABA ID, su Dataset y el indicador *"Enrutamiento automático"*.
+
+### Modificado
+
+- **Resolución de Datasets y Credenciales en Tiempo de Ejecución**:
+  - Enrutamiento dinámico en `emitConversion` y `retryConversion` ([crm/src/server/attribution/conversions.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/attribution/conversions.ts)): resuelve el `wabaId` exacto a partir del `phoneNumberId` de la conversación y obtiene su Dataset correspondiente en lugar de depender únicamente de un ID estático.
+  - Mecanismo de respaldo entre tokens: si el token principal falla por permisos del Dataset, reintenta transparentemente con el token de la línea conectada.
+- **Rediseño y Ergonomía Visual en *"Actividad reciente"***:
+  - Definición de anchos de columna fijos y mínimos (`min-w-[...]`) en [crm/src/components/settings/ads-client.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/settings/ads-client.tsx) para evitar compresión de encabezados o botones.
+  - Alertas formateadas de error y truncamiento controlado (`line-clamp-2` con `title` completo) en los detalles de respuesta de Meta.
+- **Diagnóstico Detallado de Errores de Meta Graph API**:
+  - En [crm/src/lib/meta/client.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/meta/client.ts), `MetaApiError` ahora extrae y concatena `error_user_msg`, `error_data` y `error_subcode`, facilitando la identificación precisa de fallos como parámetros faltantes o permisos en vez de mensajes genéricos.
+
+### Corregido
+
+- **Error de Dataset Desvinculado de WABA en Organizaciones Multi-Línea (Subcódigo 2804132)**:
+  - Solución al error donde un evento con `whatsapp_business_account_id` de una cuenta secundaria era enviado al dataset de la cuenta primaria, permitiendo que cada conversación reporte exclusivamente a su propio Dataset en Meta.
+- **Omisión de Divisa Obligatoria en Eventos Purchase (Subcódigo 2804010)**:
+  - En [crm/src/server/attribution/conversions.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/attribution/conversions.ts), `purchaseCustomData` ahora garantiza que el parámetro `currency` viaje siempre en el payload para cumplir con el esquema mandatorio de Meta para ventas.
+  - Asignación automática de `DEFAULT_CURRENCY` (`"MXN"` desde [crm/src/lib/money.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/money.ts)) cuando el lead en base de datos no tiene una divisa registrada explícitamente.
+
+---
+
 ## [1.8.0] - 2026-09-10
 
 ### Añadido

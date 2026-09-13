@@ -13,6 +13,7 @@ import {
 import { isAtribucionEnabled } from "@/server/attribution/flag";
 import { getCapiSettings } from "@/server/attribution/settings";
 import { getAttributionForConversation } from "@/server/attribution/store";
+import { DEFAULT_CURRENCY } from "@/lib/money";
 
 /**
  * 016 — Reporte de conversiones a Meta.
@@ -393,21 +394,25 @@ export async function retryConversion(
  * para fijar en un test la conversión centavos → unidades: Meta espera unidades
  * de la moneda (450.50) y la base guarda centavos enteros (45050).
  *
- * Sin monto (o en cero) devuelve solo la etapa: la venta se cuenta igual, pero
- * sin precio. Mandar `value: 0` no significa "no sé cuánto" — le enseña al
- * optimizador que las ventas de este negocio valen nada.
+ * Meta CAPI exige OBLIGATORIAMENTE el parámetro `currency` en el evento `Purchase`
+ * (subcódigo 2804010). Si no viene divisa en el lead, se asigna `DEFAULT_CURRENCY` ("MXN").
+ * Sin monto (o en cero) no se manda `value` para no desinformar al optimizador de Meta.
  */
 export function purchaseCustomData(amount: {
   amountCents: number | null;
   currency: string | null;
 }): Record<string, unknown> {
-  const base = { lead_stage: "won" };
-  if (amount.amountCents === null || amount.amountCents <= 0) return base;
-  return {
-    ...base,
-    value: amount.amountCents / 100,
-    ...(amount.currency ? { currency: amount.currency } : {}),
+  const currency =
+    (amount.currency && amount.currency.trim().toUpperCase()) ||
+    DEFAULT_CURRENCY;
+  const res: Record<string, unknown> = {
+    lead_stage: "won",
+    currency,
   };
+  if (amount.amountCents !== null && amount.amountCents > 0) {
+    res.value = amount.amountCents / 100;
+  }
+  return res;
 }
 
 /**

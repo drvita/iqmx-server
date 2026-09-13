@@ -21,27 +21,32 @@ describe("purchaseCustomData", () => {
     });
   });
 
-  it("sin monto, la venta se cuenta pero SIN precio", () => {
-    // `value: 0` no significa "no sé cuánto": le enseñaría al optimizador que
+  it("sin monto, la venta se cuenta pero SIN precio y con divisa requerida por Meta", () => {
+    // Meta exige divisa para Purchase (subcódigo 2804010).
+    // `value: 0` no se manda: le enseñaría al optimizador que
     // las ventas de este negocio valen nada.
     expect(purchaseCustomData({ amountCents: null, currency: "MXN" })).toEqual({
       lead_stage: "won",
+      currency: "MXN",
     });
     expect(purchaseCustomData({ amountCents: 0, currency: "MXN" })).toEqual({
       lead_stage: "won",
+      currency: "MXN",
     });
   });
 
   it("un monto negativo tampoco inventa un valor", () => {
     expect(purchaseCustomData({ amountCents: -100, currency: "MXN" })).toEqual({
       lead_stage: "won",
+      currency: "MXN",
     });
   });
 
-  it("sin moneda capturada, manda el valor sin moneda antes que inventarla", () => {
+  it("sin moneda capturada, utiliza DEFAULT_CURRENCY para evitar rechazo de Meta", () => {
     expect(purchaseCustomData({ amountCents: 12300, currency: null })).toEqual({
       lead_stage: "won",
       value: 123,
+      currency: "MXN",
     });
   });
 });
