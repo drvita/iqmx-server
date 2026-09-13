@@ -16,8 +16,12 @@ vi.mock("@/lib/meta/client", async (importOriginal) => {
   return { ...original, graphRequest };
 });
 
-const { buildEventPayload, sendBusinessMessagingEvent, isMetaBusinessMessagingEvent } =
-  await import("@/lib/meta/capi");
+const {
+  buildEventPayload,
+  sendBusinessMessagingEvent,
+  isMetaBusinessMessagingEvent,
+  getOrLinkWabaDataset,
+} = await import("@/lib/meta/capi");
 
 const EVENT = {
   eventName: "QualifiedLead",
@@ -163,3 +167,48 @@ describe("el acuse de Meta", () => {
     ).rejects.toThrow(/events_received=0/);
   });
 });
+
+describe("getOrLinkWabaDataset", () => {
+  it("obtiene el dataset existente mediante GET /{wabaId}/dataset", async () => {
+    graphRequest.mockResolvedValueOnce({ id: "ds_waba_1" });
+    const res = await getOrLinkWabaDataset({
+      wabaId: "WABA_TEST_1",
+      token: "tok_1",
+    });
+    expect(res).toEqual({ id: "ds_waba_1" });
+    expect(graphRequest).toHaveBeenCalledWith(
+      "WABA_TEST_1/dataset",
+      expect.objectContaining({ method: "GET", token: "tok_1" })
+    );
+  });
+
+  it("si GET no devuelve id, recurre a POST /{wabaId}/dataset para enlazarlo", async () => {
+    graphRequest.mockRejectedValueOnce(new Error("No dataset"));
+    graphRequest.mockResolvedValueOnce({ id: "ds_waba_created" });
+    const res = await getOrLinkWabaDataset({
+      wabaId: "WABA_TEST_2",
+      token: "tok_2",
+    });
+    expect(res).toEqual({ id: "ds_waba_created" });
+    expect(graphRequest).toHaveBeenCalledWith(
+      "WABA_TEST_2/dataset",
+      expect.objectContaining({ method: "POST", token: "tok_2" })
+    );
+  });
+
+  it("utiliza fallbackToken si el token principal falla", async () => {
+    graphRequest.mockRejectedValueOnce(new Error("Auth fail line")); // GET tok_primary
+    graphRequest.mockResolvedValueOnce({ id: "ds_waba_fallback" }); // GET fallback
+    const res = await getOrLinkWabaDataset({
+      wabaId: "WABA_TEST_3",
+      token: "tok_primary",
+      fallbackToken: "tok_capi_fallback",
+    });
+    expect(res).toEqual({ id: "ds_waba_fallback" });
+    expect(graphRequest).toHaveBeenCalledWith(
+      "WABA_TEST_3/dataset",
+      expect.objectContaining({ method: "GET", token: "tok_capi_fallback" })
+    );
+  });
+});
+

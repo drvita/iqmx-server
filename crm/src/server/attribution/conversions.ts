@@ -2,7 +2,10 @@ import { and, desc, eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
-import { sendBusinessMessagingEvent } from "@/lib/meta/capi";
+import {
+  getOrLinkWabaDataset,
+  sendBusinessMessagingEvent,
+} from "@/lib/meta/capi";
 import {
   getCredentialsByOrg,
   getCredentialsByPhoneNumberId,
@@ -111,18 +114,51 @@ export async function emitConversion(
       return "skipped";
     }
 
-    try {
-      const ack = await sendBusinessMessagingEvent({
-        datasetId: settings.datasetId,
-        token: settings.token,
-        event: {
-          eventName,
-          eventTime: Math.floor(Date.now() / 1000),
-          ctwaClid: attribution.ctwaClid,
-          wabaId: credentials.wabaId,
-          customData,
-        },
+    // Resolver dataset vinculado a la WABA específica de esta conversación
+    let targetDatasetId = settings.datasetId;
+    if (credentials.wabaId) {
+      const wabaDataset = await getOrLinkWabaDataset({
+        wabaId: credentials.wabaId,
+        token: credentials.token,
+        fallbackToken: settings.token,
       });
+      if (wabaDataset?.id) {
+        targetDatasetId = wabaDataset.id;
+      }
+    }
+
+    try {
+      const primaryToken = settings.token || credentials.token;
+      let ack;
+      try {
+        ack = await sendBusinessMessagingEvent({
+          datasetId: targetDatasetId,
+          token: primaryToken,
+          event: {
+            eventName,
+            eventTime: Math.floor(Date.now() / 1000),
+            ctwaClid: attribution.ctwaClid,
+            wabaId: credentials.wabaId,
+            customData,
+          },
+        });
+      } catch (primaryErr) {
+        if (credentials.token && credentials.token !== primaryToken) {
+          ack = await sendBusinessMessagingEvent({
+            datasetId: targetDatasetId,
+            token: credentials.token,
+            event: {
+              eventName,
+              eventTime: Math.floor(Date.now() / 1000),
+              ctwaClid: attribution.ctwaClid,
+              wabaId: credentials.wabaId,
+              customData,
+            },
+          });
+        } else {
+          throw primaryErr;
+        }
+      }
       await db
         .update(schema.conversionEvent)
         .set({
@@ -270,18 +306,51 @@ export async function retryConversion(
     customData = { lead_stage: "qualified" };
   }
 
-  try {
-    const ack = await sendBusinessMessagingEvent({
-      datasetId: settings.datasetId,
-      token: settings.token,
-      event: {
-        eventName: event.eventName,
-        eventTime: Math.floor(Date.now() / 1000),
-        ctwaClid: attribution.ctwaClid,
-        wabaId: credentials.wabaId,
-        customData,
-      },
+  // Resolver dataset vinculado a la WABA específica de esta conversación
+  let targetDatasetId = settings.datasetId;
+  if (credentials.wabaId) {
+    const wabaDataset = await getOrLinkWabaDataset({
+      wabaId: credentials.wabaId,
+      token: credentials.token,
+      fallbackToken: settings.token,
     });
+    if (wabaDataset?.id) {
+      targetDatasetId = wabaDataset.id;
+    }
+  }
+
+  try {
+    const primaryToken = settings.token || credentials.token;
+    let ack;
+    try {
+      ack = await sendBusinessMessagingEvent({
+        datasetId: targetDatasetId,
+        token: primaryToken,
+        event: {
+          eventName: event.eventName,
+          eventTime: Math.floor(Date.now() / 1000),
+          ctwaClid: attribution.ctwaClid,
+          wabaId: credentials.wabaId,
+          customData,
+        },
+      });
+    } catch (primaryErr) {
+      if (credentials.token && credentials.token !== primaryToken) {
+        ack = await sendBusinessMessagingEvent({
+          datasetId: targetDatasetId,
+          token: credentials.token,
+          event: {
+            eventName: event.eventName,
+            eventTime: Math.floor(Date.now() / 1000),
+            ctwaClid: attribution.ctwaClid,
+            wabaId: credentials.wabaId,
+            customData,
+          },
+        });
+      } else {
+        throw primaryErr;
+      }
+    }
 
     await db
       .update(schema.conversionEvent)

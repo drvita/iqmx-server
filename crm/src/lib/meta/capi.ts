@@ -151,3 +151,72 @@ export function buildEventPayload(
 
   return { data: [data], partner_agent: PARTNER_AGENT };
 }
+
+/** Cache de 1 hora para datasets asociados a cada WABA para no sobrecargar Meta */
+const wabaDatasetCache = new Map<string, { id: string; expiresAt: number }>();
+
+/**
+ * Obtiene o crea el dataset vinculado a una WhatsApp Business Account (WABA).
+ * Meta exige que el dataset al que se envían eventos de business_messaging
+ * esté vinculado directamente a la WABA (subcódigo 2804132).
+ */
+export async function getOrLinkWabaDataset(input: {
+  wabaId: string;
+  token: string;
+  fallbackToken?: string;
+}): Promise<{ id: string } | null> {
+  const cached = wabaDatasetCache.get(input.wabaId);
+  if (cached && Date.now() < cached.expiresAt) {
+    return { id: cached.id };
+  }
+
+  const tokens = [input.token];
+  if (input.fallbackToken && input.fallbackToken !== input.token) {
+    tokens.push(input.fallbackToken);
+  }
+
+  // 1. Intentar GET {wabaId}/dataset con cada token disponible
+  for (const tok of tokens) {
+    try {
+      const getRes = await graphRequest<{ id?: string; data?: { id: string }[] }>(
+        `${input.wabaId}/dataset`,
+        { method: "GET", token: tok }
+      );
+      const id = getRes?.id ?? getRes?.data?.[0]?.id;
+      if (id) {
+        wabaDatasetCache.set(input.wabaId, {
+          id,
+          expiresAt: Date.now() + 3600000,
+        });
+        return { id };
+      }
+    } catch {
+      // Intentar siguiente token o continuar a POST
+    }
+  }
+
+  // 2. Intentar POST {wabaId}/dataset para crear o vincular automáticamente
+  for (const tok of tokens) {
+    try {
+      const postRes = await graphRequest<{ id?: string }>(
+        `${input.wabaId}/dataset`,
+        { method: "POST", token: tok }
+      );
+      if (postRes?.id) {
+        wabaDatasetCache.set(input.wabaId, {
+          id: postRes.id,
+          expiresAt: Date.now() + 3600000,
+        });
+        return { id: postRes.id };
+      }
+    } catch (err) {
+      console.warn(
+        `[capi] intento POST /{wabaId}/dataset falló para WABA ${input.wabaId}:`,
+        err
+      );
+    }
+  }
+
+  return null;
+}
+

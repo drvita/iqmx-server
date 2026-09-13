@@ -73,6 +73,17 @@ export function AdsClient() {
   const [error, setError] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [retryError, setRetryError] = useState<string | null>(null);
+  const [detectingDataset, setDetectingDataset] = useState(false);
+  const [detectSuccess, setDetectSuccess] = useState<string | null>(null);
+  const [accounts, setAccounts] = useState<
+    Array<{
+      wabaId: string;
+      phoneNumber: string | null;
+      label: string | null;
+      datasetId: string | null;
+      error: string | null;
+    }> | null
+  >(null);
 
   const loadActivity = useCallback(async () => {
     const res = await fetch("/api/settings/capi/events").catch(() => null);
@@ -80,6 +91,50 @@ export function AdsClient() {
     const data = (await res.json()) as { events: ActivityRow[] };
     setActivity(data.events);
   }, []);
+
+  async function detectDataset() {
+    setDetectingDataset(true);
+    setError(null);
+    setDetectSuccess(null);
+    try {
+      const res = await fetch("/api/settings/capi/waba-dataset");
+      const data = (await res.json()) as {
+        ok?: boolean;
+        datasetId?: string;
+        accounts?: Array<{
+          wabaId: string;
+          phoneNumber: string | null;
+          label: string | null;
+          datasetId: string | null;
+          error: string | null;
+        }>;
+        error?: string;
+      };
+      if (res.ok && (data.datasetId || (data.accounts && data.accounts.length > 0))) {
+        if (data.datasetId) {
+          setDatasetId(data.datasetId);
+        }
+        if (data.accounts) {
+          setAccounts(data.accounts);
+        }
+        if (data.accounts && data.accounts.length > 1) {
+          setDetectSuccess(
+            `Se detectaron ${data.accounts.length} cuentas de WhatsApp (Multi-WABA). Vocero enruta automáticamente cada evento a su dataset.`
+          );
+        } else if (data.datasetId) {
+          setDetectSuccess(
+            `Dataset ${data.datasetId} detectado y vinculado a WhatsApp.`
+          );
+        }
+      } else {
+        setError(data.error ?? "No se pudo obtener el dataset de WhatsApp.");
+      }
+    } catch {
+      setError("Error al consultar Meta para detectar el dataset.");
+    } finally {
+      setDetectingDataset(false);
+    }
+  }
 
   async function retryEvent(eventId: string) {
     setRetryingId(eventId);
@@ -190,17 +245,73 @@ export function AdsClient() {
           ) : null}
 
           <div className="space-y-1.5">
-            <Label htmlFor="capi-dataset">ID del dataset</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="capi-dataset">ID del conjunto de datos (Dataset)</Label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-6 text-xs text-primary hover:text-primary/80 px-2"
+                disabled={detectingDataset}
+                onClick={() => void detectDataset()}
+              >
+                {detectingDataset ? "Detectando…" : "Detectar de WhatsApp"}
+              </Button>
+            </div>
             <Input
               id="capi-dataset"
               value={datasetId}
               onChange={(e) => setDatasetId(e.target.value)}
               placeholder="1708105527110154"
             />
-            <p className="text-xs text-muted-foreground">
-              Administrador de eventos de Meta → tu conjunto de datos. Suele ser
-              el de tu propia cuenta de WhatsApp.
-            </p>
+            {detectSuccess ? (
+              <p className="text-xs text-success-text">{detectSuccess}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Meta exige que el dataset esté vinculado a tu WhatsApp Business Account (WABA).
+                Puedes pulsar &quot;Detectar de WhatsApp&quot; para obtenerlo automáticamente.
+              </p>
+            )}
+
+            {accounts && accounts.length > 1 && (
+              <div className="rounded-lg border bg-muted/30 p-3 space-y-2 text-xs">
+                <div className="flex items-center justify-between font-medium text-foreground">
+                  <span>Cuentas de WhatsApp (Multi-WABA)</span>
+                  <span className="text-[10px] tracking-wide bg-primary/10 text-primary font-semibold px-2 py-0.5 rounded-full">
+                    Enrutamiento automático
+                  </span>
+                </div>
+                <p className="text-muted-foreground leading-relaxed">
+                  Cada evento se reporta al dataset vinculado a la cuenta de WhatsApp que atendió la conversación.
+                </p>
+                <div className="divide-y divide-border/60 pt-1">
+                  {accounts.map((acc) => (
+                    <div
+                      key={acc.wabaId}
+                      className="flex items-center justify-between py-1.5 font-mono text-[11px]"
+                    >
+                      <div className="truncate pr-2">
+                        <span className="font-medium text-foreground font-sans mr-2">
+                          {acc.label || acc.phoneNumber || "Línea WhatsApp"}
+                        </span>
+                        <span className="text-muted-foreground">WABA: {acc.wabaId}</span>
+                      </div>
+                      <div className="shrink-0">
+                        {acc.datasetId ? (
+                          <span className="text-success-text font-medium">
+                            Dataset: {acc.datasetId}
+                          </span>
+                        ) : (
+                          <span className="text-destructive font-medium">
+                            {acc.error || "Sin dataset"}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="space-y-1.5">
@@ -264,75 +375,100 @@ export function AdsClient() {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Actividad reciente</CardTitle>
-          <CardDescription>
-            Lo último que se le reportó a Meta. Si algo no salió, aquí dice por
-            qué — es la forma de saber si esto funciona, sin salir del CRM.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-center justify-between">
-            <Button variant="outline" onClick={() => void loadActivity()}>
-              Actualizar
-            </Button>
-            {retryError ? (
-              <p className="text-sm text-danger-text" role="alert">
-                {retryError}
-              </p>
-            ) : null}
+        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4">
+          <div className="space-y-1 pr-4">
+            <CardTitle>Actividad reciente</CardTitle>
+            <CardDescription>
+              Lo último que se le reportó a Meta. Si algo no salió, aquí dice por
+              qué — es la forma de saber si esto funciona, sin salir del CRM.
+            </CardDescription>
           </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void loadActivity()}
+            className="shrink-0"
+          >
+            Actualizar
+          </Button>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {retryError ? (
+            <div
+              className="rounded-lg border border-destructive/25 bg-destructive/10 p-3.5 text-xs text-destructive leading-relaxed"
+              role="alert"
+            >
+              <div className="font-semibold mb-1 flex items-center gap-1.5 text-foreground">
+                <span className="inline-block h-2 w-2 rounded-full bg-destructive" />
+                Respuesta de Meta CAPI
+              </div>
+              <p className="text-muted-foreground break-words">{retryError}</p>
+            </div>
+          ) : null}
+
           {activity === null ? (
-            <p className="text-sm text-muted-foreground">Cargando…</p>
+            <p className="text-sm text-muted-foreground py-4 text-center">Cargando actividad…</p>
           ) : activity.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm text-muted-foreground py-4 text-center">
               Todavía no hay conversiones. Aparecerán cuando un lead que llegó
               por un anuncio avance de etapa.
             </p>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto rounded-md border">
               <table className="w-full text-sm">
-                <thead className="kicker text-left">
+                <thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
                   <tr>
-                    <th className="py-2 pr-3 font-medium">Evento</th>
-                    <th className="py-2 pr-3 font-medium">Contacto</th>
-                    <th className="py-2 pr-3 font-medium">Estado</th>
-                    <th className="py-2 pr-3 font-medium">Cuándo</th>
-                    <th className="py-2 pr-3 font-medium">Detalle</th>
-                    <th className="py-2 text-right font-medium">Acción</th>
+                    <th className="py-2.5 px-3 font-medium min-w-[140px]">Evento</th>
+                    <th className="py-2.5 px-3 font-medium min-w-[120px]">Contacto</th>
+                    <th className="py-2.5 px-3 font-medium min-w-[90px]">Estado</th>
+                    <th className="py-2.5 px-3 font-medium min-w-[150px]">Cuándo</th>
+                    <th className="py-2.5 px-3 font-medium min-w-[220px]">Detalle</th>
+                    <th className="py-2.5 px-3 text-right font-medium min-w-[110px]">Acción</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y">
                   {activity.map((row) => (
-                    <tr key={row.id} className="border-t align-top">
-                      <td className="py-2 pr-3">
-                        {EVENT_LABEL[row.eventName] ?? row.eventName}
+                    <tr key={row.id} className="align-middle hover:bg-muted/30 transition-colors">
+                      <td className="py-2.5 px-3">
+                        <span className="font-medium text-foreground">
+                          {EVENT_LABEL[row.eventName] ?? row.eventName}
+                        </span>
                         {row.adHeadline ? (
-                          <span className="block text-xs text-muted-foreground">
+                          <span
+                            className="block text-xs text-muted-foreground line-clamp-1 mt-0.5"
+                            title={row.adHeadline}
+                          >
                             {row.adHeadline}
                           </span>
                         ) : null}
                       </td>
-                      <td className="py-2 pr-3">{row.contactName ?? "—"}</td>
-                      <td className="py-2 pr-3">
+                      <td className="py-2.5 px-3 text-foreground whitespace-nowrap">
+                        {row.contactName ?? "—"}
+                      </td>
+                      <td className="py-2.5 px-3 whitespace-nowrap">
                         <Badge variant={STATUS_VARIANT[row.status]}>
                           {STATUS_LABEL[row.status]}
                         </Badge>
                       </td>
-                      <td className="py-2 pr-3 whitespace-nowrap text-muted-foreground">
+                      <td className="py-2.5 px-3 whitespace-nowrap text-xs text-muted-foreground">
                         {new Date(row.at).toLocaleString()}
                       </td>
-                      <td className="py-2 pr-3 text-xs text-muted-foreground">
-                        {row.error ?? row.fbTraceId ?? "—"}
+                      <td className="py-2.5 px-3 text-xs text-muted-foreground max-w-xs md:max-w-md">
+                        <span
+                          className="line-clamp-2 cursor-help"
+                          title={row.error ?? row.fbTraceId ?? undefined}
+                        >
+                          {row.error ?? row.fbTraceId ?? "—"}
+                        </span>
                       </td>
-                      <td className="py-2 text-right">
+                      <td className="py-2.5 px-3 text-right whitespace-nowrap">
                         {row.status === "failed" ? (
                           <Button
                             size="sm"
                             variant="outline"
                             disabled={retryingId === row.id}
                             onClick={() => void retryEvent(row.id)}
-                            className="h-7 text-xs"
+                            className="h-7 px-2.5 text-xs font-medium"
                           >
                             {retryingId === row.id
                               ? "Reintentando…"
