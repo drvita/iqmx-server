@@ -71,6 +71,8 @@ export function AdsClient() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [retryError, setRetryError] = useState<string | null>(null);
 
   const loadActivity = useCallback(async () => {
     const res = await fetch("/api/settings/capi/events").catch(() => null);
@@ -78,6 +80,29 @@ export function AdsClient() {
     const data = (await res.json()) as { events: ActivityRow[] };
     setActivity(data.events);
   }, []);
+
+  async function retryEvent(eventId: string) {
+    setRetryingId(eventId);
+    setRetryError(null);
+    try {
+      const res = await fetch("/api/settings/capi/events", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ eventId }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as
+          | { error?: { message?: string } }
+          | null;
+        setRetryError(body?.error?.message ?? "Falló el reintento");
+      }
+    } catch {
+      setRetryError("Error de conexión al reintentar");
+    } finally {
+      setRetryingId(null);
+      await loadActivity();
+    }
+  }
 
   useEffect(() => {
     void (async () => {
@@ -188,8 +213,9 @@ export function AdsClient() {
               autoComplete="off"
             />
             <p className="text-xs text-muted-foreground">
-              El token de tu conexión de WhatsApp ya suele poder publicar en el
-              dataset. Solo pega uno si Meta te dio otro distinto.
+              Para evitar errores de permisos, genera este token en Administrador
+              de eventos de Meta → tu Conjunto de datos → Configuración → API de
+              conversiones → Generar token de acceso.
             </p>
           </div>
 
@@ -246,9 +272,16 @@ export function AdsClient() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Button variant="outline" onClick={() => void loadActivity()}>
-            Actualizar
-          </Button>
+          <div className="flex items-center justify-between">
+            <Button variant="outline" onClick={() => void loadActivity()}>
+              Actualizar
+            </Button>
+            {retryError ? (
+              <p className="text-sm text-danger-text" role="alert">
+                {retryError}
+              </p>
+            ) : null}
+          </div>
           {activity === null ? (
             <p className="text-sm text-muted-foreground">Cargando…</p>
           ) : activity.length === 0 ? (
@@ -265,7 +298,8 @@ export function AdsClient() {
                     <th className="py-2 pr-3 font-medium">Contacto</th>
                     <th className="py-2 pr-3 font-medium">Estado</th>
                     <th className="py-2 pr-3 font-medium">Cuándo</th>
-                    <th className="py-2 font-medium">Detalle</th>
+                    <th className="py-2 pr-3 font-medium">Detalle</th>
+                    <th className="py-2 text-right font-medium">Acción</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -288,8 +322,23 @@ export function AdsClient() {
                       <td className="py-2 pr-3 whitespace-nowrap text-muted-foreground">
                         {new Date(row.at).toLocaleString()}
                       </td>
-                      <td className="py-2 text-xs text-muted-foreground">
+                      <td className="py-2 pr-3 text-xs text-muted-foreground">
                         {row.error ?? row.fbTraceId ?? "—"}
+                      </td>
+                      <td className="py-2 text-right">
+                        {row.status === "failed" ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={retryingId === row.id}
+                            onClick={() => void retryEvent(row.id)}
+                            className="h-7 text-xs"
+                          >
+                            {retryingId === row.id
+                              ? "Reintentando…"
+                              : "Reintentar"}
+                          </Button>
+                        ) : null}
                       </td>
                     </tr>
                   ))}

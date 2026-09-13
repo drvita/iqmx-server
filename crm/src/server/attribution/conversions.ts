@@ -3,7 +3,10 @@ import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
 import { sendBusinessMessagingEvent } from "@/lib/meta/capi";
-import { getCredentialsByOrg } from "@/server/whatsapp/credentials";
+import {
+  getCredentialsByOrg,
+  getCredentialsByPhoneNumberId,
+} from "@/server/whatsapp/credentials";
 import { isAtribucionEnabled } from "@/server/attribution/flag";
 import { getCapiSettings } from "@/server/attribution/settings";
 import { getAttributionForConversation } from "@/server/attribution/store";
@@ -75,7 +78,26 @@ export async function emitConversion(
       conversationId
     );
     const settings = await getCapiSettings(organizationId);
-    const credentials = await getCredentialsByOrg(organizationId);
+
+    // Resolver la línea de WhatsApp que atendió la conversación
+    const convRows = await db
+      .select({ phoneNumberId: schema.conversation.phoneNumberId })
+      .from(schema.conversation)
+      .where(
+        and(
+          scoped(schema.conversation.organizationId, organizationId),
+          eq(schema.conversation.id, conversationId)
+        )
+      )
+      .limit(1);
+
+    const conv = convRows[0];
+    let credentials = conv?.phoneNumberId
+      ? await getCredentialsByPhoneNumberId(conv.phoneNumberId)
+      : null;
+    if (!credentials) {
+      credentials = await getCredentialsByOrg(organizationId);
+    }
 
     if (!attribution?.ctwaClid || !settings || !credentials) {
       await db
@@ -131,6 +153,156 @@ export async function emitConversion(
     // quien nos llamó (mover un lead de etapa).
     console.warn(`[capi] emitConversion(${eventName}) falló: ${err}`);
     return "error";
+  }
+}
+
+export type RetryConversionOutcome = {
+  ok: boolean;
+  status: "sent" | "failed";
+  fbTraceId?: string | null;
+  error?: string | null;
+};
+
+/**
+ * Reintenta reportar un evento que previamente falló a Meta CAPI.
+ * Solo procede si el evento existe y se encuentra en estado 'failed'.
+ */
+export async function retryConversion(
+  organizationId: string,
+  eventId: string
+): Promise<RetryConversionOutcome> {
+  const db = getDb();
+
+  const eventRows = await db
+    .select()
+    .from(schema.conversionEvent)
+    .where(
+      and(
+        scoped(schema.conversionEvent.organizationId, organizationId),
+        eq(schema.conversionEvent.id, eventId)
+      )
+    )
+    .limit(1);
+
+  const event = eventRows[0];
+  if (!event) {
+    return { ok: false, status: "failed", error: "Evento no encontrado" };
+  }
+
+  if (event.status !== "failed") {
+    return {
+      ok: false,
+      status: event.status as "sent" | "failed",
+      error: "Solo los eventos fallidos pueden reintentarse",
+    };
+  }
+
+  const attribution = await getAttributionForConversation(
+    organizationId,
+    event.conversationId
+  );
+  const settings = await getCapiSettings(organizationId);
+
+  const convRows = await db
+    .select({ phoneNumberId: schema.conversation.phoneNumberId })
+    .from(schema.conversation)
+    .where(
+      and(
+        scoped(schema.conversation.organizationId, organizationId),
+        eq(schema.conversation.id, event.conversationId)
+      )
+    )
+    .limit(1);
+
+  const conv = convRows[0];
+  let credentials = conv?.phoneNumberId
+    ? await getCredentialsByPhoneNumberId(conv.phoneNumberId)
+    : null;
+  if (!credentials) {
+    credentials = await getCredentialsByOrg(organizationId);
+  }
+
+  if (!attribution?.ctwaClid || !settings || !credentials) {
+    const reason = !attribution?.ctwaClid
+      ? NO_CLID_REASON
+      : NOT_CONFIGURED_REASON;
+    await db
+      .update(schema.conversionEvent)
+      .set({
+        error: reason,
+      })
+      .where(eq(schema.conversionEvent.id, event.id));
+    return { ok: false, status: "failed", error: reason };
+  }
+
+  // Reconstruir customData si era Purchase
+  let customData: Record<string, unknown> | undefined;
+  if (event.eventName === PURCHASE_EVENT) {
+    const leadRows = await db
+      .select({
+        amountCents: schema.lead.amountCents,
+        currency: schema.lead.currency,
+      })
+      .from(schema.conversation)
+      .innerJoin(
+        schema.lead,
+        and(
+          eq(schema.lead.organizationId, schema.conversation.organizationId),
+          eq(schema.lead.contactId, schema.conversation.contactId)
+        )
+      )
+      .where(
+        and(
+          scoped(schema.conversation.organizationId, organizationId),
+          eq(schema.conversation.id, event.conversationId)
+        )
+      )
+      .limit(1);
+    customData = purchaseCustomData(leadRows[0] ?? { amountCents: null, currency: null });
+  } else if (event.eventName === QUALIFIED_EVENT) {
+    customData = { lead_stage: "qualified" };
+  }
+
+  try {
+    const ack = await sendBusinessMessagingEvent({
+      datasetId: settings.datasetId,
+      token: settings.token,
+      event: {
+        eventName: event.eventName,
+        eventTime: Math.floor(Date.now() / 1000),
+        ctwaClid: attribution.ctwaClid,
+        wabaId: credentials.wabaId,
+        customData,
+      },
+    });
+
+    await db
+      .update(schema.conversionEvent)
+      .set({
+        status: "sent",
+        attributionId: attribution.id,
+        sentAt: new Date(),
+        fbTraceId: ack.fbTraceId,
+        error: null,
+      })
+      .where(eq(schema.conversionEvent.id, event.id));
+
+    return { ok: true, status: "sent", fbTraceId: ack.fbTraceId };
+  } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    await db
+      .update(schema.conversionEvent)
+      .set({
+        status: "failed",
+        attributionId: attribution.id,
+        error: errorMsg,
+      })
+      .where(eq(schema.conversionEvent.id, event.id));
+
+    console.warn(
+      `[capi] fallo al reintentar ${event.eventName} de ${event.conversationId}: ${err}`
+    );
+    return { ok: false, status: "failed", error: errorMsg };
   }
 }
 

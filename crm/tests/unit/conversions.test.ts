@@ -104,4 +104,10 @@ describe("guardarraíles del reporte", () => {
     const txEnd = gate.indexOf("  });");
     expect(gate.indexOf("reportStageChange(", txEnd)).toBeGreaterThan(txEnd);
   });
+
+  it("el reintento manual exige que el evento esté en failed", () => {
+    // Solo los eventos fallidos se pueden reintentar (no enviados ni omitidos)
+    expect(source).toContain('event.status !== "failed"');
+    expect(source).toContain("retryConversion");
+  });
 });
