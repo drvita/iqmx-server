@@ -74,9 +74,35 @@ export async function graphRequest<T>(
   }
 
   if (!res.ok) {
-    const err = (json as { error?: { message?: string; code?: number; type?: string } })
-      ?.error;
-    throw new MetaApiError(err?.message ?? `Meta respondió ${res.status}`, {
+    const err = (json as {
+      error?: {
+        message?: string;
+        code?: number;
+        type?: string;
+        error_subcode?: number;
+        error_user_title?: string;
+        error_user_msg?: string;
+        error_data?: unknown;
+        fbtrace_id?: string;
+      };
+    })?.error;
+
+    const extra: string[] = [];
+    if (err?.error_user_title) extra.push(err.error_user_title);
+    if (err?.error_user_msg) extra.push(err.error_user_msg);
+    if (err?.error_data) {
+      extra.push(
+        typeof err.error_data === "string"
+          ? err.error_data
+          : JSON.stringify(err.error_data)
+      );
+    }
+    if (err?.error_subcode) extra.push(`subcódigo ${err.error_subcode}`);
+
+    const baseMsg = err?.message ?? `Meta respondió ${res.status}`;
+    const fullMsg = extra.length > 0 ? `${baseMsg} (${extra.join(" — ")})` : baseMsg;
+
+    throw new MetaApiError(fullMsg, {
       status: res.status,
       code: err?.code ?? null,
       type: err?.type ?? null,

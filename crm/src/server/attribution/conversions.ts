@@ -135,17 +135,24 @@ export async function emitConversion(
         .where(eq(schema.conversionEvent.id, event.id));
       return "sent";
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
       await db
         .update(schema.conversionEvent)
         .set({
           status: "failed",
           attributionId: attribution.id,
-          error: err instanceof Error ? err.message : String(err),
+          error: errorMsg,
         })
         .where(eq(schema.conversionEvent.id, event.id));
       console.warn(
-        `[capi] fallo al reportar ${eventName} de ${conversationId}: ${err}`
+        `[capi] fallo al reportar ${eventName} de ${conversationId}: ${errorMsg}`
       );
+      if (err && typeof err === "object" && "details" in err) {
+        console.warn(
+          `[capi] respuesta detallada de Meta:`,
+          JSON.stringify((err as { details: unknown }).details, null, 2)
+        );
+      }
       return "failed";
     }
   } catch (err) {
@@ -300,8 +307,14 @@ export async function retryConversion(
       .where(eq(schema.conversionEvent.id, event.id));
 
     console.warn(
-      `[capi] fallo al reintentar ${event.eventName} de ${event.conversationId}: ${err}`
+      `[capi] fallo al reintentar ${event.eventName} de ${event.conversationId}: ${errorMsg}`
     );
+    if (err && typeof err === "object" && "details" in err) {
+      console.warn(
+        `[capi] respuesta detallada de Meta:`,
+        JSON.stringify((err as { details: unknown }).details, null, 2)
+      );
+    }
     return { ok: false, status: "failed", error: errorMsg };
   }
 }
