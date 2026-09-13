@@ -13,9 +13,11 @@ import { Label } from "@/components/ui/label";
  */
 export function TemplateSender({
   conversationId,
+  phoneNumberId,
   onSent,
 }: {
   conversationId: string;
+  phoneNumberId?: string | null;
   onSent: () => void;
 }) {
   const [templates, setTemplates] = useState<TemplateDto[] | null>(null);
@@ -26,7 +28,10 @@ export function TemplateSender({
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/templates")
+    const url = phoneNumberId
+      ? `/api/templates?phoneNumberId=${encodeURIComponent(phoneNumberId)}`
+      : "/api/templates";
+    fetch(url)
       .then((r) => (r.ok ? r.json() : { templates: [] }))
       .then((d: { templates?: TemplateDto[] }) => {
         if (!cancelled) {
@@ -41,7 +46,7 @@ export function TemplateSender({
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [phoneNumberId]);
 
   if (templates === null) {
     return <p className="text-xs text-muted-foreground">Cargando plantillas…</p>;

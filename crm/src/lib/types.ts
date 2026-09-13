@@ -90,6 +90,8 @@ export type TemplateDto = {
   body: string;
   status: "draft" | "pending" | "approved" | "rejected";
   rejectionReason: string | null;
+  phoneNumberId?: string | null;
+  wabaId?: string | null;
 };
 
 export type StageDto = {

@@ -685,12 +685,19 @@ export const template = pgTable(
       .default("draft"),
     rejectionReason: text("rejection_reason"),
     waTemplateId: text("wa_template_id"),
+    /** Línea de WhatsApp a la que pertenece esta plantilla (NULL solo en legacy pre-migración). */
+    phoneNumberId: text("phone_number_id"),
+    /** WABA ID de Meta donde vive la plantilla en Cloud API. */
+    wabaId: text("waba_id"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex("template_org_name_lang_uq").on(
+    index("template_org_phone_idx").on(t.organizationId, t.phoneNumberId),
+    index("template_org_waba_idx").on(t.organizationId, t.wabaId),
+    uniqueIndex("template_org_waba_name_lang_uq").on(
       t.organizationId,
+      sql`coalesce(${t.wabaId}, '')`,
       t.name,
       t.language
     ),

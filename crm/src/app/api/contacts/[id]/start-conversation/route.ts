@@ -42,6 +42,23 @@ export const POST = withAuth(async (session, req: Request, ctx: Params) => {
   if (!body.ok) return body.response;
 
   const db = getDb();
+  const templates = await db
+    .select()
+    .from(schema.template)
+    .where(
+      scoped(
+        schema.template.organizationId,
+        session.organizationId,
+        eq(schema.template.id, body.data.templateId)
+      )
+    )
+    .limit(1);
+  const template = templates[0];
+  if (!template) return apiError(404, "not_found", "Plantilla no encontrada");
+  if (template.status !== "approved") {
+    return apiError(422, "invalid", "Solo se pueden enviar plantillas aprobadas");
+  }
+
   const existing = await db
     .select({ id: schema.conversation.id, lastInboundAt: schema.conversation.lastInboundAt })
     .from(schema.conversation)
@@ -50,7 +67,10 @@ export const POST = withAuth(async (session, req: Request, ctx: Params) => {
         schema.conversation.organizationId,
         session.organizationId,
         eq(schema.conversation.contactId, id),
-        eq(schema.conversation.isTest, false)
+        eq(schema.conversation.isTest, false),
+        template.phoneNumberId
+          ? eq(schema.conversation.phoneNumberId, template.phoneNumberId)
+          : undefined
       )
     )
     .limit(1);
@@ -66,7 +86,11 @@ export const POST = withAuth(async (session, req: Request, ctx: Params) => {
   }
 
   const conversation =
-    existing[0] ?? (await getOrCreateConversation(session.organizationId, id));
+    existing[0] ??
+    (await getOrCreateConversation(session.organizationId, id, {
+      channel: "whatsapp",
+      phoneNumberId: template.phoneNumberId,
+    }));
 
   try {
     const result = await sendTemplate({

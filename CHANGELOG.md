@@ -9,6 +9,30 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ---
 
+## [1.10.0] - 2026-09-13
+
+### Añadido
+
+- **Filtro Interactivo por Cuenta de WhatsApp en la Bandeja (`/inbox`)**:
+  - Selector rápido tipo pills en la cabecera de la lista en [crm/src/components/inbox/conversation-list.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/conversation-list.tsx), permitiendo filtrar conversaciones entre *"Todas las cuentas"* o líneas específicas (ej. *"ice frut"*, *"iqiss mexico"*).
+  - Cada pill incluye el indicador de color determinista y el conteo dinámico de conversaciones en tiempo real.
+  - **Control Estricto de Roles y Visibilidad:** El filtro se despliega únicamente cuando el usuario tiene acceso a 2 o más cuentas. Se oculta automáticamente si la organización solo tiene 1 línea o si el usuario es un agente con una sola línea autorizada.
+- **Resolución de Líneas Accesibles por Sesión en `GET /api/conversations`**:
+  - En [crm/src/app/api/conversations/route.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/conversations/route.ts), el endpoint consulta las líneas disponibles y entrega el listado seguro `lines: ConversationLineDto[]` cruzando con `getMemberLineAccess` para agentes y `listCredentialsByOrg` para administradores/dueños.
+  - DTO `ConversationLineDto` definido en [crm/src/lib/types.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/types.ts).
+- **Pruebas Automatizadas de Filtrado y Roles de Bandeja**:
+  - Suite de pruebas unitarias en [crm/tests/unit/inbox-lines-filter.test.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/tests/unit/inbox-lines-filter.test.ts) validando el determinismo de la paleta de colores, la regla de visibilidad condicional de roles y el filtrado estricto de conversaciones.
+
+### Modificado
+
+- **Diferenciación Visual Inmediata de Cuentas en la Lista de Conversaciones**:
+  - Indicador de acento vertical en el margen izquierdo de cada tarjeta de conversación en [crm/src/components/inbox/conversation-list.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/conversation-list.tsx) con el color de la línea correspondiente, facilitando el escaneo visual rápido en organizaciones multi-línea.
+  - Estandarización de [crm/src/components/inbox/line-badge.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/line-badge.tsx) con icono telefónico (`Phone`), separando la identidad de la línea respecto a las etapas del pipeline (`Nuevo`, `Cliente`) y etiquetas de atención humana para evitar confusiones.
+- **Identificación de Línea Receptora en la Cabecera del Chat Activo**:
+  - En [crm/src/components/inbox/inbox-client.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/inbox-client.tsx), se incorporó el distintivo de la línea telefónica junto al nombre del contacto para que el operador confirme siempre desde qué cuenta está respondiendo.
+
+---
+
 ## [1.9.0] - 2026-09-12
 
 ### Añadido

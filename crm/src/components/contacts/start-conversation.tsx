@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -22,6 +22,12 @@ function countVariables(body: string): number {
  * una decisión del CRM. Si la ventana de 24 h está abierta, este panel ni se
  * muestra: gastar una plantilla ahí sería tirar dinero.
  */
+type WhatsAppLine = {
+  phoneNumberId: string;
+  displayPhoneNumber: string | null;
+  label: string | null;
+};
+
 export function StartConversation({
   contactId,
   onStarted,
@@ -30,6 +36,7 @@ export function StartConversation({
   onStarted: (conversationId: string) => void;
 }) {
   const [templates, setTemplates] = useState<TemplateDto[] | null>(null);
+  const [lines, setLines] = useState<Record<string, WhatsAppLine>>({});
   const [templateId, setTemplateId] = useState("");
   const [vars, setVars] = useState<string[]>([]);
   const [enviando, setEnviando] = useState(false);
@@ -37,9 +44,22 @@ export function StartConversation({
 
   useEffect(() => {
     void (async () => {
-      const res = await fetch("/api/templates").catch(() => null);
-      if (!res?.ok) return setTemplates([]);
-      const data = (await res.json()) as { templates: TemplateDto[] };
+      const [tRes, wRes] = await Promise.all([
+        fetch("/api/templates").catch(() => null),
+        fetch("/api/settings/whatsapp").catch(() => null),
+      ]);
+
+      if (wRes?.ok) {
+        const wData = (await wRes.json()) as { connections?: WhatsAppLine[] };
+        const lMap: Record<string, WhatsAppLine> = {};
+        for (const c of wData.connections ?? []) {
+          lMap[c.phoneNumberId] = c;
+        }
+        setLines(lMap);
+      }
+
+      if (!tRes?.ok) return setTemplates([]);
+      const data = (await tRes.json()) as { templates: TemplateDto[] };
       const aprobadas = data.templates.filter((t) => t.status === "approved");
       setTemplates(aprobadas);
       setTemplateId(aprobadas[0]?.id ?? "");
@@ -108,11 +128,15 @@ export function StartConversation({
         aria-label="Plantilla para iniciar"
         className="h-9 w-full rounded-md border border-input bg-card px-2 text-sm"
       >
-        {templates.map((t) => (
-          <option key={t.id} value={t.id}>
-            {t.name} ({t.language})
-          </option>
-        ))}
+        {templates.map((t) => {
+          const l = t.phoneNumberId ? lines[t.phoneNumberId] : null;
+          const lineLabel = l ? ` · ${l.label || l.displayPhoneNumber || ""}` : "";
+          return (
+            <option key={t.id} value={t.id}>
+              {t.name} ({t.language}){lineLabel}
+            </option>
+          );
+        })}
       </select>
 
       {elegida && (

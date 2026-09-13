@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef, useState } from "react";
 import {
@@ -211,7 +211,11 @@ export function Composer({
             </p>
           </div>
         </div>
-        <TemplateSender conversationId={conversation.id} onSent={onSent} />
+        <TemplateSender
+          conversationId={conversation.id}
+          phoneNumberId={conversation.phoneNumberId}
+          onSent={onSent}
+        />
       </div>
     );
   }

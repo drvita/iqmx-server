@@ -12,9 +12,14 @@ export const dynamic = "force-dynamic";
  * el modo agencia: los webhooks de plantillas no siguen el override de
  * callback (limitación de Meta documentada en el README).
  */
-export const POST = withAuth(async (session) => {
+export const POST = withAuth(async (session, req: Request) => {
   try {
-    const updated = await syncTemplates(session.organizationId);
+    const url = new URL(req.url);
+    const phoneNumberId = url.searchParams.get("phoneNumberId")?.trim() || undefined;
+
+    const updated = await syncTemplates(session.organizationId, {
+      phoneNumberId,
+    });
     return Response.json({ ok: true, updated });
   } catch (err) {
     if (err instanceof TemplateError) {

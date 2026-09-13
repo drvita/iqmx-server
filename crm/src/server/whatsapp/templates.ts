@@ -12,7 +12,9 @@ import { scoped } from "@/lib/db/tenant";
 import { publish } from "@/server/events/bus";
 import {
   getCredentialsByOrg,
+  getCredentialsByPhoneNumberId,
   getCredentialsByWabaId,
+  listCredentialsByOrg,
   markReconnectRequired,
 } from "@/server/whatsapp/credentials";
 import { callGraphSend, SendError } from "@/server/inbox/send";
@@ -62,23 +64,44 @@ export function serializeTemplate(t: TemplateRow) {
     body: t.body,
     status: t.status,
     rejectionReason: t.rejectionReason,
+    phoneNumberId: t.phoneNumberId,
+    wabaId: t.wabaId,
   };
 }
 
-/** Crea la plantilla y la manda a aprobación de Meta (FR-050). */
+/** Crea la plantilla y la manda a aprobación de Meta (FR-050) para una línea específica. */
 export async function createTemplate(
   organizationId: string,
-  input: { name: string; language: string; category: string; body: string }
+  input: {
+    phoneNumberId: string;
+    name: string;
+    language: string;
+    category: string;
+    body: string;
+  }
 ): Promise<TemplateRow> {
   const variableError = validateBodyVariables(input.body);
   if (variableError) throw new TemplateError("invalid", variableError);
 
-  const creds = await getCredentialsByOrg(organizationId);
-  if (!creds) {
-    throw new TemplateError("not_connected", "Conecta tu número de WhatsApp primero");
+  if (!input.phoneNumberId || !input.phoneNumberId.trim()) {
+    throw new TemplateError(
+      "invalid",
+      "Debes seleccionar la línea de WhatsApp a la que pertenece esta plantilla"
+    );
+  }
+
+  const creds = await getCredentialsByPhoneNumberId(input.phoneNumberId.trim());
+  if (!creds || creds.organizationId !== organizationId) {
+    throw new TemplateError(
+      "not_connected",
+      "La línea de WhatsApp seleccionada no existe o no pertenece a tu organización"
+    );
   }
   if (creds.status === "reconnect_required") {
-    throw new TemplateError("reconnect_required", "Reconecta tu número antes de crear plantillas");
+    throw new TemplateError(
+      "reconnect_required",
+      "Reconecta la línea seleccionada antes de crear plantillas"
+    );
   }
 
   const name = input.name
@@ -137,6 +160,8 @@ export async function createTemplate(
     .values({
       id: newId("template"),
       organizationId,
+      phoneNumberId: creds.phoneNumberId,
+      wabaId: creds.wabaId,
       name,
       language: input.language,
       category: input.category,
@@ -147,10 +172,12 @@ export async function createTemplate(
     .onConflictDoUpdate({
       target: [
         schema.template.organizationId,
+        schema.template.wabaId,
         schema.template.name,
         schema.template.language,
       ],
       set: {
+        phoneNumberId: creds.phoneNumberId,
         category: input.category,
         body: input.body,
         status: "pending",
@@ -176,66 +203,103 @@ function mapMetaStatus(
 }
 
 /**
- * Sincroniza estados desde Graph (`GET {waba}/message_templates`). Cubre el
- * modo agencia: los webhooks de plantillas NO siguen el override de callback,
- * así que el pull es la vía universal (DV-VC-04/DV-VC-15).
+ * Sincroniza estados desde Graph (`GET {waba}/message_templates`).
+ * Sincroniza todas las WABAs de las líneas activas de la organización
+ * o la WABA de una línea específica si se pasa `phoneNumberId`.
  */
-export async function syncTemplates(organizationId: string): Promise<number> {
-  const creds = await getCredentialsByOrg(organizationId);
-  if (!creds) {
+export async function syncTemplates(
+  organizationId: string,
+  opts?: { phoneNumberId?: string }
+): Promise<number> {
+  const allCreds = await listCredentialsByOrg(organizationId);
+  if (allCreds.length === 0) {
     throw new TemplateError("not_connected", "Conecta tu número de WhatsApp primero");
   }
 
-  let data: {
-    data?: { id?: string; name?: string; language?: string; status?: string; category?: string; quality_score?: unknown; rejected_reason?: string }[];
-  };
-  try {
-    data = await graphRequest(`${creds.wabaId}/message_templates`, {
-      token: creds.token,
-    });
-  } catch (err) {
-    if (err instanceof MetaApiError) {
-      if (err.isAuthError) {
-        await markReconnectRequired(organizationId);
-        throw new TemplateError("reconnect_required", "El token expiró: reconecta el número");
-      }
-      throw new TemplateError("meta_unavailable", "No se pudo consultar Meta");
+  const targetCreds = opts?.phoneNumberId
+    ? allCreds.filter((c) => c.phoneNumberId === opts.phoneNumberId)
+    : allCreds;
+
+  if (targetCreds.length === 0) {
+    throw new TemplateError(
+      "not_found",
+      "No se encontró la línea de WhatsApp especificada"
+    );
+  }
+
+  // Agrupar por wabaId para no duplicar llamadas si 2 números comparten WABA
+  const wabaMap = new Map<string, (typeof allCreds)[number]>();
+  for (const c of targetCreds) {
+    if (!wabaMap.has(c.wabaId)) {
+      wabaMap.set(c.wabaId, c);
     }
-    throw err;
   }
 
   const db = getDb();
-  const local = await db
-    .select()
-    .from(schema.template)
-    .where(scoped(schema.template.organizationId, organizationId));
-
   let updated = 0;
-  for (const remote of data.data ?? []) {
-    const status = mapMetaStatus(remote.status);
-    if (!status) continue;
-    const match = local.find(
-      (t) =>
-        (remote.id && t.waTemplateId === remote.id) ||
-        (t.name === remote.name && t.language === remote.language)
-    );
-    if (!match) continue;
-    // Meta reclasifica la categoría al aprobar (una UTILITY puede volverse
-    // MARKETING, lo que cambia el costo por conversación): es autoridad.
-    const category = remote.category ?? match.category;
-    if (match.status === status && match.category === category) continue;
-    await db
-      .update(schema.template)
-      .set({
-        status,
-        category,
-        rejectionReason: remote.rejected_reason ?? null,
-        waTemplateId: match.waTemplateId ?? remote.id ?? null,
-        updatedAt: new Date(),
-      })
-      .where(eq(schema.template.id, match.id));
-    updated += 1;
+
+  for (const [wabaId, creds] of wabaMap.entries()) {
+    let data: {
+      data?: {
+        id?: string;
+        name?: string;
+        language?: string;
+        status?: string;
+        category?: string;
+        quality_score?: unknown;
+        rejected_reason?: string;
+      }[];
+    };
+    try {
+      data = await graphRequest(`${wabaId}/message_templates`, {
+        token: creds.token,
+      });
+    } catch (err) {
+      if (err instanceof MetaApiError) {
+        if (err.isAuthError) {
+          await markReconnectRequired(organizationId);
+          throw new TemplateError("reconnect_required", "El token expiró: reconecta el número");
+        }
+        throw new TemplateError("meta_unavailable", "No se pudo consultar Meta");
+      }
+      throw err;
+    }
+
+    const local = await db
+      .select()
+      .from(schema.template)
+      .where(
+        and(
+          scoped(schema.template.organizationId, organizationId),
+          eq(schema.template.wabaId, wabaId)
+        )
+      );
+
+    for (const remote of data.data ?? []) {
+      const status = mapMetaStatus(remote.status);
+      if (!status) continue;
+      const match = local.find(
+        (t) =>
+          (remote.id && t.waTemplateId === remote.id) ||
+          (t.name === remote.name && t.language === remote.language)
+      );
+      if (!match) continue;
+      const category = remote.category ?? match.category;
+      if (match.status === status && match.category === category) continue;
+      await db
+        .update(schema.template)
+        .set({
+          status,
+          category,
+          rejectionReason: remote.rejected_reason ?? null,
+          waTemplateId: match.waTemplateId ?? remote.id ?? null,
+          updatedAt: new Date(),
+        })
+        .where(eq(schema.template.id, match.id));
+      updated += 1;
+    }
   }
+
   return updated;
 }
 
@@ -264,6 +328,7 @@ export async function applyTemplateStatusEvent(
     .where(
       and(
         eq(schema.template.organizationId, creds.organizationId),
+        eq(schema.template.wabaId, wabaId),
         eq(schema.template.name, name),
         eq(schema.template.language, language)
       )
@@ -337,10 +402,21 @@ export async function sendTemplate(input: {
     );
   }
 
-  const creds = await getCredentialsByOrg(input.organizationId);
+  const targetPhoneId = row.conversation.phoneNumberId ?? template.phoneNumberId;
+  const creds = targetPhoneId
+    ? await getCredentialsByPhoneNumberId(targetPhoneId)
+    : await getCredentialsByOrg(input.organizationId);
   if (!creds) throw new TemplateError("not_connected", "Sin número conectado");
   if (creds.status === "reconnect_required") {
     throw new TemplateError("reconnect_required", "Reconecta el número");
+  }
+
+  // Si la conversación no tenía línea asignada, asignarla a la línea por la que se envía
+  if (!row.conversation.phoneNumberId && creds.phoneNumberId) {
+    await db
+      .update(schema.conversation)
+      .set({ phoneNumberId: creds.phoneNumberId, updatedAt: new Date() })
+      .where(eq(schema.conversation.id, input.conversationId));
   }
 
   // 003: destinatario = teléfono normalizado o BSUID.

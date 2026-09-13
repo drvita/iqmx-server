@@ -1,15 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import Link from "next/link";
+import { Phone, RefreshCw } from "lucide-react";
 import type { TemplateDto } from "@/lib/types";
 import { countVariables, validateBodyVariables } from "@/lib/templates";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 
 const STATUS_BADGE: Record<
   TemplateDto["status"],
@@ -21,33 +23,54 @@ const STATUS_BADGE: Record<
   rejected: { label: "Rechazada", variant: "destructive" },
 };
 
+type WhatsAppLine = {
+  id: string;
+  wabaId: string;
+  phoneNumberId: string;
+  displayPhoneNumber: string | null;
+  verifiedName: string | null;
+  label: string | null;
+  isDefault: boolean;
+  status: "connected" | "reconnect_required";
+};
+
 export function TemplatesClient() {
   const [templates, setTemplates] = useState<TemplateDto[]>([]);
+  const [lines, setLines] = useState<WhatsAppLine[]>([]);
+  const [filterPhoneId, setFilterPhoneId] = useState<string>("all");
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
 
-  const refetch = useCallback(async () => {
-    const res = await fetch("/api/templates").catch(() => null);
+  const fetchLines = useCallback(async () => {
+    const res = await fetch("/api/settings/whatsapp").catch(() => null);
+    if (!res?.ok) return;
+    const data = (await res.json()) as { connections?: WhatsAppLine[] };
+    setLines(data.connections ?? []);
+  }, []);
+
+  const refetch = useCallback(async (phoneId?: string) => {
+    const activeFilter = phoneId !== undefined ? phoneId : filterPhoneId;
+    const url =
+      activeFilter && activeFilter !== "all"
+        ? `/api/templates?phoneNumberId=${encodeURIComponent(activeFilter)}`
+        : "/api/templates";
+    const res = await fetch(url).catch(() => null);
     if (!res?.ok) return;
     const data = (await res.json()) as { templates: TemplateDto[] };
     setTemplates(data.templates);
-  }, []);
+  }, [filterPhoneId]);
 
-  /**
-   * `silent`: sincronización automática al abrir la pantalla. Meta entrega
-   * `message_template_status_update` al callback A NIVEL APP, que en modo
-   * agencia no es el de esta instancia — sin este pull la plantilla se queda
-   * "Pendiente de Meta" para siempre aunque ya esté aprobada.
-   */
   const sync = useCallback(
     async ({ silent = false } = {}) => {
       if (!silent) {
         setSyncing(true);
         setSyncMsg(null);
       }
-      const res = await fetch("/api/templates/sync", { method: "POST" }).catch(
-        () => null
-      );
+      const url =
+        filterPhoneId && filterPhoneId !== "all"
+          ? `/api/templates/sync?phoneNumberId=${encodeURIComponent(filterPhoneId)}`
+          : "/api/templates/sync";
+      const res = await fetch(url, { method: "POST" }).catch(() => null);
       if (!silent) setSyncing(false);
       if (res?.ok) {
         const data = (await res.json()) as { updated: number };
@@ -60,29 +83,32 @@ export function TemplatesClient() {
         }
         if (!silent || data.updated > 0) void refetch();
       } else if (!silent) {
-        // El auto-sync falla en silencio: la lista local ya se pintó.
         const data = (await res?.json().catch(() => null)) as {
           error?: { message?: string };
         } | null;
         setSyncMsg(data?.error?.message ?? "No se pudo sincronizar");
       }
     },
-    [refetch]
+    [filterPhoneId, refetch]
   );
 
   useEffect(() => {
+    void fetchLines();
     void refetch().then(() => sync({ silent: true }));
-  }, [refetch, sync]);
+  }, [fetchLines, refetch, sync]);
+
+  const lineMap = new Map<string, WhatsAppLine>();
+  for (const l of lines) {
+    lineMap.set(l.phoneNumberId, l);
+  }
 
   return (
     <div className="max-w-3xl space-y-6">
       <div className="flex items-start justify-between gap-4">
         <p className="text-sm text-muted-foreground">
           Las plantillas permiten reabrir conversaciones con la ventana de 24 h
-          cerrada. Meta las aprueba en horas o días y puede reclasificar la
-          categoría (lo que cambia el costo por conversación). Esta pantalla
-          consulta el estado a Meta cada vez que la abres; Sincronizar fuerza
-          la consulta sin recargar.
+          cerrada. Meta las aprueba en horas o días y aplican a la línea de WhatsApp
+          autorizada. Esta pantalla consulta el estado a Meta automáticamente.
         </p>
         <Button variant="outline" size="sm" disabled={syncing} onClick={() => void sync()}>
           <RefreshCw className={`h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
@@ -91,35 +117,86 @@ export function TemplatesClient() {
       </div>
       {syncMsg && <p className="text-xs text-muted-foreground">{syncMsg}</p>}
 
-      <CreateForm onCreated={() => void refetch()} />
+      {lines.length === 0 ? (
+        <Card>
+          <CardContent className="py-6 text-center">
+            <Phone className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
+            <h3 className="text-base font-semibold">Sin líneas de WhatsApp conectadas</h3>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Para crear y gestionar plantillas, conecta primero tu número de WhatsApp en la sección de Canales.
+            </p>
+            <Link
+              href="/settings/channels"
+              className={cn(buttonVariants({ size: "sm" }), "mt-4 inline-flex")}
+            >
+              Ir a Canales
+            </Link>
+          </CardContent>
+        </Card>
+      ) : (
+        <CreateForm lines={lines} onCreated={() => void refetch()} />
+      )}
+
+      {lines.length > 1 && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border bg-card p-3">
+          <span className="text-sm font-medium">Filtrar por línea:</span>
+          <select
+            value={filterPhoneId}
+            onChange={(e) => {
+              const val = e.target.value;
+              setFilterPhoneId(val);
+              void refetch(val);
+            }}
+            className="flex h-9 rounded-md border border-input bg-card px-3 text-sm"
+          >
+            <option value="all">Todas las líneas</option>
+            {lines.map((l) => (
+              <option key={l.phoneNumberId} value={l.phoneNumberId}>
+                {l.label ? `${l.label} · ` : ""}
+                {l.displayPhoneNumber ?? l.phoneNumberId}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="space-y-2">
-        {templates.map((t) => (
-          <div key={t.id} className="rounded-lg border bg-card p-4">
-            <div className="flex items-center justify-between gap-3">
-              <p className="font-mono text-sm font-medium">
-                {t.name}{" "}
-                <span className="text-muted-foreground">
-                  ({t.language} · {t.category})
-                </span>
-              </p>
-              <Badge variant={STATUS_BADGE[t.status].variant}>
-                {STATUS_BADGE[t.status].label}
-              </Badge>
+        {templates.map((t) => {
+          const associatedLine = t.phoneNumberId ? lineMap.get(t.phoneNumberId) : null;
+          return (
+            <div key={t.id} className="rounded-lg border bg-card p-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <p className="font-mono text-sm font-medium">
+                    {t.name}{" "}
+                    <span className="text-muted-foreground">
+                      ({t.language} · {t.category})
+                    </span>
+                  </p>
+                  {associatedLine && (
+                    <p className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Phone className="h-3 w-3" />
+                      {associatedLine.label ? `${associatedLine.label} · ` : ""}
+                      {associatedLine.displayPhoneNumber ?? associatedLine.phoneNumberId}
+                    </p>
+                  )}
+                </div>
+                <Badge variant={STATUS_BADGE[t.status].variant}>
+                  {STATUS_BADGE[t.status].label}
+                </Badge>
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">{t.body}</p>
+              {t.status === "rejected" && t.rejectionReason && (
+                <p className="mt-2 text-xs text-destructive">
+                  Razón del rechazo: {t.rejectionReason}
+                </p>
+              )}
             </div>
-            <p className="mt-2 text-sm text-muted-foreground">{t.body}</p>
-            {t.status === "rejected" && t.rejectionReason && (
-              <p className="mt-2 text-xs text-destructive">
-                Razón del rechazo: {t.rejectionReason}
-              </p>
-            )}
-          </div>
-        ))}
+          );
+        })}
         {templates.length === 0 && (
           <p className="rounded-lg border border-dashed p-6 text-center text-sm text-muted-foreground">
-            Sin plantillas todavía. Crea la primera arriba — por ejemplo un
-            «seguimos disponibles, ¿retomamos tu cotización?» para
-            conversaciones frías.
+            Sin plantillas todavía. Crea la primera arriba para conversaciones frías.
           </p>
         )}
       </div>
@@ -127,7 +204,14 @@ export function TemplatesClient() {
   );
 }
 
-function CreateForm({ onCreated }: { onCreated: () => void }) {
+function CreateForm({
+  lines,
+  onCreated,
+}: {
+  lines: WhatsAppLine[];
+  onCreated: () => void;
+}) {
+  const [phoneNumberId, setPhoneNumberId] = useState(lines[0]?.phoneNumberId ?? "");
   const [name, setName] = useState("");
   const [language, setLanguage] = useState("es_MX");
   const [category, setCategory] = useState<"UTILITY" | "MARKETING">("UTILITY");
@@ -135,17 +219,27 @@ function CreateForm({ onCreated }: { onCreated: () => void }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Misma validación que el servidor: avisa antes de gastar una llamada a Meta.
+  // Mantener phoneNumberId alineado si cambian las líneas
+  useEffect(() => {
+    if (!phoneNumberId && lines[0]?.phoneNumberId) {
+      setPhoneNumberId(lines[0].phoneNumberId);
+    }
+  }, [lines, phoneNumberId]);
+
   const bodyError = body.trim() ? validateBodyVariables(body) : null;
   const variableCount = countVariables(body);
 
   async function create() {
+    if (!phoneNumberId) {
+      setError("Debes seleccionar la línea de WhatsApp a la que pertenece esta plantilla");
+      return;
+    }
     setSaving(true);
     setError(null);
     const res = await fetch("/api/templates", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ name, language, category, body }),
+      body: JSON.stringify({ phoneNumberId, name, language, category, body }),
     }).catch(() => null);
     setSaving(false);
     if (!res?.ok) {
@@ -167,10 +261,28 @@ function CreateForm({ onCreated }: { onCreated: () => void }) {
         <CardDescription>
           Cuerpo con las variables que necesites: numéralas{" "}
           <code>{"{{1}}"}</code>, <code>{"{{2}}"}</code>, <code>{"{{3}}"}</code>
-          … en orden y sin saltos. Se envía a aprobación de Meta al crearla.
+          … en orden y sin saltos. Se envía a aprobación de Meta para la línea seleccionada.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="tpl-phone">Línea de WhatsApp</Label>
+          <select
+            id="tpl-phone"
+            value={phoneNumberId}
+            onChange={(e) => setPhoneNumberId(e.target.value)}
+            className="flex h-9 w-full rounded-md border border-input bg-card px-3 text-sm"
+          >
+            {lines.map((l) => (
+              <option key={l.phoneNumberId} value={l.phoneNumberId}>
+                {l.label ? `${l.label} · ` : ""}
+                {l.displayPhoneNumber ?? l.phoneNumberId}
+                {l.isDefault ? " (predeterminada)" : ""}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div className="grid gap-4 md:grid-cols-3">
           <div className="space-y-1.5">
             <Label htmlFor="tpl-name">Nombre</Label>
@@ -215,7 +327,7 @@ function CreateForm({ onCreated }: { onCreated: () => void }) {
           <Textarea
             id="tpl-body"
             rows={3}
-            placeholder="Hola {{1}}, te confirmo tu sesión el {{2}} a las {{3}}."
+            placeholder="Hola {{1}}, te confirmo tu cita el {{2}} a las {{3}}."
             value={body}
             onChange={(e) => setBody(e.target.value)}
           />
@@ -233,7 +345,7 @@ function CreateForm({ onCreated }: { onCreated: () => void }) {
         </div>
         {error && <p className="text-sm text-destructive">{error}</p>}
         <Button
-          disabled={saving || !name.trim() || !body.trim() || bodyError !== null}
+          disabled={saving || !phoneNumberId || !name.trim() || !body.trim() || bodyError !== null}
           onClick={() => void create()}
         >
           {saving ? "Enviando a Meta…" : "Crear y enviar a aprobación"}
