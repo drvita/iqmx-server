@@ -43,7 +43,8 @@ export function isChannelEnabled(channel: Channel): boolean {
 
 /**
  * Resuelve los canales habilitados para una organización específica.
- * Si se omite organizationId, usa el fallback global de entorno.
+ * Si se omite organizationId, devuelve únicamente el canal base (WhatsApp).
+ * No recurre a variables de entorno para forzar aislamiento multi-tenant estricto.
  */
 export async function getOrganizationChannels(
   organizationId?: string | null
@@ -51,20 +52,22 @@ export async function getOrganizationChannels(
   if (organizationId) {
     const { getOrganizationSettings } = await import("@/server/settings/service");
     const settings = await getOrganizationSettings(organizationId);
-    return parseChannels(settings.channels);
+    return parseChannels(settings?.channels);
   }
-  return enabledChannels();
+  return new Set<Channel>([ALWAYS_ON]);
 }
 
 /**
  * Consulta si un canal específico está habilitado para una organización.
+ * Depende exclusivamente de la configuración de la organización en base de datos.
  */
 export async function isChannelEnabledForOrg(
   channel: Channel,
   organizationId?: string | null
 ): Promise<boolean> {
+  if (!organizationId) return false;
   const channels = await getOrganizationChannels(organizationId);
-  return channels.has(channel) || isChannelEnabled(channel);
+  return channels.has(channel);
 }
 
 /**

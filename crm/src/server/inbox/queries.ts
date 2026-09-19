@@ -36,6 +36,18 @@ export async function listConversations(
     where mc.phone_number_id = ${schema.conversation.phoneNumberId}
     limit 1
   )`;
+  const messengerPageSql = sql<string | null>`(
+    select mc.page_name
+    from messenger_credentials mc
+    where mc.organization_id = ${schema.conversation.organizationId}
+    limit 1
+  )`;
+  const igUserSql = sql<string | null>`(
+    select coalesce(ic.username, ic.ig_user_id)
+    from instagram_credentials ic
+    where ic.organization_id = ${schema.conversation.organizationId}
+    limit 1
+  )`;
 
   const lineFilter = options?.allowedLineIds
     ? options.allowedLineIds.length > 0
@@ -54,6 +66,8 @@ export async function listConversations(
       stageName: stageSql,
       linePhone: linePhoneSql,
       lineName: lineNameSql,
+      messengerPageName: messengerPageSql,
+      igUsername: igUserSql,
     })
     .from(schema.conversation)
     .innerJoin(
@@ -78,7 +92,12 @@ export async function listConversations(
       r.preview,
       r.stageName,
       r.linePhone,
-      r.lineName
+      r.lineName,
+      r.conversation.channel === "messenger"
+        ? r.messengerPageName
+        : r.conversation.channel === "instagram"
+          ? r.igUsername
+          : r.lineName
     )
   );
 }
@@ -100,12 +119,26 @@ export async function getConversation(
     where mc.phone_number_id = ${schema.conversation.phoneNumberId}
     limit 1
   )`;
+  const messengerPageSql = sql<string | null>`(
+    select mc.page_name
+    from messenger_credentials mc
+    where mc.organization_id = ${schema.conversation.organizationId}
+    limit 1
+  )`;
+  const igUserSql = sql<string | null>`(
+    select coalesce(ic.username, ic.ig_user_id)
+    from instagram_credentials ic
+    where ic.organization_id = ${schema.conversation.organizationId}
+    limit 1
+  )`;
   const rows = await db
     .select({
       conversation: schema.conversation,
       contact: schema.contact,
       linePhone: linePhoneSql,
       lineName: lineNameSql,
+      messengerPageName: messengerPageSql,
+      igUsername: igUserSql,
     })
     .from(schema.conversation)
     .innerJoin(
@@ -153,7 +186,8 @@ export function serializeConversation(
   preview: string | null = null,
   stageName: string | null = null,
   linePhone: string | null = null,
-  lineName: string | null = null
+  lineName: string | null = null,
+  accountName?: string | null
 ): ConversationDto {
   return {
     id: c.id,
@@ -161,7 +195,13 @@ export function serializeConversation(
     phoneNumberId: c.phoneNumberId ?? null,
     linePhone: linePhone ?? (c.phoneNumberId ? c.phoneNumberId : null),
     lineName: lineName ?? null,
-    contact: { id: contact.id, name: contact.name, phone: contact.phone },
+    accountName: accountName ?? null,
+    contact: {
+      id: contact.id,
+      name: contact.name,
+      phone: contact.phone,
+      identity: contact.waIdentity ?? null,
+    },
     stageName,
     aiEnabled: c.aiEnabled,
     handoffAt: c.handoffAt?.toISOString() ?? null,

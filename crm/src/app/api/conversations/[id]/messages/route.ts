@@ -54,6 +54,7 @@ export const GET = withAuth(async (session, req: Request, ctx: Params) => {
         sourceType: attribution.sourceType,
         sourceUrl: attribution.sourceUrl,
         mediaType: attribution.mediaType,
+        channel: row.conversation.channel,
         imageUrl:
           (raw.image_url as string | undefined) ??
           (raw.thumbnail_url as string | undefined) ??

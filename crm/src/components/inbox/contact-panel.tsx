@@ -10,6 +10,8 @@ import type {
   StageDto,
 } from "@/lib/types";
 import { cn, formatPhone } from "@/lib/utils";
+import { CHANNEL_LABEL } from "@/lib/channels";
+import { ChannelBadge } from "@/components/channel-badge";
 import { ContactAvatar } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -173,35 +175,50 @@ export function ContactPanel({
               size="md"
             />
             <div className="min-w-0">
-              <p className="truncate text-sm font-bold tracking-tight">
-                {conversation.contact.name}
-              </p>
+              <div className="flex items-center gap-1.5">
+                <ChannelBadge channel={conversation.channel} />
+                <p className="truncate text-sm font-bold tracking-tight">
+                  {conversation.contact.name}
+                </p>
+              </div>
               <p className="text-xs text-text-3">
-                {formatPhone(conversation.contact.phone)}
+                {conversation.contact.phone
+                  ? formatPhone(conversation.contact.phone)
+                  : conversation.channel === "messenger"
+                    ? "Facebook Messenger"
+                    : conversation.channel === "instagram"
+                      ? "Instagram Direct"
+                      : "Sin teléfono"}
               </p>
             </div>
           </div>
 
-          {/* Línea / Cuenta telefónica receptora (para múltiples números) */}
-          {(conversation.linePhone || conversation.phoneNumberId) && (
-            <div className="mt-3 flex items-center justify-between gap-2 rounded-md border bg-subtle/60 px-3 py-2 text-xs">
-              <span className="text-[11px] font-medium text-text-3">
-                Línea receptora:
-              </span>
-              <div className="flex items-center gap-1.5 min-w-0">
-                {conversation.lineName && (
-                  <LineBadge
-                    name={conversation.lineName}
-                    seed={conversation.phoneNumberId ?? conversation.lineName}
-                    size="xs"
-                  />
-                )}
-                <span className="font-mono font-medium text-foreground truncate">
-                  {formatPhone(conversation.linePhone ?? conversation.phoneNumberId)}
+          {/* Línea / Cuenta receptora */}
+          <div className="mt-3 flex items-center justify-between gap-2 rounded-md border bg-subtle/60 px-3 py-2 text-xs">
+            <span className="text-[11px] font-medium text-text-3">
+              {conversation.channel === "whatsapp" ? "Línea receptora:" : "Cuenta conectada:"}
+            </span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              {conversation.channel === "whatsapp" ? (
+                <>
+                  {conversation.lineName && (
+                    <LineBadge
+                      name={conversation.lineName}
+                      seed={conversation.phoneNumberId ?? conversation.lineName}
+                      size="xs"
+                    />
+                  )}
+                  <span className="font-mono font-medium text-foreground truncate">
+                    {formatPhone(conversation.linePhone ?? conversation.phoneNumberId)}
+                  </span>
+                </>
+              ) : (
+                <span className="font-medium text-foreground truncate">
+                  {conversation.accountName || CHANNEL_LABEL[conversation.channel]}
                 </span>
-              </div>
+              )}
             </div>
-          )}
+          </div>
 
           {conversation.handoffAt && (
             <div className="mt-3 rounded-md border border-warning-soft bg-warning-tint p-3">

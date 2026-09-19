@@ -7,6 +7,38 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 > **Zona horaria de referencia:** Ciudad de México (CST / UTC-6).
 
+## [1.11.0] - 2026-09-19
+
+### Añadido
+
+- **Suscripción y Diagnóstico de Webhooks en Facebook Messenger (`/settings/messenger`)**:
+  - Endpoint dedicado [crm/src/app/api/settings/messenger/subscription/route.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/settings/messenger/subscription/route.ts) con soporte para:
+    - `GET`: Diagnóstico y consulta del estado de suscripción de la aplicación en Graph API (`/subscribed_apps`).
+    - `POST`: Suscripción y activación automática de eventos esenciales (`messages`, `messaging_postbacks`, `message_echoes`, `messaging_referrals`, `message_deliveries`, `message_reads`).
+  - Botón interactivo de suscripción y comprobación de estado con feedback visual en [crm/src/components/settings/messenger-client.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/settings/messenger-client.tsx).
+- **Procesamiento de Eventos de Entrega y Lectura en Messenger**:
+  - Ingesta de `message_deliveries` y `message_reads` en [crm/src/server/messenger/ingest.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/messenger/ingest.ts), actualizando el estado monótono de entrega (`delivered`, `read`) de los mensajes salientes en el CRM, alineado al comportamiento existente de WhatsApp.
+- **Soporte de Atribución de Anuncios (`messaging_referrals`) en Messenger e Instagram Direct**:
+  - Función unificada de mapeo `mapMetaMessagingReferral` en [crm/src/server/inbox/webhook.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/inbox/webhook.ts) para normalizar datos de anuncios Click-to-Messenger y Click-to-Instagram Direct.
+  - Ingesta y registro de atribución tanto en mensajes entrantes como en eventos directos de apertura de hilo (`m.referral`) en [crm/src/server/messenger/ingest.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/messenger/ingest.ts) e [crm/src/server/instagram/ingest.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/instagram/ingest.ts).
+  - Presentación contextual de la tarjeta de anuncio en la conversación mediante [crm/src/components/inbox/ad-referral-card.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/ad-referral-card.tsx) indicando el canal correspondiente (*Click-to-WhatsApp*, *Click to Messenger*, *Click to Instagram Direct*).
+- **Distintivo y Presentación de Canales en la Bandeja (`/inbox`)**:
+  - Carga dinámica multi-canal por organización en [crm/src/app/(app)/inbox/page.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/(app)/inbox/page.tsx) mediante `getOrganizationChannels`.
+  - Distintivo visual (`ChannelBadge`) oficial por canal en cada fila de conversación de [crm/src/components/inbox/conversation-list.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/conversation-list.tsx) y filtros superiores automáticos cuando existen múltiples canales o conversaciones multi-plataforma.
+  - Distintivo del canal en la cabecera activa del hilo de chat en [crm/src/components/inbox/inbox-client.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/inbox-client.tsx), con indicación de página de Facebook, usuario de Instagram o línea telefónica receptora.
+  - Identificación clara del canal y cuenta conectada en el panel lateral de detalles de [crm/src/components/inbox/contact-panel.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/contact-panel.tsx).
+
+### Modificado
+
+- **Serialización de Conversaciones Multi-Canal**:
+  - En [crm/src/server/inbox/queries.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/inbox/queries.ts), `listConversations`, `getConversation` y `serializeConversation` ahora incorporan `accountName` (nombre de página en Messenger o usuario en Instagram) e `identity` del contacto en el DTO `ConversationDto`.
+  - Actualización del endpoint `PATCH /api/conversations/[id]` en [crm/src/app/api/conversations/[id]/route.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/conversations/[id]/route.ts) para preservar `accountName` en las actualizaciones reactivas por SSE.
+
+### Corregido
+
+- **Persistencia y Cambio de Asistente IA para Messenger en `/settings/messenger`**:
+  - Se corrigió el flujo de guardado y asignación del asistente IA configurado para Facebook Messenger, asegurando que las conversaciones entrantes adopten de inmediato el asistente seleccionado en la organización.
+
 ---
 
 ## [1.10.0] - 2026-09-13

@@ -31,6 +31,12 @@ describe("CHANNELS: qué bandejas enciende la instancia (ADR-001)", () => {
     expect(isChannel("telegram")).toBe(false);
     expect(isChannel("")).toBe(false);
   });
+
+  it("isChannelEnabledForOrg devuelve false si no hay organizationId", async () => {
+    const { isChannelEnabledForOrg } = await import("@/server/channels/enabled");
+    expect(await isChannelEnabledForOrg("messenger", null)).toBe(false);
+    expect(await isChannelEnabledForOrg("instagram", undefined)).toBe(false);
+  });
 });
 
 describe("capacidades por canal", () => {

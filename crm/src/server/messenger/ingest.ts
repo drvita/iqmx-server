@@ -1,13 +1,26 @@
 import { and, eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
-import { FB_PREFIX } from "@/server/inbox/identity";
-import { ingestInboundMessage } from "@/server/inbox/ingest";
+import { FB_PREFIX, getOrCreateContactByIdentity } from "@/server/inbox/identity";
+import {
+  getOrCreateConversation,
+  ingestInboundMessage,
+} from "@/server/inbox/ingest";
 import {
   getMessengerCredentialsByAccountRef,
   getMessengerCredentialsByPageId,
 } from "@/server/messenger/credentials";
 import { fetchMessengerProfileName } from "@/server/messenger/send";
 import { zernioSentAtSeconds, type ZernioEvent } from "@/server/zernio";
+import {
+  applyStatusUpdate,
+  applyWatermarkReadUpdate,
+} from "@/server/inbox/status";
+import {
+  mapMetaMessagingReferral,
+  type WebhookReferral,
+} from "@/server/inbox/webhook";
+import { isAtribucionEnabled } from "@/server/attribution/flag";
+import { recordAttribution } from "@/server/attribution/store";
 
 /**
  * 017 — Adaptadores de entrada del canal de Messenger.
@@ -41,6 +54,8 @@ export type MessengerInbound = {
   profileName: string | null;
   /** Hilo en la plataforma de origen: hace falta para responder por Zernio. */
   threadRef: string | null;
+  /** Origen del anuncio publicitario si el mensaje inició desde uno. */
+  referral?: WebhookReferral | null;
 };
 
 type MetaPagePayload = {
@@ -60,7 +75,9 @@ type MetaPagePayload = {
           type?: string;
           payload?: { url?: string; sticker_id?: number };
         }>;
+        referral?: unknown;
       };
+      referral?: unknown;
       postback?: unknown;
       delivery?: unknown;
       read?: unknown;
@@ -112,6 +129,9 @@ export function normalizeMetaPagePayload(payload: unknown): MessengerInbound[] {
       const type = resolveType(text, msg.attachments?.[0]);
       if (!type) continue; // ni texto ni adjunto: no hay nada que ingerir
 
+      const rawReferral = msg.referral ?? m.referral;
+      const referral = rawReferral ? mapMetaMessagingReferral(rawReferral) : null;
+
       out.push({
         routeKey: pageId,
         psid,
@@ -124,6 +144,7 @@ export function normalizeMetaPagePayload(payload: unknown): MessengerInbound[] {
         // Meta no manda nombre ni usuario en el webhook: se consulta aparte.
         profileName: null,
         threadRef: null,
+        referral,
       });
     }
   }
@@ -204,7 +225,96 @@ async function contactExists(
 }
 
 export async function processMetaPagePayload(payload: unknown): Promise<void> {
+  const body = payload as MetaPagePayload | null;
+  if (!body || body.object !== "page") return;
+
+  // 1. Ingesta de mensajes de texto / adjuntos
   await ingestAll(normalizeMetaPagePayload(payload), "meta");
+
+  // 2. Ingesta de acuses de entrega y lectura (message_deliveries y message_reads)
+  for (const entry of body.entry ?? []) {
+    const pageId = entry.id;
+    if (!pageId) continue;
+
+    for (const m of entry.messaging ?? []) {
+      const psid = m.sender?.id;
+      if (!psid) continue;
+
+      const delivery = m.delivery as { mids?: string[]; watermark?: number } | undefined;
+      const read = m.read as { watermark?: number; mid?: string } | undefined;
+
+      if (!delivery && !read) continue;
+
+      const creds = await getMessengerCredentialsByPageId(pageId);
+      if (!creds || creds.source !== "meta") continue;
+
+      if (delivery?.mids && Array.isArray(delivery.mids)) {
+        for (const mid of delivery.mids) {
+          await applyStatusUpdate(creds.organizationId, {
+            id: mid,
+            status: "delivered",
+            timestamp: String(
+              m.timestamp ? Math.floor(m.timestamp / 1000) : Math.floor(Date.now() / 1000)
+            ),
+            recipient_id: psid,
+          });
+        }
+      }
+
+      if (read) {
+        if (read.mid) {
+          await applyStatusUpdate(creds.organizationId, {
+            id: read.mid,
+            status: "read",
+            timestamp: String(
+              m.timestamp ? Math.floor(m.timestamp / 1000) : Math.floor(Date.now() / 1000)
+            ),
+            recipient_id: psid,
+          });
+        }
+        if (read.watermark) {
+          await applyWatermarkReadUpdate(creds.organizationId, {
+            channel: "messenger",
+            recipientPsid: psid,
+            watermarkMs: read.watermark,
+          });
+        }
+      }
+    }
+
+    // 3. Ingesta de eventos standalone de apertura de hilo por anuncio (messaging_referrals)
+    for (const m of entry.messaging ?? []) {
+      const psid = m.sender?.id;
+      if (!psid || m.message) continue; // los que traían mensaje ya se procesaron en ingestAll
+      if (!m.referral) continue;
+
+      const creds = await getMessengerCredentialsByPageId(pageId);
+      if (!creds || creds.source !== "meta") continue;
+
+      const referral = mapMetaMessagingReferral(m.referral);
+      if (!referral) continue;
+
+      if (await isAtribucionEnabled(creds.organizationId)) {
+        const identity = `${FB_PREFIX}${psid}`;
+        const { contact } = await getOrCreateContactByIdentity(creds.organizationId, {
+          identity,
+          channel: "messenger",
+          phone: null,
+          waUserId: null,
+          profileName: await fetchMessengerProfileName(creds, psid),
+        });
+        const conv = await getOrCreateConversation(creds.organizationId, contact.id, {
+          channel: "messenger",
+        });
+        await recordAttribution({
+          organizationId: creds.organizationId,
+          contactId: contact.id,
+          conversationId: conv.id,
+          referral,
+        });
+      }
+    }
+  }
 }
 
 export async function processZernioMessengerEvent(
@@ -268,6 +378,7 @@ async function ingestAll(
       text: evt.text,
       timestamp: evt.timestamp,
       threadRef: evt.threadRef,
+      referral: evt.referral ?? null,
     });
   }
 }

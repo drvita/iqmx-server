@@ -23,6 +23,8 @@ export type MessengerCredentials = {
   accountRef: string | null;
   webhookSecret: string | null;
   status: "connected" | "reconnect_required";
+  aiEnabled: boolean;
+  assistantId: string | null;
   token: string;
 };
 
@@ -38,6 +40,8 @@ function toCredentials(row: Row): MessengerCredentials {
     accountRef: row.accountRef,
     webhookSecret: row.webhookSecret,
     status: row.status,
+    aiEnabled: row.aiEnabled,
+    assistantId: row.assistantId,
     token: decryptSecret({
       cipher: row.tokenCipher,
       iv: row.tokenIv,
@@ -89,6 +93,8 @@ export async function saveMessengerCredentials(input: {
   accountRef: string | null;
   token: string;
   webhookSecret: string | null;
+  aiEnabled?: boolean;
+  assistantId?: string | null;
 }): Promise<void> {
   const db = getDb();
   const enc = encryptSecret(input.token);
@@ -105,6 +111,8 @@ export async function saveMessengerCredentials(input: {
     tokenTag: enc.tag,
     webhookSecret: input.webhookSecret,
     status: "connected" as const,
+    ...(input.aiEnabled !== undefined ? { aiEnabled: input.aiEnabled } : {}),
+    ...(input.assistantId !== undefined ? { assistantId: input.assistantId } : {}),
     updatedAt: new Date(),
   };
 

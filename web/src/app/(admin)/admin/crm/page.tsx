@@ -75,6 +75,8 @@ export default function AdminCrmPage() {
     agenda_enabled: false,
     attribution_enabled: false,
     lab_enabled: false,
+    messenger_enabled: false,
+    instagram_enabled: false,
     ai_api_key: "",
     ai_model: "minimax/minimax-m2.7:free",
     ai_judge_model: "minimax/minimax-m2.7:free",
@@ -225,12 +227,15 @@ export default function AdminCrmPage() {
     setOverrideModalTab("form");
     setRawJsonError(null);
     setExtraRawFields({});
+    const activeChannels = (tenant.channels || "").split(",").map((c) => c.trim().toLowerCase());
     const formState = {
       max_whatsapp_accounts: tenant.max_whatsapp_accounts,
       max_team_members: tenant.max_team_members,
       agenda_enabled: tenant.agenda_enabled,
       attribution_enabled: tenant.attribution_enabled,
       lab_enabled: tenant.lab_enabled,
+      messenger_enabled: activeChannels.includes("messenger"),
+      instagram_enabled: activeChannels.includes("instagram"),
       ai_api_key: "",
       ai_model: tenant.ai_model || "minimax/minimax-m2.7:free",
       ai_judge_model: tenant.ai_judge_model || "google/gemma-4-31b-it:free",
@@ -239,12 +244,17 @@ export default function AdminCrmPage() {
     };
     setOverrideForm(formState);
 
+    const channelsList = ["whatsapp"];
+    if (formState.messenger_enabled) channelsList.push("messenger");
+    if (formState.instagram_enabled) channelsList.push("instagram");
+
     const initialJson: Record<string, any> = {
       max_whatsapp_accounts: formState.max_whatsapp_accounts,
       max_team_members: formState.max_team_members,
       agenda_enabled: formState.agenda_enabled,
       attribution_enabled: formState.attribution_enabled,
       lab_enabled: formState.lab_enabled,
+      channels: channelsList.join(","),
       ai_model: formState.ai_model,
       ai_judge_model: formState.ai_judge_model,
       ai_base_url: formState.ai_base_url,
@@ -257,6 +267,10 @@ export default function AdminCrmPage() {
     if (targetTab === overrideModalTab) return;
 
     if (targetTab === "raw") {
+      const channelsList = ["whatsapp"];
+      if (overrideForm.messenger_enabled) channelsList.push("messenger");
+      if (overrideForm.instagram_enabled) channelsList.push("instagram");
+
       const payload: Record<string, any> = {
         ...extraRawFields,
         max_whatsapp_accounts: overrideForm.max_whatsapp_accounts,
@@ -264,6 +278,7 @@ export default function AdminCrmPage() {
         agenda_enabled: overrideForm.agenda_enabled,
         attribution_enabled: overrideForm.attribution_enabled,
         lab_enabled: overrideForm.lab_enabled,
+        channels: channelsList.join(","),
         ai_model: overrideForm.ai_model,
         ai_judge_model: overrideForm.ai_judge_model,
         ai_base_url: overrideForm.ai_base_url,
@@ -310,6 +325,18 @@ export default function AdminCrmPage() {
             typeof parsed.lab_enabled === "boolean"
               ? parsed.lab_enabled
               : prev.lab_enabled,
+          messenger_enabled:
+            typeof parsed.channels === "string"
+              ? parsed.channels.toLowerCase().includes("messenger")
+              : typeof parsed.messenger_enabled === "boolean"
+                ? parsed.messenger_enabled
+                : prev.messenger_enabled,
+          instagram_enabled:
+            typeof parsed.channels === "string"
+              ? parsed.channels.toLowerCase().includes("instagram")
+              : typeof parsed.instagram_enabled === "boolean"
+                ? parsed.instagram_enabled
+                : prev.instagram_enabled,
           ai_model:
             typeof parsed.ai_model === "string"
               ? parsed.ai_model
@@ -338,6 +365,9 @@ export default function AdminCrmPage() {
           "agenda_enabled",
           "attribution_enabled",
           "lab_enabled",
+          "channels",
+          "messenger_enabled",
+          "instagram_enabled",
           "ai_model",
           "ai_judge_model",
           "ai_base_url",
@@ -396,6 +426,10 @@ export default function AdminCrmPage() {
         return;
       }
     } else {
+      const channelsList = ["whatsapp"];
+      if (overrideForm.messenger_enabled) channelsList.push("messenger");
+      if (overrideForm.instagram_enabled) channelsList.push("instagram");
+
       payload = {
         ...extraRawFields,
         max_whatsapp_accounts: overrideForm.max_whatsapp_accounts,
@@ -403,6 +437,7 @@ export default function AdminCrmPage() {
         agenda_enabled: overrideForm.agenda_enabled,
         attribution_enabled: overrideForm.attribution_enabled,
         lab_enabled: overrideForm.lab_enabled,
+        channels: channelsList.join(","),
         ai_model: overrideForm.ai_model,
         ai_judge_model: overrideForm.ai_judge_model,
         ai_base_url: overrideForm.ai_base_url,
@@ -651,9 +686,22 @@ export default function AdminCrmPage() {
                             Lab
                           </span>
                         )}
+                        {/* Canales Activos */}
+                        {t.channels?.toLowerCase().includes("messenger") && (
+                          <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700 border border-sky-200">
+                            Messenger
+                          </span>
+                        )}
+                        {t.channels?.toLowerCase().includes("instagram") && (
+                          <span className="rounded bg-pink-50 px-1.5 py-0.5 text-[10px] font-semibold text-pink-700 border border-pink-200">
+                            Instagram
+                          </span>
+                        )}
                         {!t.agenda_enabled &&
                           !t.attribution_enabled &&
-                          !t.lab_enabled && (
+                          !t.lab_enabled &&
+                          !t.channels?.toLowerCase().includes("messenger") &&
+                          !t.channels?.toLowerCase().includes("instagram") && (
                             <span className="text-[10px] text-gray-400">
                               Básicos
                             </span>
@@ -934,6 +982,59 @@ export default function AdminCrmPage() {
                         className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                       />
                       <span>Laboratorio</span>
+                    </label>
+                  </div>
+                </div>
+
+                {/* Canales y Redes Sociales */}
+                <div className="pt-3 space-y-2 border-t border-gray-100">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-semibold text-gray-800">
+                      Canales y Redes Sociales Habilitadas
+                    </p>
+                    <span className="text-[11px] text-gray-400">
+                      Multi-Tenant estricto
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <label className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-not-allowed opacity-75">
+                      <input
+                        type="checkbox"
+                        checked={true}
+                        disabled={true}
+                        className="rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <span>WhatsApp (Base)</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={overrideForm.messenger_enabled}
+                        onChange={(e) =>
+                          setOverrideForm({
+                            ...overrideForm,
+                            messenger_enabled: e.target.checked,
+                          })
+                        }
+                        className="rounded border-gray-300 text-sky-600 focus:ring-sky-500"
+                      />
+                      <span>Facebook Messenger</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={overrideForm.instagram_enabled}
+                        onChange={(e) =>
+                          setOverrideForm({
+                            ...overrideForm,
+                            instagram_enabled: e.target.checked,
+                          })
+                        }
+                        className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
+                      />
+                      <span>Instagram Direct</span>
                     </label>
                   </div>
                 </div>

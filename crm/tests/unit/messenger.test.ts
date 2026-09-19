@@ -62,7 +62,7 @@ describe("017 · Messenger en el catálogo de canales", () => {
     expect(caps.windowMs).toBe(24 * 60 * 60 * 1000);
     expect(caps.outsideWindow).toBe("human_agent_tag");
     expect(caps.outboundMedia).toBe(false);
-    expect(caps.deliveryReceipts).toBe(false);
+    expect(caps.deliveryReceipts).toBe(true);
     // Fuera de ventana no se le pide nada al operador: sale etiquetado solo.
     expect(windowClosedMessage("messenger")).toBe("");
   });
@@ -102,6 +102,42 @@ describe("017 · normalizeMetaPagePayload (qué entra y qué se descarta)", () =
       timestamp: "1770000123",
       profileName: null,
       threadRef: null,
+      referral: null,
+    });
+  });
+
+  it("un mensaje con referral de anuncio extrae los datos publicitarios para la atribución", () => {
+    const [evt] = normalizeMetaPagePayload(
+      metaWebhook([
+        {
+          sender: { id: PSID },
+          recipient: { id: PAGE },
+          timestamp: 1_770_000_123_456,
+          message: {
+            mid: "m_ad",
+            text: "Quiero info",
+            referral: {
+              source: "ADS",
+              type: "OPEN_THREAD",
+              ad_id: "987654321",
+              referer_uri: "https://fb.me/xyz",
+              ads_context_data: {
+                ad_title: "Promoción de Verano",
+                photo_url: "https://cdn/ad.jpg",
+              },
+            },
+          },
+        },
+      ])
+    );
+    expect(evt?.referral).toEqual({
+      source_id: "987654321",
+      source_url: "https://fb.me/xyz",
+      source_type: "ADS",
+      headline: "Promoción de Verano",
+      image_url: "https://cdn/ad.jpg",
+      video_url: undefined,
+      media_type: "image",
     });
   });
 

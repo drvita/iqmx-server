@@ -12,22 +12,48 @@ import {
 } from "@/server/channels/enabled";
 import { verifyZernioToken } from "@/server/zernio";
 
+import { and, desc, eq } from "drizzle-orm";
+import { getDb, schema } from "@/lib/db";
+import { scoped } from "@/lib/db/tenant";
+import { subscribeMessengerApp } from "@/server/messenger/subscription";
+
 export const dynamic = "force-dynamic";
 
 /** 017 — Estado de la conexión de Messenger (el token nunca sale entero). */
 export const GET = withAuth(async (session) => {
   if (!(await isChannelEnabledForOrg("messenger", session.organizationId))) return channelDisabledResponse();
-  const creds = await getMessengerCredentialsByOrg(session.organizationId);
-  if (!creds) return Response.json({ connection: null });
+  const [creds, assistants] = await Promise.all([
+    getMessengerCredentialsByOrg(session.organizationId),
+    getDb()
+      .select({
+        id: schema.agentProfile.id,
+        name: schema.agentProfile.name,
+        isDefault: schema.agentProfile.isDefault,
+      })
+      .from(schema.agentProfile)
+      .where(
+        and(
+          scoped(schema.agentProfile.organizationId, session.organizationId),
+          eq(schema.agentProfile.type, "conversational")
+        )
+      )
+      .orderBy(desc(schema.agentProfile.isDefault), desc(schema.agentProfile.createdAt)),
+  ]);
+
   return Response.json({
-    connection: {
-      source: creds.source,
-      pageId: creds.pageId,
-      pageName: creds.pageName,
-      accountRef: creds.accountRef,
-      status: creds.status,
-      tokenLast4: tokenLast4(creds.token),
-    },
+    connection: creds
+      ? {
+          source: creds.source,
+          pageId: creds.pageId,
+          pageName: creds.pageName,
+          accountRef: creds.accountRef,
+          status: creds.status,
+          aiEnabled: creds.aiEnabled,
+          assistantId: creds.assistantId,
+          tokenLast4: tokenLast4(creds.token),
+        }
+      : null,
+    assistants,
   });
 });
 
@@ -35,8 +61,10 @@ const putSchema = z.object({
   source: z.enum(["zernio", "meta"]).default("meta"),
   pageId: z.string().trim().min(1).nullish(),
   accountRef: z.string().trim().min(1).nullish(),
-  token: z.string().trim().min(1),
+  token: z.string().trim().min(1).optional(),
   webhookSecret: z.string().trim().min(1).nullish(),
+  aiEnabled: z.boolean().optional(),
+  assistantId: z.string().trim().min(1).nullish(),
 });
 
 /**
@@ -54,6 +82,26 @@ export const PUT = withAuth(async (session, req: Request) => {
   // `.default()` deja el tipo opcional aunque Zod siempre lo rellene: se fija
   // aquí para que el resto del handler trabaje con un valor cerrado.
   const data = { ...body.data, source: body.data.source ?? "meta" };
+  const existing = await getMessengerCredentialsByOrg(session.organizationId);
+
+  // Si no envía token pero ya existen credenciales guardadas, permite actualizar solo asistente o aiEnabled
+  if (!data.token) {
+    if (!existing) {
+      return apiError(422, "missing_token", "Se requiere el token para la conexión inicial.");
+    }
+    await saveMessengerCredentials({
+      organizationId: session.organizationId,
+      source: existing.source,
+      pageId: existing.pageId,
+      pageName: existing.pageName,
+      accountRef: existing.accountRef,
+      token: existing.token,
+      webhookSecret: existing.webhookSecret,
+      aiEnabled: data.aiEnabled !== undefined ? data.aiEnabled : existing.aiEnabled,
+      assistantId: data.assistantId !== undefined ? data.assistantId : existing.assistantId,
+    });
+    return Response.json({ ok: true, pageName: existing.pageName });
+  }
 
   if (data.source === "meta" && !data.pageId) {
     return apiError(
@@ -70,7 +118,7 @@ export const PUT = withAuth(async (session, req: Request) => {
     );
   }
 
-  const check = await verify(data);
+  const check = await verify({ ...data, token: data.token });
   if (!check.ok) return apiError(check.status, check.code, check.message);
 
   await saveMessengerCredentials({
@@ -81,7 +129,16 @@ export const PUT = withAuth(async (session, req: Request) => {
     accountRef: data.accountRef ?? null,
     token: data.token,
     webhookSecret: data.webhookSecret ?? null,
+    aiEnabled: data.aiEnabled !== undefined ? data.aiEnabled : existing?.aiEnabled ?? true,
+    assistantId: data.assistantId !== undefined ? data.assistantId : existing?.assistantId ?? null,
   });
+
+  if (data.source === "meta" && data.pageId) {
+    // Intenta auto-suscribir la app a la página para que el webhook comience a recibir eventos de inmediato.
+    void subscribeMessengerApp(data.pageId, data.token).catch((err) => {
+      console.warn(`[messenger] no se pudo auto-suscribir la página ${data.pageId}:`, err);
+    });
+  }
 
   return Response.json({ ok: true, pageName: check.pageName });
 });
@@ -90,8 +147,9 @@ type Check =
   | { ok: true; pageName: string | null }
   | { ok: false; status: number; code: string; message: string };
 
-type VerifyInput = Omit<z.infer<typeof putSchema>, "source"> & {
+type VerifyInput = Omit<z.infer<typeof putSchema>, "source" | "token"> & {
   source: "zernio" | "meta";
+  token: string;
 };
 
 async function verify(data: VerifyInput): Promise<Check> {

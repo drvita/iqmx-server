@@ -71,7 +71,7 @@ export const CHANNEL_CAPABILITIES: Record<Channel, ChannelCapabilities> = {
     outsideWindow: "human_agent_tag",
     maxTextBytes: 2000,
     outboundMedia: false,
-    deliveryReceipts: false,
+    deliveryReceipts: true,
   },
 };
 

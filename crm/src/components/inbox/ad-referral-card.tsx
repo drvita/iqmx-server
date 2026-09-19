@@ -11,6 +11,13 @@ import { cn } from "@/lib/utils";
 export function AdReferralCard({ ad }: { ad?: AdReferralDto | null }) {
   if (!ad) return null;
 
+  const channelLabel =
+    ad.channel === "messenger"
+      ? "Click to Messenger"
+      : ad.channel === "instagram"
+        ? "Click to Instagram Direct"
+        : "Click-to-WhatsApp";
+
   return (
     <div className="my-3 flex justify-center px-2">
       <div className="w-full max-w-md overflow-hidden rounded-xl border border-border-strong bg-card text-card-foreground shadow-sm transition-all hover:shadow-md">
@@ -18,7 +25,7 @@ export function AdReferralCard({ ad }: { ad?: AdReferralDto | null }) {
         <div className="flex items-center justify-between border-b border-border-strong/60 bg-muted/40 px-3.5 py-2">
           <div className="flex items-center gap-1.5 text-xs font-semibold text-brand-text">
             <Megaphone className="h-3.5 w-3.5 shrink-0 text-brand" strokeWidth={2} />
-            <span>Anuncio de Meta · Click-to-WhatsApp</span>
+            <span>Anuncio de Meta · {channelLabel}</span>
           </div>
           {ad.sourceId && (
             <span className="font-mono text-[10.5px] text-muted-foreground">

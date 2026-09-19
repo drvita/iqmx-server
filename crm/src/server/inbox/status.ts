@@ -70,3 +70,85 @@ export async function applyStatusUpdate(
     },
   });
 }
+
+/**
+ * 017 — Actualiza a "read" los mensajes salientes entregados hasta cierta fecha/watermark.
+ * Utilizado por Facebook Messenger, donde Meta envía watermark en milisegundos en vez de un mid específico.
+ */
+export async function applyWatermarkReadUpdate(
+  organizationId: string,
+  input: {
+    channel: "messenger";
+    recipientPsid: string;
+    watermarkMs: number;
+  }
+): Promise<void> {
+  const db = getDb();
+  const cutoff = new Date(input.watermarkMs);
+
+  // Busca el contacto asociado al PSID de Messenger
+  const contacts = await db
+    .select({ id: schema.contact.id })
+    .from(schema.contact)
+    .where(
+      and(
+        eq(schema.contact.organizationId, organizationId),
+        eq(schema.contact.channel, "messenger"),
+        eq(schema.contact.waIdentity, `fb:${input.recipientPsid}`)
+      )
+    )
+    .limit(1);
+
+  const contact = contacts[0];
+  if (!contact) return;
+
+  const convs = await db
+    .select({ id: schema.conversation.id })
+    .from(schema.conversation)
+    .where(
+      and(
+        eq(schema.conversation.organizationId, organizationId),
+        eq(schema.conversation.contactId, contact.id),
+        eq(schema.conversation.channel, "messenger")
+      )
+    )
+    .limit(1);
+
+  const conv = convs[0];
+  if (!conv) return;
+
+  // Busca los mensajes salientes de esa conversación creados hasta el watermark que aún no estén en 'read'
+  const msgs = await db
+    .select({
+      id: schema.message.id,
+      status: schema.message.status,
+    })
+    .from(schema.message)
+    .where(
+      and(
+        eq(schema.message.organizationId, organizationId),
+        eq(schema.message.conversationId, conv.id),
+        eq(schema.message.direction, "out")
+      )
+    );
+
+  for (const m of msgs) {
+    if (isUpgrade(m.status, "read")) {
+      await db
+        .update(schema.message)
+        .set({ status: "read" })
+        .where(eq(schema.message.id, m.id));
+
+      publish(organizationId, {
+        type: "message.status",
+        data: {
+          conversationId: conv.id,
+          messageId: m.id,
+          status: "read",
+          error: null,
+        },
+      });
+    }
+  }
+}
+

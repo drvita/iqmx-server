@@ -77,6 +77,70 @@ export type WebhookReferral = {
   ctwa_clid?: string;
 };
 
+/**
+ * 017 — Mapea la estructura de referral de Meta (Messenger e Instagram)
+ * al formato unificado WebhookReferral que el CRM almacena en ad_attribution.
+ */
+export function mapMetaMessagingReferral(raw: unknown): WebhookReferral | null {
+  if (!raw || typeof raw !== "object") return null;
+  const ref = raw as Record<string, unknown>;
+  const adsContext = (ref.ads_context_data ?? {}) as Record<string, unknown>;
+
+  const adId =
+    typeof ref.ad_id === "string"
+      ? ref.ad_id
+      : typeof ref.source_id === "string"
+        ? ref.source_id
+        : null;
+
+  const headline =
+    typeof adsContext.ad_title === "string"
+      ? adsContext.ad_title
+      : typeof ref.headline === "string"
+        ? ref.headline
+        : null;
+
+  const photo =
+    typeof adsContext.photo_url === "string"
+      ? adsContext.photo_url
+      : typeof ref.image_url === "string"
+        ? ref.image_url
+        : null;
+
+  const video =
+    typeof adsContext.video_url === "string"
+      ? adsContext.video_url
+      : typeof ref.video_url === "string"
+        ? ref.video_url
+        : null;
+
+  const uri =
+    typeof ref.referer_uri === "string"
+      ? ref.referer_uri
+      : typeof ref.source_url === "string"
+        ? ref.source_url
+        : null;
+
+  const sourceType =
+    typeof ref.source === "string"
+      ? ref.source
+      : typeof ref.source_type === "string"
+        ? ref.source_type
+        : "ad";
+
+  if (!adId && !headline && !photo && !uri) return null;
+
+  return {
+    source_id: adId ?? undefined,
+    source_url: uri ?? undefined,
+    source_type: sourceType,
+    headline: headline ?? undefined,
+    image_url: photo ?? undefined,
+    video_url: video ?? undefined,
+    media_type: video ? "video" : photo ? "image" : undefined,
+  };
+}
+
 export type WebhookMessage = {
   /** Teléfono del remitente. OPCIONAL desde la migración de Meta a BSUID (003). */
   from?: string;

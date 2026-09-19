@@ -564,6 +564,12 @@ export const instagramCredentials = pgTable(
     status: text("status", { enum: ["connected", "reconnect_required"] })
       .notNull()
       .default("connected"),
+    /** Si el asistente IA atiende en este canal. */
+    aiEnabled: boolean("ai_enabled").notNull().default(true),
+    /** Asistente IA conversacional asignado a Instagram. */
+    assistantId: text("assistant_id").references(() => agentProfile.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
@@ -608,6 +614,12 @@ export const messengerCredentials = pgTable(
     status: text("status", { enum: ["connected", "reconnect_required"] })
       .notNull()
       .default("connected"),
+    /** Si el asistente IA atiende en este canal. */
+    aiEnabled: boolean("ai_enabled").notNull().default(true),
+    /** Asistente IA conversacional asignado a Messenger. */
+    assistantId: text("assistant_id").references(() => agentProfile.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },

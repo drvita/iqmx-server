@@ -1,5 +1,8 @@
-import { IG_PREFIX } from "@/server/inbox/identity";
-import { ingestInboundMessage } from "@/server/inbox/ingest";
+import { IG_PREFIX, getOrCreateContactByIdentity } from "@/server/inbox/identity";
+import {
+  getOrCreateConversation,
+  ingestInboundMessage,
+} from "@/server/inbox/ingest";
 import {
   getInstagramCredentialsByAccountRef,
   getInstagramCredentialsByIgUserId,
@@ -9,6 +12,9 @@ import {
   zernioSentAtSeconds,
   type ZernioEvent,
 } from "@/server/zernio";
+import { mapMetaMessagingReferral } from "@/server/inbox/webhook";
+import { isAtribucionEnabled } from "@/server/attribution/flag";
+import { recordAttribution } from "@/server/attribution/store";
 
 /**
  * 014 — Adaptadores de entrada del canal de Instagram.
@@ -124,7 +130,9 @@ type MetaIgPayload = {
         mid?: string;
         text?: string;
         is_echo?: boolean;
+        referral?: unknown;
       };
+      referral?: unknown;
     }>;
   }>;
 };
@@ -163,29 +171,58 @@ export async function processMetaInstagramPayload(
       if (m.message?.is_echo) continue;
 
       const igsid = m.sender?.id;
-      const mid = m.message?.mid;
-      if (!igsid || !mid) continue;
-      if (typeof m.message?.text !== "string") continue; // solo texto (014)
+      if (!igsid) continue;
 
-      await ingestInboundMessage({
-        organizationId: creds.organizationId,
-        identity: {
-          identity: `${IG_PREFIX}${igsid}`,
-          channel: "instagram",
-          phone: null,
-          waUserId: null,
-          // Meta no manda nombre ni usuario en el webhook: queda el respaldo
-          // hasta que alguien edite el contacto.
-          profileName: null,
-        },
-        waMessageId: `ig_${mid}`,
-        type: "text",
-        text: m.message.text,
-        timestamp: String(
-          m.timestamp ? Math.floor(m.timestamp / 1000) : Math.floor(Date.now() / 1000)
-        ),
-        threadRef: null,
-      });
+      // 1. Mensaje de texto entrante (con posible referral de anuncio)
+      if (m.message && m.message.mid && typeof m.message.text === "string") {
+        const rawReferral = m.message.referral ?? m.referral;
+        const referral = rawReferral ? mapMetaMessagingReferral(rawReferral) : null;
+
+        await ingestInboundMessage({
+          organizationId: creds.organizationId,
+          identity: {
+            identity: `${IG_PREFIX}${igsid}`,
+            channel: "instagram",
+            phone: null,
+            waUserId: null,
+            // Meta no manda nombre ni usuario en el webhook: queda el respaldo
+            // hasta que alguien edite el contacto.
+            profileName: null,
+          },
+          waMessageId: `ig_${m.message.mid}`,
+          type: "text",
+          text: m.message.text,
+          timestamp: String(
+            m.timestamp ? Math.floor(m.timestamp / 1000) : Math.floor(Date.now() / 1000)
+          ),
+          threadRef: null,
+          referral,
+        });
+      }
+
+      // 2. Evento standalone de apertura de hilo por anuncio en Instagram (messaging_referrals)
+      if (!m.message && m.referral) {
+        const referral = mapMetaMessagingReferral(m.referral);
+        if (referral && (await isAtribucionEnabled(creds.organizationId))) {
+          const identity = `${IG_PREFIX}${igsid}`;
+          const { contact } = await getOrCreateContactByIdentity(creds.organizationId, {
+            identity,
+            channel: "instagram",
+            phone: null,
+            waUserId: null,
+            profileName: null,
+          });
+          const conv = await getOrCreateConversation(creds.organizationId, contact.id, {
+            channel: "instagram",
+          });
+          await recordAttribution({
+            organizationId: creds.organizationId,
+            contactId: contact.id,
+            conversationId: conv.id,
+            referral,
+          });
+        }
+      }
     }
   }
 }

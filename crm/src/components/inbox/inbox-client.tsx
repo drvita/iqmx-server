@@ -37,10 +37,12 @@ const isWideEnoughForPanel = () =>
   typeof window !== "undefined" && window.matchMedia(PANEL_MEDIA_QUERY).matches;
 
 export function InboxClient({ channels }: { channels: readonly Channel[] }) {
-  const multiChannel = channels.length > 1;
   const [conversations, setConversations] = useState<ConversationDto[] | null>(
     null
   );
+  const multiChannel =
+    channels.length > 1 ||
+    (conversations?.some((c) => c.channel !== "whatsapp") ?? false);
   const [lines, setLines] = useState<ConversationLineDto[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageDto[]>([]);
@@ -322,34 +324,40 @@ export function InboxClient({ channels }: { channels: readonly Channel[] }) {
                 <div className="min-w-0">
                   <div className="flex min-w-0 items-center gap-2">
                     <p className="flex min-w-0 items-center gap-1.5 text-[15px] font-bold leading-tight tracking-tight">
-                      {multiChannel && <ChannelBadge channel={selected.channel} />}
+                      {(multiChannel || selected.channel !== "whatsapp") && (
+                        <ChannelBadge channel={selected.channel} />
+                      )}
                       <span className="truncate">{selected.contact.name}</span>
                     </p>
-                    {selected.lineName && (
+                    {selected.channel === "whatsapp" && selected.lineName ? (
                       <LineBadge
                         name={selected.lineName}
                         seed={selected.phoneNumberId ?? selected.lineName}
                         size="xs"
                         showIcon
                       />
+                    ) : selected.accountName ? (
+                      <span className="inline-flex items-center gap-1 rounded-full border border-border-strong bg-background px-2 py-0.5 text-[11px] font-medium text-text-3">
+                        {selected.accountName}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[11px] tracking-[0.02em]">
+                    <span className="font-semibold text-text-2">
+                      {CHANNEL_LABEL[selected.channel]}
+                    </span>
+                    {selected.contact.phone && (
+                      <span className="text-text-3">
+                        {formatPhone(selected.contact.phone)}
+                      </span>
+                    )}
+                    {selected.windowOpen && (
+                      <span className="flex items-center gap-1 text-[10.5px] font-medium text-success-text">
+                        <span className="h-1.5 w-1.5 rounded-full bg-success" />
+                        ventana abierta
+                      </span>
                     )}
                   </div>
-                  <p
-                    className={cn(
-                      "mt-0.5 font-mono text-[10.5px] tracking-[0.04em]",
-                      selected.windowOpen
-                        ? "font-medium text-success-text"
-                        : "text-text-3"
-                    )}
-                  >
-                    {selected.windowOpen
-                      ? "ventana abierta"
-                      : selected.contact.phone
-                        ? formatPhone(selected.contact.phone)
-                        : // Instagram no tiene teléfono: decir "Sin teléfono"
-                          // sería contestar una pregunta que nadie hizo.
-                          CHANNEL_LABEL[selected.channel]}
-                  </p>
                 </div>
               </div>
               {!panelOpen && (

@@ -23,13 +23,20 @@ export const PATCH = withAuth(async (session, req: Request, ctx: Params) => {
 
   const row = await getConversation(session.organizationId, id);
   if (row) {
+    const accountName =
+      row.conversation.channel === "messenger"
+        ? row.messengerPageName
+        : row.conversation.channel === "instagram"
+          ? row.igUsername
+          : row.lineName;
     const dto = serializeConversation(
       row.conversation,
       row.contact,
       null,
       null,
       row.linePhone,
-      row.lineName
+      row.lineName,
+      accountName
     );
     publish(session.organizationId, {
       type: "conversation.updated",

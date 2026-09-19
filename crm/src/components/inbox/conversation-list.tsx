@@ -131,8 +131,11 @@ export function ConversationList({
   const visible =
     filter === "unread" ? inLine.filter((c) => c.unreadCount > 0) : inLine;
 
-  // Con un solo canal encendido no hay bandejas que distinguir.
-  const multiChannel = channels.length > 1;
+  // Distinguir bandejas si hay más de un canal habilitado o con conversaciones activas
+  const availableChannels = Array.from(
+    new Set([...channels, ...conversations.map((c) => c.channel)])
+  );
+  const multiChannel = availableChannels.length > 1;
 
   // Etapas presentes en la bandeja, en el orden en que llegan del pipeline.
   const stages: string[] = [];
@@ -154,7 +157,7 @@ export function ConversationList({
           <span className="font-mono text-[12px] text-text-3">{conversations.length}</span>
           {multiChannel && (
             <div className="ml-auto flex items-center gap-1">
-              {channels.map((ch) => {
+              {availableChannels.map((ch) => {
                 const on = inbox === ch;
                 return (
                   <button
@@ -408,14 +411,18 @@ export function ConversationList({
                       </span>
                       <span className="mt-1.5 flex flex-wrap items-center justify-between gap-1.5">
                         <span className="flex items-center gap-1.5">
-                          {c.lineName && (
+                          {c.channel === "whatsapp" && c.lineName ? (
                             <LineBadge
                               name={c.lineName}
                               seed={c.phoneNumberId ?? c.lineName}
                               size="xs"
                               showIcon
                             />
-                          )}
+                          ) : c.accountName ? (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-border-strong bg-background px-2 py-0.5 text-[11px] font-medium text-text-3">
+                              {c.accountName}
+                            </span>
+                          ) : null}
                         </span>
                         <span className="flex items-center gap-1.5">
                           {c.stageName && (

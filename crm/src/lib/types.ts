@@ -12,7 +12,9 @@ export type ConversationDto = {
   linePhone?: string | null;
   /** Nombre comercial o etiqueta de la línea receptora (ej. Ventas, Soporte). */
   lineName?: string | null;
-  contact: { id: string; name: string; phone: string | null };
+  /** Nombre de la página o cuenta social conectada (ej. página de FB o usuario de IG). */
+  accountName?: string | null;
+  contact: { id: string; name: string; phone: string | null; identity?: string | null };
   stageName: string | null;
   aiEnabled: boolean;
   handoffAt: string | null;
@@ -63,6 +65,7 @@ export type AdReferralDto = {
   mediaType: string | null;
   imageUrl: string | null;
   videoUrl: string | null;
+  channel?: Channel;
 };
 
 export type MessageDto = {

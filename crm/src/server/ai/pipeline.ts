@@ -128,10 +128,13 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
   }
 
   // Resolver el asistente conversacional asignado:
-  // 1. Si la conversación tiene un asistente explícito asignado (ej. pruebas de laboratorio), usarlo prioritariamente.
+  // 1. Si es prueba de laboratorio y tiene un asistente explícito asignado, usarlo prioritariamente.
   // 2. Si tiene una línea de WhatsApp asociada, usar el asistente configurado en esa línea.
+  // 3. Si es del canal Messenger, usar el asistente configurado en la cuenta de Facebook de la organización.
+  // 4. Si es del canal Instagram, usar el asistente configurado en la cuenta de Instagram de la organización.
+  // 5. Si la conversación tiene un asistente explícito fijado manualmente, usarlo.
   let targetAssistantId: string | null = null;
-  if (conversation.assistantId) {
+  if (conversation.isTest && conversation.assistantId) {
     targetAssistantId = conversation.assistantId;
   } else if (conversation.phoneNumberId) {
     const creds = await db
@@ -150,6 +153,42 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
       }
       targetAssistantId = creds[0].assistantId;
     }
+  } else if (conversation.channel === "messenger") {
+    const creds = await db
+      .select({
+        aiEnabled: schema.messengerCredentials.aiEnabled,
+        assistantId: schema.messengerCredentials.assistantId,
+      })
+      .from(schema.messengerCredentials)
+      .where(eq(schema.messengerCredentials.organizationId, organizationId))
+      .limit(1);
+
+    if (creds[0]) {
+      if (!conversation.isTest && !creds[0].aiEnabled) {
+        console.log(`[agente] IA apagada específicamente para Messenger en org ${organizationId}`);
+        return;
+      }
+      targetAssistantId = creds[0].assistantId;
+    }
+  } else if (conversation.channel === "instagram") {
+    const creds = await db
+      .select({
+        aiEnabled: schema.instagramCredentials.aiEnabled,
+        assistantId: schema.instagramCredentials.assistantId,
+      })
+      .from(schema.instagramCredentials)
+      .where(eq(schema.instagramCredentials.organizationId, organizationId))
+      .limit(1);
+
+    if (creds[0]) {
+      if (!conversation.isTest && !creds[0].aiEnabled) {
+        console.log(`[agente] IA apagada específicamente para Instagram en org ${organizationId}`);
+        return;
+      }
+      targetAssistantId = creds[0].assistantId;
+    }
+  } else if (conversation.assistantId) {
+    targetAssistantId = conversation.assistantId;
   }
 
   // Cargar el perfil del asistente asignado (debe ser de tipo conversational) o el predeterminado de la org
@@ -188,8 +227,8 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
     return;
   }
 
-  // Si la conversación no tenía asistente explícito, vincular el perfil resuelto
-  if (!conversation.assistantId) {
+  // Mantener actualizado el asistente activo en la conversación si difiere
+  if (conversation.assistantId !== profile.id) {
     await db
       .update(schema.conversation)
       .set({ assistantId: profile.id })
