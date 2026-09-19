@@ -49,6 +49,7 @@ class CrmTenantSummary(BaseModel):
 class OverrideLimitsRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
 
+    organization_name: Optional[str] = None
     max_whatsapp_accounts: Optional[int] = None
     max_team_members: Optional[int] = None
     max_contacts: Optional[int] = None
@@ -82,7 +83,14 @@ def list_crm_tenants(
     sql_query = text("""
         SELECT 
             o.id as organization_id,
-            o.name,
+            COALESCE(
+                CASE 
+                    WHEN o.metadata IS NOT NULL AND o.metadata != '' AND (o.metadata::jsonb ? 'branding')
+                    THEN NULLIF(o.metadata::jsonb -> 'branding' ->> 'name', '')
+                    ELSE NULL 
+                END,
+                o.name
+            ) as name,
             o.slug,
             o.status,
             o.created_at,
@@ -232,6 +240,38 @@ async def override_tenant_limits(
     payload = {k: v for k, v in req.model_dump().items() if v is not None}
     if not payload:
         raise HTTPException(status_code=400, detail="No se enviaron campos para modificar.")
+
+    # Sincronizar nombre de organización y cliente si se especificó
+    if req.organization_name is not None and req.organization_name.strip():
+        clean_org_name = req.organization_name.strip()
+        db.execute(text("""
+            UPDATE crm.organization
+            SET 
+                name = :clean_name,
+                metadata = CASE 
+                    WHEN metadata IS NOT NULL AND metadata != '' AND (metadata::jsonb ? 'branding')
+                    THEN jsonb_set(metadata::jsonb, '{branding,name}', to_jsonb(CAST(:clean_name AS text)))::text
+                    WHEN metadata IS NOT NULL AND metadata != ''
+                    THEN (metadata::jsonb || jsonb_build_object('branding', jsonb_build_object('name', CAST(:clean_name AS text))))::text
+                    ELSE json_build_object('branding', json_build_object('name', CAST(:clean_name AS text)))::text
+                END
+            WHERE id = :org_id;
+        """), {"clean_name": clean_org_name, "org_id": org_id})
+
+        db.execute(text("""
+            UPDATE public.customers
+            SET company_name = :clean_name, updated_at = NOW()
+            WHERE id IN (
+                SELECT NULLIF(external_customer_id, '')::integer
+                FROM crm.organization
+                WHERE id = :org_id AND external_customer_id ~ '^[0-9]+$'
+                UNION
+                SELECT customer_id
+                FROM public.customer_subscriptions
+                WHERE external_tenant_id = :org_id
+            );
+        """), {"clean_name": clean_org_name, "org_id": org_id})
+        db.commit()
 
     # Guardar en customer_subscriptions si existe
     sub = db.query(CustomerSubscription).filter(

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import {
   DEFAULT_BRANDING,
@@ -69,9 +69,37 @@ export async function saveBranding(
     .where(eq(schema.organization.id, organizationId))
     .limit(1);
   const meta = parseMetadata(rows[0]?.metadata ?? null);
-  meta.branding = normalizeBranding(branding);
+  const normalized = normalizeBranding(branding);
+  meta.branding = normalized;
+
+  const cleanName = normalized.name.trim();
+
+  // 1. Actualizar la organización en el CRM (tanto el nombre directo como los metadatos)
   await db
     .update(schema.organization)
-    .set({ metadata: JSON.stringify(meta) })
+    .set({
+      name: cleanName,
+      metadata: JSON.stringify(meta),
+    })
     .where(eq(schema.organization.id, organizationId));
+
+  // 2. Sincronizar el nombre en la tabla central public.customers para el panel de administración y portal
+  try {
+    await db.execute(sql`
+      UPDATE public.customers
+      SET company_name = ${cleanName}, updated_at = NOW()
+      WHERE id IN (
+        SELECT NULLIF(external_customer_id, '')::integer
+        FROM crm.organization
+        WHERE id = ${organizationId} AND external_customer_id ~ '^[0-9]+$'
+        UNION
+        SELECT customer_id
+        FROM public.customer_subscriptions
+        WHERE external_tenant_id = ${organizationId}
+      )
+    `);
+  } catch (err) {
+    // Si la tabla public.customers no está disponible en este entorno, salvaguardar
+    console.warn("No se pudo sincronizar el nombre con public.customers:", err);
+  }
 }

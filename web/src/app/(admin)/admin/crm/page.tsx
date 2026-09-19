@@ -70,6 +70,7 @@ export default function AdminCrmPage() {
   const [rawJsonError, setRawJsonError] = useState<string | null>(null);
   const [extraRawFields, setExtraRawFields] = useState<Record<string, any>>({});
   const [overrideForm, setOverrideForm] = useState({
+    organization_name: "",
     max_whatsapp_accounts: 1,
     max_team_members: 2,
     agenda_enabled: false,
@@ -229,6 +230,7 @@ export default function AdminCrmPage() {
     setExtraRawFields({});
     const activeChannels = (tenant.channels || "").split(",").map((c) => c.trim().toLowerCase());
     const formState = {
+      organization_name: tenant.name || "",
       max_whatsapp_accounts: tenant.max_whatsapp_accounts,
       max_team_members: tenant.max_team_members,
       agenda_enabled: tenant.agenda_enabled,
@@ -249,6 +251,7 @@ export default function AdminCrmPage() {
     if (formState.instagram_enabled) channelsList.push("instagram");
 
     const initialJson: Record<string, any> = {
+      organization_name: formState.organization_name,
       max_whatsapp_accounts: formState.max_whatsapp_accounts,
       max_team_members: formState.max_team_members,
       agenda_enabled: formState.agenda_enabled,
@@ -432,6 +435,7 @@ export default function AdminCrmPage() {
 
       payload = {
         ...extraRawFields,
+        organization_name: overrideForm.organization_name.trim(),
         max_whatsapp_accounts: overrideForm.max_whatsapp_accounts,
         max_team_members: overrideForm.max_team_members,
         agenda_enabled: overrideForm.agenda_enabled,
@@ -892,6 +896,26 @@ export default function AdminCrmPage() {
             {/* Vista 1: Formulario Asistido */}
             {overrideModalTab === "form" && (
               <div className="mt-4 space-y-4">
+                {/* Nombre de la Empresa / Organización */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700">
+                    Nombre de la Empresa / CRM
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={100}
+                    value={overrideForm.organization_name}
+                    onChange={(e) =>
+                      setOverrideForm({
+                        ...overrideForm,
+                        organization_name: e.target.value,
+                      })
+                    }
+                    placeholder="Ej. Mi Empresa o Marca"
+                    className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-xs text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+
                 {/* Sección Límites y Cuotas */}
                 <div className="grid grid-cols-2 gap-3">
                   <div>

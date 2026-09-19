@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
@@ -218,7 +219,32 @@ def update_customer(
 
     # 3. Nombre de la empresa
     if payload.company_name is not None:
-        customer.company_name = payload.company_name.strip()
+        clean_company = payload.company_name.strip()
+        customer.company_name = clean_company
+
+        # Sincronizar hacia crm.organization
+        db.execute(text("""
+            UPDATE crm.organization
+            SET 
+                name = :clean_name,
+                metadata = CASE 
+                    WHEN metadata IS NOT NULL AND metadata != '' AND (metadata::jsonb ? 'branding')
+                    THEN jsonb_set(metadata::jsonb, '{branding,name}', to_jsonb(CAST(:clean_name AS text)))::text
+                    WHEN metadata IS NOT NULL AND metadata != ''
+                    THEN (metadata::jsonb || jsonb_build_object('branding', jsonb_build_object('name', CAST(:clean_name AS text))))::text
+                    ELSE json_build_object('branding', json_build_object('name', CAST(:clean_name AS text)))::text
+                END
+            WHERE external_customer_id = :cust_id_str
+               OR id IN (
+                   SELECT external_tenant_id 
+                   FROM public.customer_subscriptions 
+                   WHERE customer_id = :cust_id AND external_tenant_id IS NOT NULL
+               );
+        """), {
+            "clean_name": clean_company,
+            "cust_id": customer.id,
+            "cust_id_str": str(customer.id),
+        })
 
     # 4. Teléfono
     if payload.phone is not None:
