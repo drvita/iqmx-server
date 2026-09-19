@@ -7,6 +7,24 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 > **Zona horaria de referencia:** Ciudad de México (CST / UTC-6).
 
+## [1.12.0] - 2026-09-19
+
+### Añadido
+
+- **Menú de Navegación Lateral Colapsable y Flotante por Hover (`AppNav`)**:
+  - Modo compacto inteligente en escritorio que reduce el ancho reservado de 224px a 68px (`w-[4.25rem]`), liberando 156px para el área de trabajo en la bandeja de entrada, visor de mensajes y paneles de detalle.
+  - Expansión flotante fluida al pasar el cursor (*peek on hover* a 224px / `w-56`) con elevación y sombra profunda (`shadow-2xl`), posicionada de forma absoluta sobre el lienzo para garantizar cero desplazamiento acumulado de diseño (CLS = 0).
+  - Botón interactivo de fijación/anclaje (Pin / Unpin) con memorización persistente de la preferencia del usuario en `localStorage` (`crm.sidebar.collapsed`).
+  - Repliegue automático al hacer clic en un enlace de navegación o al presionar la tecla `Escape`.
+  - Preservación intacta del comportamiento táctil y cajón deslizante sobre velo oscuro en dispositivos móviles y tabletas.
+  - Archivos: [crm/src/components/app-nav.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/app-nav.tsx) y [crm/src/components/app-shell.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/app-shell.tsx).
+- **Sincronización Bidireccional de Nombre Corporativo y Organización**:
+  - Sincronización atómica entre la configuración de marca del CRM (`settings/branding`) y las entidades centrales de la plataforma ([crm/src/server/branding.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/branding.ts)), manteniendo alineados simultáneamente `crm.organization.name`, `crm.organization.metadata.branding.name` y `public.customers.company_name`.
+  - Capacidad de actualización del nombre corporativo directamente desde el modal de ajustes de inquilinos en el panel administrativo Web ([web/src/app/(admin)/admin/crm/page.tsx](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/(admin)/admin/crm/page.tsx)).
+  - Endpoints en FastAPI con propagación bidireccional inmediata y resolución resiliente con `COALESCE` para organizaciones existentes: [api/app/api/admin_customers.py](file:///Users/laclavees12345/code/iqissmexico/main/api/app/api/admin_customers.py) y [api/app/api/admin_crm.py](file:///Users/laclavees12345/code/iqissmexico/main/api/app/api/admin_crm.py).
+
+---
+
 ## [1.11.0] - 2026-09-19
 
 ### Añadido

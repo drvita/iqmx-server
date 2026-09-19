@@ -68,7 +68,7 @@ export function AppShell({
   }, [navOpen]);
 
   return (
-    <div className="flex h-dvh overflow-hidden bg-background">
+    <div className="relative flex h-dvh overflow-hidden bg-background">
       {navOpen && (
         <button
           aria-label="Cerrar el menú"
