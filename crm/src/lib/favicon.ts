@@ -154,6 +154,10 @@ export function faviconCacheKey(branding: Branding): string {
 }
 
 /** URL que va en el `<link rel="icon">`. */
-export function faviconHref(branding: Branding): string {
-  return `/api/branding/favicon?v=${faviconCacheKey(branding)}`;
+export function faviconHref(
+  branding: Branding,
+  organizationId?: string | null
+): string {
+  const orgParam = organizationId ? `&org=${encodeURIComponent(organizationId)}` : "";
+  return `/api/branding/favicon?v=${faviconCacheKey(branding)}${orgParam}`;
 }

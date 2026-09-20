@@ -2,6 +2,7 @@ import { readMediaFile } from "@/server/whatsapp/media";
 import { getBrandingContext } from "@/server/branding";
 import { DEFAULT_BRANDING } from "@/lib/branding";
 import { FAVICON_ASSET, generatedFaviconSvg } from "@/lib/favicon";
+import { getSessionOrNull } from "@/lib/auth/session";
 
 export const dynamic = "force-dynamic";
 
@@ -27,20 +28,24 @@ function cabeceras(mime: string, cacheable: boolean): HeadersInit {
 }
 
 /**
- * El icono de la pestaña. **Ruta pública**: el login también tiene pestaña, y
- * ahí todavía no hay sesión. Es la misma decisión que ya toma el GET de la
- * marca — en una instancia de un solo negocio, su nombre y su logo no son un
- * secreto.
+ * El icono de la pestaña y logotipo del tenant.
+ * Resuelve la organización mediante el parámetro `?org=` o mediante la sesión activa.
+ * Si no se encuentra organización o es una petición pública sin contexto, sirve el generado por defecto.
  */
 export async function GET(req: Request) {
-  const cacheable = new URL(req.url).searchParams.has("v");
+  const url = new URL(req.url);
+  const cacheable = url.searchParams.has("v");
+  const orgParam = url.searchParams.get("org")?.trim() || null;
+  const session = await getSessionOrNull().catch(() => null);
+  const targetOrgId = orgParam || session?.organizationId || null;
 
-  const ctx = await getBrandingContext().catch(() => null);
+  const ctx = await getBrandingContext(targetOrgId).catch(() => null);
   const branding = ctx?.branding ?? DEFAULT_BRANDING;
+  const resolvedOrgId = ctx?.organizationId ?? targetOrgId;
 
-  if (ctx?.organizationId && branding.favicon) {
+  if (resolvedOrgId && branding.favicon) {
     try {
-      const buf = await readMediaFile(ctx.organizationId, FAVICON_ASSET);
+      const buf = await readMediaFile(resolvedOrgId, FAVICON_ASSET);
       return new Response(new Uint8Array(buf), {
         headers: cabeceras(branding.favicon.mime, cacheable),
       });

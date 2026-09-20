@@ -48,7 +48,10 @@ function coalesceMap(): Map<string, CoalesceEntry> {
 }
 
 /** Punto de entrada con debounce (mensajes entrantes reales). */
-export function scheduleAgentTurn(conversationId: string): void {
+export async function scheduleAgentTurn(
+  conversationId: string,
+  organizationId?: string | null
+): Promise<void> {
   const map = coalesceMap();
   const entry = map.get(conversationId) ?? {
     timer: null,
@@ -62,7 +65,36 @@ export function scheduleAgentTurn(conversationId: string): void {
     return;
   }
   if (entry.timer) clearTimeout(entry.timer);
-  const delay = getEnv().AGENT_COALESCE_MS;
+
+  let delay = getEnv().AGENT_COALESCE_MS;
+  let targetOrgId = organizationId;
+
+  if (!targetOrgId) {
+    try {
+      const db = getDb();
+      const rows = await db
+        .select({ organizationId: schema.conversation.organizationId })
+        .from(schema.conversation)
+        .where(eq(schema.conversation.id, conversationId))
+        .limit(1);
+      targetOrgId = rows[0]?.organizationId ?? null;
+    } catch (err) {
+      console.warn("[agente] No se pudo resolver org de conversación para debounce:", err);
+    }
+  }
+
+  if (targetOrgId) {
+    try {
+      const { getOrganizationSettings } = await import("@/server/settings/service");
+      const settings = await getOrganizationSettings(targetOrgId);
+      if (typeof settings.agentCoalesceMs === "number" && settings.agentCoalesceMs >= 500) {
+        delay = settings.agentCoalesceMs;
+      }
+    } catch (err) {
+      console.warn("[agente] No se pudo obtener agentCoalesceMs de org, usando fallback:", err);
+    }
+  }
+
   entry.timer = setTimeout(() => {
     entry.timer = null;
     void executeTurn(conversationId);

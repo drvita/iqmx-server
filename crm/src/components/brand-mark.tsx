@@ -1,13 +1,12 @@
 import type { Branding } from "@/lib/branding";
 import {
   BRAND_CYAN,
-  BRAND_CYAN_ON_TILE,
   BRAND_MARK_BODY,
   BRAND_MARK_STROKE,
   BRAND_MARK_TAIL,
   isVoceroName,
 } from "@/lib/brand";
-import { faviconInitial } from "@/lib/favicon";
+import { faviconHref, faviconInitial } from "@/lib/favicon";
 import { cn } from "@/lib/utils";
 
 /**
@@ -44,24 +43,49 @@ export function BrandMark({
 
 /**
  * Mosaico cuadrado con degradado del acento: es el favicon en grande. Con la
- * marca Vocero lleva la "v"; con un nombre white-label, la inicial.
+ * marca Vocero lleva la "v"; con un nombre white-label, la inicial. Si se ha
+ * subido un icono/logo, lo renderiza como imagen.
  */
 export function BrandTile({
   branding,
   className,
 }: {
-  branding: Pick<Branding, "name">;
+  branding: Pick<Branding, "name"> & {
+    favicon?: Branding["favicon"];
+    accent?: string;
+  };
   className?: string;
 }) {
+  if (branding.favicon) {
+    return (
+      <span
+        className={cn(
+          "brand-tile flex shrink-0 items-center justify-center overflow-hidden p-1 text-brand-fg font-bold leading-none",
+          className,
+        )}
+        aria-hidden
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={faviconHref(branding as Branding)}
+          alt={branding.name}
+          className="h-full w-full object-contain rounded-[inherit]"
+        />
+      </span>
+    );
+  }
+
   return (
     <span
       className={cn(
         "brand-tile flex shrink-0 items-center justify-center text-brand-fg font-bold leading-none",
-        className
+        className,
       )}
       aria-hidden
     >
-      <span className="font-bold leading-none">{faviconInitial(branding.name)}</span>
+      <span className="font-bold leading-none">
+        {faviconInitial(branding.name)}
+      </span>
     </span>
   );
 }
@@ -82,28 +106,33 @@ const TILE_SIZE = {
 } as const;
 
 /**
- * La marca completa: logotipo oficial /logo.png por defecto, o mosaico con la
- * inicial y el nombre cuando la instancia está configurada como marca propia (white-label).
+ * La marca completa: logotipo oficial /logo.png por defecto (si no hay logo subido),
+ * o mosaico con la imagen/inicial y el nombre cuando la instancia está personalizada.
  */
 export function BrandLogo({
   branding,
   size = "md",
   className,
 }: {
-  branding: Pick<Branding, "name">;
+  branding: Pick<Branding, "name"> & {
+    favicon?: Branding["favicon"];
+    accent?: string;
+  };
   size?: keyof typeof WORDMARK_SIZE;
   className?: string;
 }) {
-  if (isVoceroName(branding.name)) {
+  if (isVoceroName(branding.name) && !branding.favicon) {
     return (
-      <span className={cn("flex items-center gap-2 text-foreground", className)}>
+      <span
+        className={cn("flex items-center gap-2 text-foreground", className)}
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/logo.png"
           alt="IQISSMexico"
           className={cn(
             "object-contain",
-            size === "lg" ? "h-9 w-auto" : "h-7 w-auto"
+            size === "lg" ? "h-9 w-auto" : "h-7 w-auto",
           )}
         />
       </span>
@@ -115,7 +144,7 @@ export function BrandLogo({
       <span
         className={cn(
           "truncate font-[750] leading-none tracking-tight",
-          size === "lg" ? "text-[26px]" : "text-[17px]"
+          size === "lg" ? "text-[26px]" : "text-[17px]",
         )}
       >
         {branding.name}

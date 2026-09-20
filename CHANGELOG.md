@@ -7,6 +7,25 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 > **Zona horaria de referencia:** Ciudad de México (CST / UTC-6).
 
+## [1.14.0] - 2026-09-19
+
+### Añadido
+
+- **Ventana de Agrupamiento (`agentCoalesceMs`) por Organización en Webhook**:
+  - Conexión de `crm.organization_settings.agent_coalesce_ms` al temporizador de debounce del agente ([crm/src/server/ai/pipeline.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/ai/pipeline.ts)).
+  - Propagación del identificador de organización desde la ingesta del webhook ([crm/src/server/inbox/ingest.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/inbox/ingest.ts)) y el disparador de turno ([crm/src/server/ai/trigger.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/ai/trigger.ts)).
+  - Cada organización ahora ejecuta estrictamente su propio tiempo de espera configurado en `/settings/ai` (ej. 10,000 ms = 10 segundos) antes de que la IA responda, agrupando ráfagas de mensajes del cliente de forma fidedigna y utilizando `AGENT_COALESCE_MS` únicamente como respaldo de seguridad.
+
+### Corregido
+
+- **Aislamiento Multi-Tenant Estricto de Marca y Branding (`/settings/branding`)**:
+  - Corrección de fuga cross-tenant en [crm/src/server/branding.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/branding.ts): se eliminó la consulta `LIMIT 1` global que congelaba el branding de la primera organización para todos los demás inquilinos. Ahora se retorna de forma segura `DEFAULT_BRANDING` si no hay organización especificada.
+  - Aislamiento de color de acento (`--accent`): inyección explícita del bloque `<style>` con las variables CSS del tenant en [crm/src/app/(app)/layout.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/%28app%29/layout.tsx) y resolución de sesión en SSR dentro de [crm/src/app/layout.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/layout.tsx).
+  - Aislamiento de assets de favicon y logo: el endpoint público [crm/src/app/api/branding/favicon/route.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/branding/favicon/route.ts) y la función `faviconHref` ahora resuelven por parámetro `?org=` o por la sesión activa, evitando servir el archivo de otra organización.
+  - Soporte de imagen de marca en interfaz ([crm/src/components/brand-mark.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/brand-mark.tsx)): `BrandTile` y `BrandLogo` ahora renderizan el logotipo subido por la organización en la barra de navegación lateral y móvil.
+
+---
+
 ## [1.13.0] - 2026-09-19
 
 ### Añadido

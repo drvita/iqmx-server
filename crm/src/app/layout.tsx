@@ -5,6 +5,7 @@ import { accentCssVariables, DEFAULT_BRANDING } from "@/lib/branding";
 import { faviconHref } from "@/lib/favicon";
 import { normalizeThemePreference, THEME_COOKIE } from "@/lib/theme";
 import { getBranding } from "@/server/branding";
+import { getSessionOrNull } from "@/lib/auth/session";
 import "./globals.css";
 
 // Las tres voces de la marca, las mismas de vocerocrm.com. next/font las
@@ -31,20 +32,22 @@ const plexMono = IBM_Plex_Mono({
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata(): Promise<Metadata> {
-  const branding = await getBranding().catch(() => DEFAULT_BRANDING);
+  const session = await getSessionOrNull().catch(() => null);
+  const branding = await getBranding(session?.organizationId).catch(() => DEFAULT_BRANDING);
   return {
     title: `${branding.name} — CRM de WhatsApp`,
     description: "CRM de WhatsApp con agente de IA y Laboratorio de auto-evaluación",
     // El `?v=` cambia con la marca: los navegadores guardan el favicon con una
     // insistencia notable y, sin eso, el logo nuevo tarda días en aparecer.
-    icons: { icon: faviconHref(branding) },
+    icons: { icon: faviconHref(branding, session?.organizationId) },
   };
 }
 
 export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
-  const branding = await getBranding().catch(() => DEFAULT_BRANDING);
+  const session = await getSessionOrNull().catch(() => null);
+  const branding = await getBranding(session?.organizationId).catch(() => DEFAULT_BRANDING);
   const theme = normalizeThemePreference(
     (await cookies()).get(THEME_COOKIE)?.value
   );

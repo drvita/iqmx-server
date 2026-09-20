@@ -8,6 +8,7 @@ import { AppShell } from "@/components/app-shell";
 import { resolveBuildCommit } from "@/lib/version";
 import { isAgendaEnabled } from "@/server/agenda/flag";
 import { isLabEnabledForOrg } from "@/server/settings/limits";
+import { accentCssVariables } from "@/lib/branding";
 import {
   getOrganizationRolePermissions,
   type AppModule,
@@ -79,18 +80,23 @@ export default async function AppLayout({
   }
 
   return (
-    <AppShell
-      branding={branding}
-      userName={authSession?.user.name ?? "Usuario"}
-      role={session.role}
-      theme={theme}
-      commit={resolveBuildCommit()}
-      agenda={hasAgenda}
-      lab={hasLab}
-      permissions={userPermissions}
-      mustChangePassword={mustChangePassword}
-    >
-      {children}
-    </AppShell>
+    <>
+      <style
+        dangerouslySetInnerHTML={{ __html: accentCssVariables(branding.accent) }}
+      />
+      <AppShell
+        branding={branding}
+        userName={authSession?.user.name ?? "Usuario"}
+        role={session.role}
+        theme={theme}
+        commit={resolveBuildCommit()}
+        agenda={hasAgenda}
+        lab={hasLab}
+        permissions={userPermissions}
+        mustChangePassword={mustChangePassword}
+      >
+        {children}
+      </AppShell>
+    </>
   );
 }

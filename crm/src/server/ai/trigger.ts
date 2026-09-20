@@ -7,7 +7,8 @@ import { isAiConfigured } from "@/lib/env";
  * directamente, sin debounce).
  */
 export async function maybeRunAgentTurn(
-  conversationId: string
+  conversationId: string,
+  organizationId?: string | null
 ): Promise<void> {
-  scheduleAgentTurn(conversationId);
+  await scheduleAgentTurn(conversationId, organizationId);
 }

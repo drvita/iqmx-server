@@ -30,18 +30,17 @@ function parseMetadata(metadata: string | null): Record<string, unknown> {
 export async function getBrandingContext(
   organizationId?: string | null
 ): Promise<{ organizationId: string | null; branding: Branding }> {
+  if (!organizationId) {
+    return { organizationId: null, branding: DEFAULT_BRANDING };
+  }
+
   const db = getDb();
-  const rows = organizationId
-    ? await db
-        .select({ id: schema.organization.id, metadata: schema.organization.metadata })
-        .from(schema.organization)
-        .where(eq(schema.organization.id, organizationId))
-        .limit(1)
-    : // Sin sesión (login, layout raíz): la única organización de la instancia.
-      await db
-        .select({ id: schema.organization.id, metadata: schema.organization.metadata })
-        .from(schema.organization)
-        .limit(1);
+  const rows = await db
+    .select({ id: schema.organization.id, metadata: schema.organization.metadata })
+    .from(schema.organization)
+    .where(eq(schema.organization.id, organizationId))
+    .limit(1);
+
   if (!rows[0]) return { organizationId: null, branding: DEFAULT_BRANDING };
   const meta = parseMetadata(rows[0].metadata);
   return {
