@@ -7,6 +7,17 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 > **Zona horaria de referencia:** Ciudad de México (CST / UTC-6).
 
+## [1.15.0] - 2026-09-19
+
+### Corregido
+
+- **Validación Multi-Tenant de Canales Zernio sin Variables de Entorno Globales**:
+  - Corrección de descarte prematuro de eventos de Messenger e Instagram en [crm/src/server/zernio/dispatch.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/zernio/dispatch.ts).
+  - La función `processZernioPayload` ahora resuelve el `accountRef` del evento para identificar a la organización propietaria de la cuenta conectada (`getMessengerCredentialsByAccountRef` o `getInstagramCredentialsByAccountRef`) y valida si el canal está activo en la base de datos para ese inquilino con `isChannelEnabledForOrg`.
+  - Se eliminó el bloqueo forzado que dependía de la variable de entorno global `CHANNELS` del servidor en producción, permitiendo que las organizaciones con canales activos reciban e ingieran sus mensajes de Facebook/Messenger e Instagram sin requerir variables fijas en el host.
+
+---
+
 ## [1.14.0] - 2026-09-19
 
 ### Añadido

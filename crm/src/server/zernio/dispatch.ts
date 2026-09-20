@@ -1,5 +1,5 @@
 import type { Channel } from "@/lib/channels";
-import { isChannelEnabled } from "@/server/channels/enabled";
+import { isChannelEnabled, isChannelEnabledForOrg } from "@/server/channels/enabled";
 import { getInstagramCredentialsByAccountRef } from "@/server/instagram/credentials";
 import { processZernioEvent } from "@/server/instagram/ingest";
 import { getMessengerCredentialsByAccountRef } from "@/server/messenger/credentials";
@@ -54,16 +54,39 @@ export async function resolveZernioSecret(
 }
 
 /**
- * Procesa el evento por el canal al que pertenece. Un canal apagado descarta
- * con aviso: la instancia no lo tiene, y su superficie no existe (ADR-001).
+ * Procesa el evento por el canal al que pertenece.
+ * Valida si el canal está habilitado para la organización de la cuenta conectada,
+ * o si está habilitado a nivel global en la instancia.
  */
 export async function processZernioPayload(payload: unknown): Promise<void> {
   const channel = zernioTargetChannel(payload);
   if (!channel) return; // otra plataforma conectada a la misma llave: no es nuestra
 
-  if (!isChannelEnabled(channel)) {
+  const evt = payload as ZernioEvent | null;
+  const accountRef = evt?.account?.id ?? null;
+
+  let isOrgActive = false;
+  let orgId: string | null = null;
+
+  if (accountRef) {
+    if (channel === "messenger") {
+      const creds = await getMessengerCredentialsByAccountRef(accountRef);
+      orgId = creds?.organizationId ?? null;
+    } else if (channel === "instagram") {
+      const creds = await getInstagramCredentialsByAccountRef(accountRef);
+      orgId = creds?.organizationId ?? null;
+    }
+  }
+
+  if (orgId) {
+    isOrgActive = await isChannelEnabledForOrg(channel, orgId);
+  }
+
+  const isGlobalActive = isChannelEnabled(channel);
+
+  if (!isOrgActive && !isGlobalActive) {
     console.warn(
-      `[zernio] evento de ${channel} con el canal apagado en esta instancia: descartado`
+      `[zernio] evento de ${channel} descartado: canal apagado para la organización ${orgId ?? "(desconocida)"} y no activo globalmente.`
     );
     return;
   }
