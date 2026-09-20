@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
+  AlertCircle,
   Bot,
   Check,
   Loader2,
@@ -123,11 +124,21 @@ export function AgentClient() {
 
   async function saveAssistant(patch: Partial<Assistant>) {
     if (!selectedAssistant) return;
-    await fetch("/api/agent/profile", {
+    const res = await fetch("/api/agent/profile", {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ ...patch, id: selectedAssistant.id }),
-    }).catch(() => null);
+    });
+
+    const data = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      const msg =
+        data?.error?.message ||
+        `Error del servidor (${res.status}). No se pudieron guardar los cambios.`;
+      throw new Error(msg);
+    }
+
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
     void refetchProfiles(selectedAssistant.id);
@@ -142,11 +153,20 @@ export function AgentClient() {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(data),
-    }).then((r) => (r.ok ? r.json() : null));
+    });
 
-    if (res?.assistant?.id) {
+    const result = await res.json().catch(() => null);
+
+    if (!res.ok) {
+      const msg =
+        result?.error?.message ||
+        `Error al crear asistente (${res.status})`;
+      throw new Error(msg);
+    }
+
+    if (result?.assistant?.id) {
       setIsCreating(false);
-      void refetchProfiles(res.assistant.id);
+      void refetchProfiles(result.assistant.id);
     }
   }
 
@@ -232,71 +252,10 @@ export function AgentClient() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const form = e.currentTarget;
-                  const name = (
-                    form.elements.namedItem("name") as HTMLInputElement
-                  ).value;
-                  const type = (
-                    form.elements.namedItem("type") as HTMLSelectElement
-                  ).value as "conversational" | "tool";
-                  const description = (
-                    form.elements.namedItem("description") as HTMLInputElement
-                  ).value;
-                  void createAssistant({ name, type, description });
-                }}
-                className="space-y-4"
-              >
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="create-name">Nombre del Asistente</Label>
-                    <Input
-                      id="create-name"
-                      name="name"
-                      placeholder="p. ej. Asistente Ventas"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="create-type">Tipo de Asistente</Label>
-                    <select
-                      id="create-type"
-                      name="type"
-                      className="w-full rounded-md border bg-background px-3 py-2 text-sm shadow-sm"
-                      defaultValue="conversational"
-                    >
-                      <option value="conversational">
-                        💬 Conversacional (Atiende WhatsApp en vivo)
-                      </option>
-                      <option value="tool">
-                        ⚙️ Herramienta / Tool (Procesos y análisis interno)
-                      </option>
-                    </select>
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="create-description">
-                    Descripción o Propósito
-                  </Label>
-                  <Input
-                    id="create-description"
-                    name="description"
-                    placeholder="p. ej. Atiende prospectos de la línea de ventas central"
-                  />
-                </div>
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsCreating(false)}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button type="submit">Crear Asistente</Button>
-                </div>
-              </form>
+              <CreateAssistantForm
+                onCancel={() => setIsCreating(false)}
+                onSubmit={createAssistant}
+              />
             </CardContent>
           </Card>
         </div>
@@ -390,6 +349,164 @@ export function AgentClient() {
   );
 }
 
+const LIMITS = {
+  name: 100,
+  description: 1000,
+  tone: 1500,
+  greeting: 2000,
+  instructions: 16000,
+  escalationRules: 8000,
+} as const;
+
+function CharacterCount({
+  current,
+  max,
+  className = "",
+}: {
+  current: number;
+  max: number;
+  className?: string;
+}) {
+  const isOver = current > max;
+  const isNear = !isOver && current >= max * 0.85;
+
+  return (
+    <span
+      className={`text-[11px] font-mono tabular-nums transition-colors ${
+        isOver
+          ? "text-destructive font-bold"
+          : isNear
+          ? "text-amber-500 dark:text-amber-400 font-medium"
+          : "text-muted-foreground"
+      } ${className}`}
+    >
+      {current.toLocaleString()} / {max.toLocaleString()} car.
+      {isOver && ` (excede por ${(current - max).toLocaleString()})`}
+    </span>
+  );
+}
+
+function CreateAssistantForm({
+  onCancel,
+  onSubmit,
+}: {
+  onCancel: () => void;
+  onSubmit: (data: {
+    name: string;
+    type: "conversational" | "tool";
+    description?: string;
+  }) => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+  const [type, setType] = useState<"conversational" | "tool">("conversational");
+  const [description, setDescription] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const isNameOver = name.length > LIMITS.name;
+  const isDescOver = description.length > LIMITS.description;
+  const hasError = isNameOver || isDescOver || !name.trim();
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (hasError) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await onSubmit({
+        name: name.trim(),
+        type,
+        description: description.trim() || undefined,
+      });
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Error al crear asistente");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+      {error && (
+        <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="create-name">Nombre del Asistente *</Label>
+            <CharacterCount current={name.length} max={LIMITS.name} />
+          </div>
+          <Input
+            id="create-name"
+            placeholder="p. ej. Asistente Dental - Sucursal Providencia"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+            maxLength={LIMITS.name + 20}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="create-type">Tipo de Asistente</Label>
+          <select
+            id="create-type"
+            value={type}
+            onChange={(e) =>
+              setType(e.target.value as "conversational" | "tool")
+            }
+            className="w-full rounded-md border bg-background px-3 py-2 text-sm shadow-sm"
+          >
+            <option value="conversational">
+              💬 Conversacional (Atiende WhatsApp en vivo)
+            </option>
+            <option value="tool">
+              ⚙️ Herramienta / Tool (Procesos y análisis interno)
+            </option>
+          </select>
+        </div>
+      </div>
+
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <Label htmlFor="create-description">Descripción o Propósito</Label>
+          <CharacterCount current={description.length} max={LIMITS.description} />
+        </div>
+        <Input
+          id="create-description"
+          placeholder="p. ej. Atiende prospectos de ortodoncia, califica intención de compra y agenda valoraciones"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          maxLength={LIMITS.description + 50}
+        />
+      </div>
+
+      <div className="flex justify-end gap-2 pt-2">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={onCancel}
+          disabled={loading}
+        >
+          Cancelar
+        </Button>
+        <Button type="submit" disabled={hasError || loading}>
+          {loading ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Creando…
+            </>
+          ) : (
+            "Crear Asistente"
+          )}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
 function AssistantEditor({
   assistant,
   onSave,
@@ -404,17 +521,55 @@ function AssistantEditor({
   const [form, setForm] = useState(assistant);
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [toggling, setToggling] = useState(false);
 
-  useEffect(() => setForm(assistant), [assistant]);
+  useEffect(() => {
+    setForm(assistant);
+    setSaveError(null);
+  }, [assistant]);
+
+  // Validaciones reactivas de longitud
+  const nameLen = (form.name ?? "").length;
+  const descLen = (form.description ?? "").length;
+  const toneLen = (form.tone ?? "").length;
+  const greetingLen = (form.greeting ?? "").length;
+  const instructionsLen = (form.instructions ?? "").length;
+  const escalationLen = (form.escalationRules ?? "").length;
+
+  const isNameOver = nameLen > LIMITS.name;
+  const isDescOver = descLen > LIMITS.description;
+  const isToneOver = form.type === "conversational" && toneLen > LIMITS.tone;
+  const isGreetingOver =
+    form.type === "conversational" && greetingLen > LIMITS.greeting;
+  const isInstructionsOver = instructionsLen > LIMITS.instructions;
+  const isEscalationOver =
+    form.type === "conversational" && escalationLen > LIMITS.escalationRules;
+
+  const hasValidationError =
+    !form.name?.trim() ||
+    isNameOver ||
+    isDescOver ||
+    isToneOver ||
+    isGreetingOver ||
+    isInstructionsOver ||
+    isEscalationOver;
 
   async function handleSave() {
+    if (hasValidationError) return;
     setSaving(true);
     setJustSaved(false);
+    setSaveError(null);
     try {
       await onSave(form);
       setJustSaved(true);
       setTimeout(() => setJustSaved(false), 3000);
+    } catch (err: unknown) {
+      setSaveError(
+        err instanceof Error
+          ? err.message
+          : "Ocurrió un error inesperado al guardar los cambios."
+      );
     } finally {
       setSaving(false);
     }
@@ -423,9 +578,18 @@ function AssistantEditor({
   async function handleToggle() {
     const next = !form.enabled;
     setToggling(true);
+    setSaveError(null);
     setForm((prev) => ({ ...prev, enabled: next }));
     try {
       await onSave({ enabled: next });
+    } catch (err: unknown) {
+      // Revertir estado visual si falla
+      setForm((prev) => ({ ...prev, enabled: !next }));
+      setSaveError(
+        err instanceof Error
+          ? err.message
+          : "No se pudo cambiar el estado del asistente."
+      );
     } finally {
       setToggling(false);
     }
@@ -467,10 +631,14 @@ function AssistantEditor({
               role="switch"
               disabled={toggling}
               aria-checked={form.enabled}
-              aria-label={form.enabled ? "Desactivar asistente" : "Activar asistente"}
+              aria-label={
+                form.enabled ? "Desactivar asistente" : "Activar asistente"
+              }
               onClick={() => void handleToggle()}
               className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
-                form.enabled ? "bg-primary" : "bg-muted-foreground/30 hover:bg-muted-foreground/40"
+                form.enabled
+                  ? "bg-primary"
+                  : "bg-muted-foreground/30 hover:bg-muted-foreground/40"
               } ${toggling ? "opacity-60 cursor-not-allowed" : ""}`}
             >
               <span
@@ -483,20 +651,40 @@ function AssistantEditor({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* Banner de error si falló el guardado */}
+        {saveError && (
+          <div className="flex items-start gap-2.5 rounded-lg border border-destructive/30 bg-destructive/10 p-3.5 text-xs text-destructive animate-in fade-in">
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+            <div className="space-y-1">
+              <span className="font-semibold block">
+                No se pudieron guardar los cambios
+              </span>
+              <span className="leading-relaxed block">{saveError}</span>
+            </div>
+          </div>
+        )}
+
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="asst-name">Nombre del Asistente</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="asst-name">Nombre del Asistente *</Label>
+              <CharacterCount current={nameLen} max={LIMITS.name} />
+            </div>
             <Input
               id="asst-name"
+              placeholder="p. ej. Asistente Dental - Sucursal Providencia"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="asst-desc">Descripción</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="asst-desc">Descripción</Label>
+              <CharacterCount current={descLen} max={LIMITS.description} />
+            </div>
             <Input
               id="asst-desc"
-              placeholder="p. ej. Línea principal de ventas"
+              placeholder="p. ej. Atiende prospectos de ortodoncia, califica intención de compra y agenda valoraciones"
               value={form.description ?? ""}
               onChange={(e) =>
                 setForm({ ...form, description: e.target.value })
@@ -508,19 +696,27 @@ function AssistantEditor({
         {form.type === "conversational" && (
           <>
             <div className="space-y-1.5">
-              <Label htmlFor="asst-tone">Tono de conversación</Label>
-              <Input
+              <div className="flex items-center justify-between">
+                <Label htmlFor="asst-tone">Tono de conversación</Label>
+                <CharacterCount current={toneLen} max={LIMITS.tone} />
+              </div>
+              <Textarea
                 id="asst-tone"
-                placeholder="p. ej. cercano y directo, de usted"
+                rows={2}
+                placeholder="p. ej. Profesional, empático y resolutivo. Dirigirse de usted con calidez. Usar emojis con moderación (máx. 1 por mensaje) y evitar tecnicismos médicos complejos."
                 value={form.tone ?? ""}
                 onChange={(e) => setForm({ ...form, tone: e.target.value })}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="asst-greeting">Mensaje de Saludo</Label>
-              <Input
+              <div className="flex items-center justify-between">
+                <Label htmlFor="asst-greeting">Mensaje de Saludo</Label>
+                <CharacterCount current={greetingLen} max={LIMITS.greeting} />
+              </div>
+              <Textarea
                 id="asst-greeting"
-                placeholder="Saludo para conversaciones nuevas en WhatsApp"
+                rows={2}
+                placeholder="p. ej. ¡Hola! Bienvenido a DentalCare. Soy Sofía, tu asistente virtual. ¿En qué podemos apoyarte hoy con tu cita o presupuesto?"
                 value={form.greeting ?? ""}
                 onChange={(e) => setForm({ ...form, greeting: e.target.value })}
               />
@@ -539,36 +735,62 @@ function AssistantEditor({
         )}
 
         <div className="space-y-1.5">
-          <Label htmlFor="asst-instructions">
-            {form.type === "conversational"
-              ? "Instrucciones de Atención (System Prompt)"
-              : "Instrucciones de la Tarea / Tool"}
-          </Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="asst-instructions">
+              {form.type === "conversational"
+                ? "Instrucciones de Atención (System Prompt)"
+                : "Instrucciones de la Tarea / Tool"}
+            </Label>
+            <CharacterCount
+              current={instructionsLen}
+              max={LIMITS.instructions}
+            />
+          </div>
           <Textarea
             id="asst-instructions"
-            rows={form.type === "conversational" ? 5 : 7}
+            rows={form.type === "conversational" ? 7 : 9}
             placeholder={
               form.type === "conversational"
-                ? "Qué debe y no debe hacer al atender clientes en WhatsApp…"
-                : "Qué criterios debe evaluar para clasificar o procesar los datos…"
+                ? `[ROL Y OBJETIVO]
+Eres el asesor virtual de la clínica. Tu meta es responder dudas con amabilidad y orientar al prospecto a agendar su consulta de valoración.
+
+[PAUTAS DE ATENCIÓN]
+- Responde de forma concisa y natural para WhatsApp (1 a 2 párrafos cortos).
+- Si preguntan precios, indica el rango base e invita a la valoración para diagnóstico certero.
+
+[LO QUE NUNCA DEBE HACER]
+- No des diagnósticos definitivos ni recetas médicas sin consulta presencial.
+- No contradigas las políticas ni prometas descuentos no autorizados.`
+                : `[OBJETIVO DE LA TAREA]
+Analizar las conversaciones cerradas para calificar el sentimiento y clasificar los motivos de pérdida según la taxonomía definida.`
             }
             value={form.instructions ?? ""}
-            onChange={(e) => setForm({ ...form, instructions: e.target.value })}
+            onChange={(e) =>
+              setForm({ ...form, instructions: e.target.value })
+            }
           />
         </div>
 
         {form.type === "conversational" && (
           <div className="space-y-1.5">
-            <div className="flex flex-col gap-0.5">
-              <Label htmlFor="asst-escalation">Reglas de Escalado a Humano</Label>
-              <span className="text-[11px] text-muted-foreground">
-                El sistema transfiere automáticamente si el cliente pide un asesor humano o fuera de ventana. Especifica aquí condiciones adicionales propias de tu negocio.
-              </span>
+            <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-0.5">
+                <Label htmlFor="asst-escalation">
+                  Reglas de Escalado a Humano
+                </Label>
+                <span className="text-[11px] text-muted-foreground">
+                  El sistema transfiere automáticamente si el cliente pide un asesor humano o fuera de ventana. Especifica aquí condiciones adicionales propias de tu negocio.
+                </span>
+              </div>
+              <CharacterCount
+                current={escalationLen}
+                max={LIMITS.escalationRules}
+              />
             </div>
             <Textarea
               id="asst-escalation"
               rows={3}
-              placeholder="Cuándo pausar la IA y transferir la conversación a un operador…"
+              placeholder="p. ej. Transferir a un asesor humano si: 1) El usuario solicita hablar con una persona. 2) Reclamos o inconformidades graves con tratamientos previos. 3) Dudas clínicas complejas que requieran criterio médico."
               value={form.escalationRules ?? ""}
               onChange={(e) =>
                 setForm({ ...form, escalationRules: e.target.value })
@@ -582,7 +804,7 @@ function AssistantEditor({
             <Button
               type="button"
               onClick={() => void handleSave()}
-              disabled={saving}
+              disabled={saving || hasValidationError}
               className="min-w-[150px] transition-all"
             >
               {saving ? (
@@ -600,7 +822,26 @@ function AssistantEditor({
               )}
             </Button>
 
-            {justSaved && (
+            {hasValidationError && (
+              <span className="text-xs text-destructive font-medium flex items-center gap-1">
+                <AlertCircle className="h-3.5 w-3.5" />
+                {isInstructionsOver
+                  ? `Las instrucciones exceden el límite de ${LIMITS.instructions.toLocaleString()} caracteres.`
+                  : isEscalationOver
+                  ? `Las reglas de escalado exceden el límite de ${LIMITS.escalationRules.toLocaleString()} caracteres.`
+                  : isToneOver
+                  ? `El tono excede el límite de ${LIMITS.tone.toLocaleString()} caracteres.`
+                  : isGreetingOver
+                  ? `El saludo excede el límite de ${LIMITS.greeting.toLocaleString()} caracteres.`
+                  : isDescOver
+                  ? `La descripción excede el límite de ${LIMITS.description.toLocaleString()} caracteres.`
+                  : !form.name?.trim()
+                  ? "El nombre es obligatorio."
+                  : "Por favor corrige los campos que exceden el límite."}
+              </span>
+            )}
+
+            {justSaved && !hasValidationError && (
               <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400 animate-in fade-in duration-300">
                 <Check className="h-4 w-4" /> Cambios guardados correctamente
               </span>

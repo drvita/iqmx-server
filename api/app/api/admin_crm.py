@@ -11,6 +11,9 @@ from app.db.database import get_db
 from app.models.customer import Customer
 from app.models.customer_subscription import CustomerSubscription
 from app.models.product import Product
+from app.models.whatsapp_number import WhatsAppNumber
+from app.models.customer_webhook import CustomerWebhook
+from app.lib.crypto import decrypt_token
 from app.api.admin_auth import get_current_admin
 from app.models.user import User
 from app.config import settings
@@ -21,6 +24,27 @@ logger = logging.getLogger("uvicorn.error")
 router = APIRouter(prefix="/api/admin/crm", tags=["admin-crm"])
 
 # --- Schemas ---
+
+class AdminWhatsAppLineSummary(BaseModel):
+    id: int
+    phone_number_id: str
+    waba_id: str
+    display_phone_number: Optional[str] = None
+    verified_name: Optional[str] = None
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    customer_id: int
+    customer_company_name: Optional[str] = None
+    customer_email: Optional[str] = None
+    organization_id: Optional[str] = None
+    organization_name: Optional[str] = None
+    is_synced_in_crm: bool = False
+    webhook_url: Optional[str] = None
+    webhook_is_active: bool = False
+    webhook_last_delivery_status: Optional[str] = None
+    webhook_last_delivery_at: Optional[datetime] = None
+
 
 class CrmTenantSummary(BaseModel):
     organization_id: str
@@ -383,5 +407,210 @@ async def list_openrouter_ai_models(
         logger.warning(f"No se pudo consultar OpenRouter models: {e}")
 
     return {"models": _ai_models_cache["data"] or fallback_models}
+
+
+# --- Endpoints de Gestión de Líneas de WhatsApp ---
+
+@router.get("/whatsapp-lines", response_model=List[AdminWhatsAppLineSummary])
+def list_whatsapp_lines(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    """
+    Lista todas las líneas de WhatsApp registradas en la base de datos central (public.whatsapp_numbers),
+    cruzando la información del cliente, el inquilino CRM vinculado, la presencia de credenciales en CRM
+    y la configuración de reenvío de webhooks.
+    """
+    lines = db.query(WhatsAppNumber).order_by(WhatsAppNumber.id.desc()).all()
+    if not lines:
+        return []
+
+    # Consultar líneas existentes en el esquema crm
+    crm_lines_raw = db.execute(text("SELECT organization_id, phone_number_id FROM crm.meta_credentials")).fetchall()
+    crm_line_map = {r.phone_number_id: r.organization_id for r in crm_lines_raw}
+
+    # Pre-cargar organizaciones de crm
+    crm_orgs_raw = db.execute(text("SELECT id, name FROM crm.organization")).fetchall()
+    crm_org_name_map = {r.id: r.name for r in crm_orgs_raw}
+
+    # Pre-cargar suscripciones
+    subscriptions = db.query(CustomerSubscription).filter(
+        CustomerSubscription.external_tenant_id.isnot(None)
+    ).all()
+    cust_to_tenant = {sub.customer_id: sub.external_tenant_id for sub in subscriptions}
+
+    # Pre-cargar webhooks
+    webhooks = db.query(CustomerWebhook).all()
+    webhook_map = {w.customer_id: w for w in webhooks}
+
+    results = []
+    for line in lines:
+        cust = line.customer
+        cust_name = cust.company_name if cust else None
+        cust_email = cust.user.email if (cust and cust.user) else None
+
+        # Identificar organización en CRM
+        org_id = crm_line_map.get(line.phone_number_id) or cust_to_tenant.get(line.customer_id)
+        org_name = crm_org_name_map.get(org_id) if org_id else None
+
+        is_synced = line.phone_number_id in crm_line_map
+
+        wh = webhook_map.get(line.customer_id)
+
+        results.append(AdminWhatsAppLineSummary(
+            id=line.id,
+            phone_number_id=line.phone_number_id,
+            waba_id=line.waba_id,
+            display_phone_number=line.display_phone_number,
+            verified_name=line.verified_name,
+            status=line.status,
+            created_at=line.created_at,
+            updated_at=line.updated_at,
+            customer_id=line.customer_id,
+            customer_company_name=cust_name,
+            customer_email=cust_email,
+            organization_id=org_id,
+            organization_name=org_name,
+            is_synced_in_crm=is_synced,
+            webhook_url=wh.url if wh else None,
+            webhook_is_active=wh.is_active if wh else False,
+            webhook_last_delivery_status=wh.last_delivery_status if wh else None,
+            webhook_last_delivery_at=wh.last_delivery_at if wh else None
+        ))
+
+    return results
+
+
+@router.delete("/whatsapp-lines/{number_id}")
+async def delete_whatsapp_line_admin(
+    number_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    """
+    Desvincula forzosamente una línea de WhatsApp a nivel de sistema por el administrador:
+    1. Desuscribe la app en Meta si era el único número activo para esa WABA.
+    2. Elimina las credenciales en crm.meta_credentials y accesos en crm.member_phone_access.
+    3. Elimina el registro central en public.whatsapp_numbers.
+    """
+    line = db.query(WhatsAppNumber).filter(WhatsAppNumber.id == number_id).first()
+    if not line:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Línea de WhatsApp con ID {number_id} no encontrada."
+        )
+
+    waba_id = line.waba_id
+    phone_number_id = line.phone_number_id
+
+    token_decrypted = None
+    try:
+        token_decrypted = decrypt_token(line.encrypted_token, settings.TOKEN_ENCRYPTION_KEY)
+    except Exception as e:
+        logger.warning(f"No se pudo descifrar token para desuscripción en Meta: {e}")
+
+    # Verificar si quedan más números asociados a esta WABA en public.whatsapp_numbers
+    other_numbers_count = db.query(WhatsAppNumber).filter(
+        WhatsAppNumber.waba_id == waba_id,
+        WhatsAppNumber.id != line.id
+    ).count()
+
+    if other_numbers_count == 0 and token_decrypted:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                del_url = f"https://graph.facebook.com/{settings.GRAPH_API_VERSION}/{waba_id}/subscribed_apps"
+                del_res = await client.delete(del_url, headers={"Authorization": f"Bearer {token_decrypted}"})
+                logger.info(f"[admin] Subscribed apps eliminada en Meta para WABA {waba_id} -> {del_res.status_code}")
+        except Exception as meta_err:
+            logger.warning(f"[admin] Error al desuscribir app en Meta: {meta_err}")
+
+    # Limpiar en esquema CRM
+    try:
+        db.execute(text("DELETE FROM crm.meta_credentials WHERE phone_number_id = :pn"), {"pn": str(phone_number_id)})
+        db.execute(text("DELETE FROM crm.member_phone_access WHERE phone_number_id = :pn"), {"pn": str(phone_number_id)})
+    except Exception as crm_err:
+        logger.warning(f"[admin] Error al limpiar en esquema crm: {crm_err}")
+
+    db.delete(line)
+    db.commit()
+
+    logger.info(f"Admin #{admin.id} eliminó la línea de WhatsApp #{number_id} (phone_number_id={phone_number_id})")
+    return {
+        "ok": True,
+        "message": f"Línea {phone_number_id} desvinculada exitosamente de la API Central, del CRM y de Meta."
+    }
+
+
+@router.post("/whatsapp-lines/{number_id}/reprovision")
+async def reprovision_whatsapp_line_admin(
+    number_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    """
+    Re-aprovisiona una línea de WhatsApp al CRM en caso de desincronización o pérdida de credenciales.
+    """
+    line = db.query(WhatsAppNumber).filter(WhatsAppNumber.id == number_id).first()
+    if not line:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Línea de WhatsApp con ID {number_id} no encontrada."
+        )
+
+    try:
+        decrypted_token = decrypt_token(line.encrypted_token, settings.TOKEN_ENCRYPTION_KEY)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No se pudo descifrar el token de la línea: {e}"
+        )
+
+    # Determinar URL de aprovisionamiento y secret
+    cust_webhook = db.query(CustomerWebhook).filter(
+        CustomerWebhook.customer_id == line.customer_id
+    ).first()
+
+    prov_url = cust_webhook.provision_url if (cust_webhook and cust_webhook.provision_url) else None
+    secret_token = cust_webhook.secret_token if cust_webhook else None
+    org_id = None
+
+    if not prov_url:
+        internal_crm_url, active_secret = get_crm_internal_url_and_secret(db)
+        if internal_crm_url:
+            prov_url = f"{internal_crm_url.rstrip('/')}/api/settings/whatsapp/provision"
+            secret_token = active_secret
+
+    # Resolver organization_id si existe
+    sub = db.query(CustomerSubscription).filter(
+        CustomerSubscription.customer_id == line.customer_id,
+        CustomerSubscription.external_tenant_id.isnot(None)
+    ).first()
+    if sub:
+        org_id = sub.external_tenant_id
+
+    if not prov_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No se encontró una URL de aprovisionamiento configurada ni URL interna del CRM."
+        )
+
+    from app.api.portal_whatsapp import send_provision_to_crm
+    result = await send_provision_to_crm(
+        provision_url=prov_url,
+        secret_token=secret_token,
+        waba_id=line.waba_id,
+        phone_number_id=line.phone_number_id,
+        token=decrypted_token,
+        display_phone_number=line.display_phone_number,
+        verified_name=line.verified_name,
+        organization_id=org_id
+    )
+
+    return {
+        "ok": result["success"],
+        "status_code": result.get("status_code"),
+        "message": result["message"]
+    }
+
 
 

@@ -238,6 +238,22 @@ export async function deleteCredentials(
       await unsubscribeAppFromWaba(creds.wabaId, creds.token);
     }
   }
+
+  // 5. Eliminar también en la tabla central public.whatsapp_numbers para evitar bloqueos en onboarding y webhooks huérfanos
+  try {
+    const { getSql } = await import("@/lib/db");
+    const sql = getSql();
+    await sql`
+      DELETE FROM public.whatsapp_numbers
+      WHERE phone_number_id = ${phoneNumberId}
+    `;
+  } catch (err) {
+    // Si la tabla no existe o es un entorno de pruebas aislado, no abortar la transacción
+    console.warn(
+      "[whatsapp] aviso al limpiar public.whatsapp_numbers:",
+      err instanceof Error ? err.message : err
+    );
+  }
 }
 
 /** Marca la conexión como vencida (token inválido detectado en runtime). */

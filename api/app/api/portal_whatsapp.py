@@ -498,8 +498,17 @@ async def delete_whatsapp_number(
         except Exception as meta_del_err:
             logger.warning(f"No se pudo desuscribir app en Meta: {meta_del_err}")
 
+    # Salvaguarda atómica: limpiar también en crm.meta_credentials y crm.member_phone_access
+    try:
+        from sqlalchemy import text
+        db.execute(text("DELETE FROM crm.meta_credentials WHERE phone_number_id = :pn"), {"pn": str(phone_number_id)})
+        db.execute(text("DELETE FROM crm.member_phone_access WHERE phone_number_id = :pn"), {"pn": str(phone_number_id)})
+    except Exception as crm_del_err:
+        logger.warning(f"Aviso al limpiar línea en esquema CRM: {crm_del_err}")
+
     db.delete(number)
     db.commit()
 
     logger.info(f"Número de WhatsApp #{number_id} eliminado por el cliente #{current_customer.id}")
     return {"status": "success", "message": "Número de WhatsApp desvinculado correctamente."}
+

@@ -14,8 +14,33 @@ import {
   BuildingOffice2Icon,
   CodeBracketIcon,
   DocumentTextIcon,
+  ChatBubbleLeftRightIcon,
+  PhoneIcon,
+  TrashIcon,
+  SignalIcon,
 } from "@heroicons/react/24/outline";
 import { RawJsonEditor } from "@/components/admin/RawJsonEditor";
+
+type WhatsAppLine = {
+  id: number;
+  phone_number_id: string;
+  waba_id: string;
+  display_phone_number: string | null;
+  verified_name: string | null;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  customer_id: number;
+  customer_company_name: string | null;
+  customer_email: string | null;
+  organization_id: string | null;
+  organization_name: string | null;
+  is_synced_in_crm: boolean;
+  webhook_url: string | null;
+  webhook_is_active: boolean;
+  webhook_last_delivery_status: string | null;
+  webhook_last_delivery_at: string | null;
+};
 
 type Tenant = {
   organization_id: string;
@@ -56,10 +81,22 @@ export default function AdminCrmPage() {
     { id: string; name: string; is_free: boolean }[]
   >([]);
 
-  // Búsqueda y Paginación
+  // Búsqueda y Paginación (Inquilinos)
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+
+  // Pestaña Activa
+  const [activeTab, setActiveTab] = useState<"tenants" | "whatsapp">("tenants");
+
+  // Gestión de Líneas de WhatsApp
+  const [whatsappLines, setWhatsappLines] = useState<WhatsAppLine[]>([]);
+  const [loadingWhatsapp, setLoadingWhatsapp] = useState(false);
+  const [searchTermWhatsapp, setSearchTermWhatsapp] = useState("");
+  const [currentWhatsappPage, setCurrentWhatsappPage] = useState(1);
+  const [whatsappPageSize, setWhatsappPageSize] = useState(10);
+  const [deletingLine, setDeletingLine] = useState<WhatsAppLine | null>(null);
+  const [syncingLineId, setSyncingLineId] = useState<number | null>(null);
 
   // Modal de Override
   const [selectedTenant, setSelectedTenant] = useState<Tenant | null>(null);
@@ -124,9 +161,134 @@ export default function AdminCrmPage() {
     }
   }, []);
 
+  const fetchWhatsappLines = useCallback(async () => {
+    const token = localStorage.getItem("iqmx_admin_token");
+    if (!token) return;
+    setLoadingWhatsapp(true);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+      const res = await fetch(`${apiUrl}/api/admin/crm/whatsapp-lines`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setWhatsappLines(data);
+      }
+    } catch {
+      setFeedbackMsg({
+        type: "error",
+        text: "Error al cargar las líneas de WhatsApp.",
+      });
+    } finally {
+      setLoadingWhatsapp(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchTenants();
-  }, [fetchTenants]);
+    fetchWhatsappLines();
+  }, [fetchTenants, fetchWhatsappLines]);
+
+  const handleConfirmDeleteWhatsappLine = async () => {
+    if (!deletingLine) return;
+    setActionLoading("delete-wa");
+    try {
+      const token = localStorage.getItem("iqmx_admin_token");
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+      const res = await fetch(
+        `${apiUrl}/api/admin/crm/whatsapp-lines/${deletingLine.id}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setFeedbackMsg({
+          type: "success",
+          text: data.message || "Línea desvinculada exitosamente.",
+        });
+        setDeletingLine(null);
+        fetchWhatsappLines();
+        fetchTenants();
+      } else {
+        const err = await res.json().catch(() => null);
+        setFeedbackMsg({
+          type: "error",
+          text: err?.detail || "No se pudo desvincular la línea.",
+        });
+      }
+    } catch {
+      setFeedbackMsg({
+        type: "error",
+        text: "Error de red al intentar desvincular la línea.",
+      });
+    } finally {
+      setActionLoading(null);
+    }
+  };
+
+  const handleReprovisionWhatsappLine = async (lineId: number) => {
+    setSyncingLineId(lineId);
+    try {
+      const token = localStorage.getItem("iqmx_admin_token");
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+      const res = await fetch(
+        `${apiUrl}/api/admin/crm/whatsapp-lines/${lineId}/reprovision`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+      if (res.ok) {
+        const data = await res.json();
+        setFeedbackMsg({
+          type: "success",
+          text: data.message || "Línea sincronizada exitosamente con el CRM.",
+        });
+        fetchWhatsappLines();
+        fetchTenants();
+      } else {
+        const err = await res.json().catch(() => null);
+        setFeedbackMsg({
+          type: "error",
+          text: err?.detail || "Error al sincronizar con el CRM.",
+        });
+      }
+    } catch {
+      setFeedbackMsg({
+        type: "error",
+        text: "Error de red al intentar sincronizar con el CRM.",
+      });
+    } finally {
+      setSyncingLineId(null);
+    }
+  };
+
+  // Filtrado y paginación reactiva de Líneas WhatsApp
+  const filteredWhatsappLines = useMemo(() => {
+    const term = searchTermWhatsapp.toLowerCase().trim();
+    if (!term) return whatsappLines;
+    return whatsappLines.filter((l) => {
+      return (
+        (l.display_phone_number && l.display_phone_number.toLowerCase().includes(term)) ||
+        (l.verified_name && l.verified_name.toLowerCase().includes(term)) ||
+        l.phone_number_id.toLowerCase().includes(term) ||
+        l.waba_id.toLowerCase().includes(term) ||
+        (l.customer_company_name && l.customer_company_name.toLowerCase().includes(term)) ||
+        (l.customer_email && l.customer_email.toLowerCase().includes(term)) ||
+        (l.organization_name && l.organization_name.toLowerCase().includes(term)) ||
+        (l.organization_id && l.organization_id.toLowerCase().includes(term))
+      );
+    });
+  }, [whatsappLines, searchTermWhatsapp]);
+
+  const totalWhatsappPages = Math.max(1, Math.ceil(filteredWhatsappLines.length / whatsappPageSize));
+  const paginatedWhatsappLines = useMemo(() => {
+    const start = (currentWhatsappPage - 1) * whatsappPageSize;
+    return filteredWhatsappLines.slice(start, start + whatsappPageSize);
+  }, [filteredWhatsappLines, currentWhatsappPage, whatsappPageSize]);
+
 
   // Filtrado y paginación reactiva
   const filteredTenants = useMemo(() => {
@@ -514,11 +676,12 @@ export default function AdminCrmPage() {
             onClick={() => {
               setLoading(true);
               fetchTenants();
+              fetchWhatsappLines();
             }}
             className="inline-flex items-center gap-1.5 rounded-lg bg-white border border-gray-300 px-3.5 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 shadow-xs transition-colors cursor-pointer"
           >
             <ArrowPathIcon
-              className={`h-4 w-4 text-gray-500 ${loading ? "animate-spin" : ""}`}
+              className={`h-4 w-4 text-gray-500 ${loading || loadingWhatsapp ? "animate-spin" : ""}`}
             />
             <span>Refrescar</span>
           </button>
@@ -542,301 +705,739 @@ export default function AdminCrmPage() {
         </div>
       )}
 
-      {/* Barra de Filtros y Paginación Superior */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-gray-200 shadow-2xs">
-        <div className="relative flex-1 max-w-md">
-          <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Buscar por empresa, ID de tenant o correo…"
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="w-full rounded-lg border border-gray-300 bg-white py-1.5 pl-9 pr-3 text-xs text-gray-900 placeholder:text-gray-400 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
-          />
-        </div>
-
-        <div className="flex items-center gap-3 text-xs text-gray-500">
-          <div className="flex items-center gap-1.5">
-            <span>Mostrar:</span>
-            <select
-              value={pageSize}
-              onChange={(e) => {
-                setPageSize(Number(e.target.value));
-                setCurrentPage(1);
-              }}
-              className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 focus:border-blue-600"
-            >
-              <option value={10}>10</option>
-              <option value={25}>25</option>
-              <option value={50}>50</option>
-            </select>
-          </div>
-          <span>
-            {filteredTenants.length === 0
-              ? "0 cuentas"
-              : `${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, filteredTenants.length)} de ${filteredTenants.length}`}
+      {/* Selector de Pestañas Principales */}
+      <div className="flex border-b border-gray-200 gap-6">
+        <button
+          onClick={() => setActiveTab("tenants")}
+          className={`flex items-center gap-2 pb-3 pt-1 text-sm font-semibold border-b-2 transition-colors cursor-pointer ${
+            activeTab === "tenants"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+          }`}
+        >
+          <BuildingOffice2Icon className="h-4 w-4" />
+          <span>Inquilinos CRM</span>
+          <span className="ml-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+            {tenants.length}
           </span>
-        </div>
+        </button>
+
+        <button
+          onClick={() => setActiveTab("whatsapp")}
+          className={`flex items-center gap-2 pb-3 pt-1 text-sm font-semibold border-b-2 transition-colors cursor-pointer ${
+            activeTab === "whatsapp"
+              ? "border-blue-600 text-blue-600"
+              : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+          }`}
+        >
+          <ChatBubbleLeftRightIcon className="h-4 w-4" />
+          <span>Líneas de WhatsApp & Webhooks</span>
+          <span className="ml-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+            {whatsappLines.length}
+          </span>
+          {whatsappLines.some((l) => !l.is_synced_in_crm) && (
+            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+              {whatsappLines.filter((l) => !l.is_synced_in_crm).length} huérfanas
+            </span>
+          )}
+        </button>
       </div>
 
-      {/* Tabla Ergonómica y Optimizada de 5 Columnas */}
-      <div className="rounded-xl border border-gray-200 bg-white shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs text-gray-700">
-            <thead className="bg-gray-50 border-b border-gray-200 text-[11px] uppercase tracking-wider text-gray-500 font-semibold">
-              <tr>
-                <th className="px-5 py-3.5">Organización y Cliente</th>
-                <th className="px-5 py-3.5">Plan y Capacidad</th>
-                <th className="px-5 py-3.5">Servicios (IA y Módulos)</th>
-                <th className="px-5 py-3.5">Estado</th>
-                <th className="px-5 py-3.5 text-right">Acciones</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
-              {paginatedTenants.map((t) => (
-                <tr
-                  key={t.organization_id}
-                  className="hover:bg-gray-50/75 transition-colors"
+      {/* PESTAÑA 1: INQUILINOS CRM */}
+      {activeTab === "tenants" && (
+        <>
+          {/* Barra de Filtros y Paginación Superior */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-gray-200 shadow-2xs">
+            <div className="relative flex-1 max-w-md">
+              <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar por empresa, ID de tenant o correo…"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="w-full rounded-lg border border-gray-300 bg-white py-1.5 pl-9 pr-3 text-xs text-gray-900 placeholder:text-gray-400 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+              />
+            </div>
+
+            <div className="flex items-center gap-3 text-xs text-gray-500">
+              <div className="flex items-center gap-1.5">
+                <span>Mostrar:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 focus:border-blue-600"
                 >
-                  {/* Columna 1: Organización y Cliente */}
-                  <td className="px-5 py-4">
-                    <div className="space-y-1">
-                      <p className="font-bold text-gray-900 text-sm">
-                        {t.name}
-                      </p>
-                      <p className="font-mono text-[11px] text-gray-400 select-all">
-                        {t.organization_id}
-                      </p>
-                      {t.customer_company_name ? (
-                        <div className="flex items-center gap-1.5 pt-0.5 text-gray-600">
-                          <BuildingOffice2Icon className="h-3.5 w-3.5 text-gray-400 shrink-0" />
-                          <span className="font-medium text-gray-800">
-                            {t.customer_company_name}
-                          </span>
-                          {t.customer_email && (
-                            <span className="text-gray-400 text-[11px]">
-                              ({t.customer_email})
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+              <span>
+                {filteredTenants.length === 0
+                  ? "0 cuentas"
+                  : `${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, filteredTenants.length)} de ${filteredTenants.length}`}
+              </span>
+            </div>
+          </div>
+
+          {/* Tabla Ergonómica y Optimizada de 5 Columnas */}
+          <div className="rounded-xl border border-gray-200 bg-white shadow-xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-gray-700">
+                <thead className="bg-gray-50 border-b border-gray-200 text-[11px] uppercase tracking-wider text-gray-500 font-semibold">
+                  <tr>
+                    <th className="px-5 py-3.5">Organización y Cliente</th>
+                    <th className="px-5 py-3.5">Plan y Capacidad</th>
+                    <th className="px-5 py-3.5">Servicios (IA y Módulos)</th>
+                    <th className="px-5 py-3.5">Estado</th>
+                    <th className="px-5 py-3.5 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {paginatedTenants.map((t) => (
+                    <tr
+                      key={t.organization_id}
+                      className="hover:bg-gray-50/75 transition-colors"
+                    >
+                      {/* Columna 1: Organización y Cliente */}
+                      <td className="px-5 py-4">
+                        <div className="space-y-1">
+                          <p className="font-bold text-gray-900 text-sm">
+                            {t.name}
+                          </p>
+                          <p className="font-mono text-[11px] text-gray-400 select-all">
+                            {t.organization_id}
+                          </p>
+                          {t.customer_company_name ? (
+                            <div className="flex items-center gap-1.5 pt-0.5 text-gray-600">
+                              <BuildingOffice2Icon className="h-3.5 w-3.5 text-gray-400 shrink-0" />
+                              <span className="font-medium text-gray-800">
+                                {t.customer_company_name}
+                              </span>
+                              {t.customer_email && (
+                                <span className="text-gray-400 text-[11px]">
+                                  ({t.customer_email})
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-gray-400 italic">
+                              Sin cliente corporativo vinculado
                             </span>
                           )}
                         </div>
-                      ) : (
-                        <span className="text-[11px] text-gray-400 italic">
-                          Sin cliente corporativo vinculado
-                        </span>
-                      )}
-                    </div>
-                  </td>
+                      </td>
 
-                  {/* Columna 2: Plan y Capacidad */}
-                  <td className="px-5 py-4">
-                    <div className="space-y-1.5">
-                      <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 font-semibold text-blue-700 border border-blue-200 text-[11px] whitespace-nowrap">
-                        {t.active_plan_name || "Personalizado"}
-                      </span>
-                      <div className="flex flex-col gap-0.5 text-[11px] text-gray-600">
-                        <span>
-                          <strong>Líneas:</strong>{" "}
+                      {/* Columna 2: Plan y Capacidad */}
+                      <td className="px-5 py-4">
+                        <div className="space-y-1.5">
+                          <span className="inline-flex items-center rounded-full bg-blue-50 px-2.5 py-0.5 font-semibold text-blue-700 border border-blue-200 text-[11px] whitespace-nowrap">
+                            {t.active_plan_name || "Personalizado"}
+                          </span>
+                          <div className="flex flex-col gap-0.5 text-[11px] text-gray-600">
+                            <span>
+                              <strong>Líneas:</strong>{" "}
+                              <span
+                                className={
+                                  t.lines_connected_count >= t.max_whatsapp_accounts
+                                    ? "text-amber-600 font-bold"
+                                    : "text-gray-800"
+                                }
+                              >
+                                {t.lines_connected_count} /{" "}
+                                {t.max_whatsapp_accounts}
+                              </span>
+                            </span>
+                            <span>
+                              <strong>Miembros:</strong> {t.members_count} /{" "}
+                              {t.max_team_members}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Columna 3: Servicios (IA y Módulos) */}
+                      <td className="px-5 py-4">
+                        <div className="space-y-1.5">
+                          {/* Estado de IA y Modelo */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span
+                              className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-medium text-[11px] border ${
+                                t.has_ai_api_key
+                                  ? "bg-purple-50 text-purple-700 border-purple-200"
+                                  : "bg-gray-100 text-gray-600 border-gray-200"
+                              }`}
+                            >
+                              <span
+                                className={`h-1.5 w-1.5 rounded-full ${
+                                  t.has_ai_api_key
+                                    ? "bg-purple-600"
+                                    : "bg-gray-400"
+                                }`}
+                              />
+                              {t.has_ai_api_key ? "IA Propia" : "IA Global"}
+                            </span>
+                            {t.ai_model && (
+                              <span className="text-[11px] text-gray-500 font-mono bg-gray-50 px-1.5 py-0.5 rounded border border-gray-200">
+                                {t.ai_model.split("/").pop()}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Módulos Activos (Badges) */}
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {t.agenda_enabled && (
+                              <span className="inline-flex items-center rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 border border-emerald-200">
+                                Agenda
+                              </span>
+                            )}
+                            {t.attribution_enabled && (
+                              <span className="inline-flex items-center rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-700 border border-indigo-200">
+                                Atribución
+                              </span>
+                            )}
+                            {t.lab_enabled && (
+                              <span className="inline-flex items-center rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700 border border-amber-200">
+                                Lab
+                              </span>
+                            )}
+                            {t.channels && t.channels !== "whatsapp" && (
+                              <span className="inline-flex items-center rounded bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 border border-sky-200">
+                                Multi-canal
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Columna 4: Estado */}
+                      <td className="px-5 py-4">
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold border ${
+                            t.status === "active"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : t.status === "trial"
+                                ? "bg-blue-50 text-blue-700 border-blue-200"
+                                : t.status === "suspended"
+                                  ? "bg-amber-50 text-amber-700 border-amber-200"
+                                  : "bg-red-50 text-red-700 border-red-200"
+                          }`}
+                        >
                           <span
-                            className={
-                              t.lines_connected_count >= t.max_whatsapp_accounts
-                                ? "text-amber-600 font-bold"
-                                : "text-gray-800"
-                            }
-                          >
-                            {t.lines_connected_count} /{" "}
-                            {t.max_whatsapp_accounts}
-                          </span>
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              t.status === "active"
+                                ? "bg-emerald-500"
+                                : t.status === "trial"
+                                  ? "bg-blue-500"
+                                  : t.status === "suspended"
+                                    ? "bg-amber-500"
+                                    : "bg-red-500"
+                            }`}
+                          />
+                          {t.status.toUpperCase()}
                         </span>
-                        <span>
-                          <strong>Equipo:</strong> {t.members_count} /{" "}
-                          {t.max_team_members} miembros
-                        </span>
-                      </div>
-                    </div>
-                  </td>
+                      </td>
 
-                  {/* Columna 3: Servicios (IA y Módulos) */}
-                  <td className="px-5 py-4">
-                    <div className="space-y-2">
-                      <div>
-                        {t.has_ai_api_key ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
-                            IA Activa (
-                            {t.ai_model?.split("/").pop() || "Claude"})
-                          </span>
+                      {/* Columna 5: Acciones */}
+                      <td className="px-5 py-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* Botón Sincronizar Membresía */}
+                          <button
+                            onClick={() => handleSyncPlan(t.organization_id)}
+                            disabled={actionLoading === t.organization_id}
+                            title="Forzar resincronización de plan y beneficios"
+                            className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            <ArrowPathIcon
+                              className={`h-3 w-3 ${actionLoading === t.organization_id ? "animate-spin text-blue-600" : "text-gray-500"}`}
+                            />
+                            <span>Sincronizar</span>
+                          </button>
+
+                          {/* Botón Ajustes / Override */}
+                          <button
+                            onClick={() => openOverrideModal(t)}
+                            title="Ajustar límites manualmente (Override)"
+                            className="inline-flex items-center gap-1 rounded-lg bg-blue-50 border border-blue-200 px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors cursor-pointer"
+                          >
+                            <AdjustmentsHorizontalIcon className="h-3.5 w-3.5" />
+                            <span>Ajustar</span>
+                          </button>
+
+                          {/* Botón Suspender / Reactivar */}
+                          <button
+                            onClick={() =>
+                              handleToggleStatus(t.organization_id, t.status)
+                            }
+                            disabled={actionLoading === t.organization_id}
+                            title={
+                              t.status === "active"
+                                ? "Suspender acceso"
+                                : "Reactivar acceso"
+                            }
+                            className={`rounded-lg p-1.5 border transition-colors cursor-pointer ${
+                              t.status === "active"
+                                ? "bg-red-50 border-red-200 text-red-600 hover:bg-red-100"
+                                : "bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+                            }`}
+                          >
+                            {t.status === "active" ? (
+                              <NoSymbolIcon className="h-4 w-4" />
+                            ) : (
+                              <CheckCircleIcon className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+
+                  {paginatedTenants.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="py-12 text-center text-gray-500"
+                      >
+                        <BuildingOffice2Icon className="mx-auto h-8 w-8 text-gray-300 mb-2" />
+                        <p className="font-medium text-sm text-gray-700">
+                          No se encontraron inquilinos
+                        </p>
+                        {searchTerm ? (
+                          <p className="text-xs text-gray-400 mt-1">
+                            No hay resultados para "{searchTerm}". Prueba con
+                            otro término.
+                          </p>
                         ) : (
-                          <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500">
-                            Sin clave de IA
-                          </span>
+                          <p className="text-xs text-gray-400 mt-1">
+                            No existen organizaciones creadas en el CRM en este
+                            momento.
+                          </p>
                         )}
-                      </div>
-                      <div className="flex flex-wrap gap-1">
-                        {t.agenda_enabled && (
-                          <span className="rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 border border-blue-200">
-                            Agenda
-                          </span>
-                        )}
-                        {t.attribution_enabled && (
-                          <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200">
-                            CAPI
-                          </span>
-                        )}
-                        {t.lab_enabled && (
-                          <span className="rounded bg-purple-50 px-1.5 py-0.5 text-[10px] font-semibold text-purple-700 border border-purple-200">
-                            Lab
-                          </span>
-                        )}
-                        {/* Canales Activos */}
-                        {t.channels?.toLowerCase().includes("messenger") && (
-                          <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700 border border-sky-200">
-                            Messenger
-                          </span>
-                        )}
-                        {t.channels?.toLowerCase().includes("instagram") && (
-                          <span className="rounded bg-pink-50 px-1.5 py-0.5 text-[10px] font-semibold text-pink-700 border border-pink-200">
-                            Instagram
-                          </span>
-                        )}
-                        {!t.agenda_enabled &&
-                          !t.attribution_enabled &&
-                          !t.lab_enabled &&
-                          !t.channels?.toLowerCase().includes("messenger") &&
-                          !t.channels?.toLowerCase().includes("instagram") && (
-                            <span className="text-[10px] text-gray-400">
-                              Básicos
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Paginación Inferior */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-5 py-3 text-xs text-gray-600">
+                <span>
+                  Página <strong>{currentPage}</strong> de{" "}
+                  <strong>{totalPages}</strong>
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 font-medium hover:bg-gray-50 disabled:opacity-40 cursor-pointer"
+                  >
+                    <ChevronLeftIcon className="h-3.5 w-3.5" />
+                    <span>Anterior</span>
+                  </button>
+                  <button
+                    onClick={() =>
+                      setCurrentPage((p) => Math.min(totalPages, p + 1))
+                    }
+                    disabled={currentPage === totalPages}
+                    className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 font-medium hover:bg-gray-50 disabled:opacity-40 cursor-pointer"
+                  >
+                    <span>Siguiente</span>
+                    <ChevronRightIcon className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {/* PESTAÑA 2: LÍNEAS DE WHATSAPP & WEBHOOKS */}
+      {activeTab === "whatsapp" && (
+        <div className="space-y-6">
+          {/* Tarjetas de Métricas Resumen */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-2xs">
+              <p className="text-xs font-medium text-gray-500">Total Líneas Registradas</p>
+              <p className="text-2xl font-bold text-gray-900 mt-1">{whatsappLines.length}</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">En base central public.whatsapp_numbers</p>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-2xs">
+              <p className="text-xs font-medium text-gray-500">Líneas Conectadas</p>
+              <p className="text-2xl font-bold text-emerald-600 mt-1">
+                {whatsappLines.filter((l) => l.status === "connected").length}
+              </p>
+              <p className="text-[11px] text-gray-400 mt-0.5">Activas y listas para recibir mensajes</p>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-2xs">
+              <p className="text-xs font-medium text-gray-500">Sincronizadas en CRM</p>
+              <p className="text-2xl font-bold text-blue-600 mt-1">
+                {whatsappLines.filter((l) => l.is_synced_in_crm).length}
+              </p>
+              <p className="text-[11px] text-gray-400 mt-0.5">Presentes en crm.meta_credentials</p>
+            </div>
+
+            <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-2xs">
+              <p className="text-xs font-medium text-gray-500">Huérfanas / Desincronizadas</p>
+              <p
+                className={`text-2xl font-bold mt-1 ${
+                  whatsappLines.some((l) => !l.is_synced_in_crm)
+                    ? "text-amber-600"
+                    : "text-gray-900"
+                }`}
+              >
+                {whatsappLines.filter((l) => !l.is_synced_in_crm).length}
+              </p>
+              <p className="text-[11px] text-gray-400 mt-0.5">
+                {whatsappLines.some((l) => !l.is_synced_in_crm)
+                  ? "Requieren atención o desvinculación"
+                  : "Todo el catálogo está alineado"}
+              </p>
+            </div>
+          </div>
+
+          {/* Barra de Filtros y Búsqueda de WhatsApp */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-4 rounded-xl border border-gray-200 shadow-2xs">
+            <div className="relative flex-1 max-w-md">
+              <MagnifyingGlassIcon className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+              <input
+                type="text"
+                placeholder="Buscar por teléfono, empresa, WABA o Phone ID…"
+                value={searchTermWhatsapp}
+                onChange={(e) => {
+                  setSearchTermWhatsapp(e.target.value);
+                  setCurrentWhatsappPage(1);
+                }}
+                className="w-full rounded-lg border border-gray-300 bg-white py-1.5 pl-9 pr-3 text-xs text-gray-900 placeholder:text-gray-400 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+              />
+            </div>
+
+            <div className="flex items-center gap-3 text-xs text-gray-500">
+              <div className="flex items-center gap-1.5">
+                <span>Mostrar:</span>
+                <select
+                  value={whatsappPageSize}
+                  onChange={(e) => {
+                    setWhatsappPageSize(Number(e.target.value));
+                    setCurrentWhatsappPage(1);
+                  }}
+                  className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs text-gray-700 focus:border-blue-600"
+                >
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+              </div>
+              <span>
+                {filteredWhatsappLines.length === 0
+                  ? "0 líneas"
+                  : `${(currentWhatsappPage - 1) * whatsappPageSize + 1}–${Math.min(currentWhatsappPage * whatsappPageSize, filteredWhatsappLines.length)} de ${filteredWhatsappLines.length}`}
+              </span>
+            </div>
+          </div>
+
+          {/* Tabla de Líneas de WhatsApp */}
+          <div className="rounded-xl border border-gray-200 bg-white shadow-xs overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-gray-700">
+                <thead className="bg-gray-50 border-b border-gray-200 text-[11px] uppercase tracking-wider text-gray-500 font-semibold">
+                  <tr>
+                    <th className="px-5 py-3.5">Línea y Número</th>
+                    <th className="px-5 py-3.5">Cliente Propietario</th>
+                    <th className="px-5 py-3.5">Inquilino CRM</th>
+                    <th className="px-5 py-3.5">Webhook de Reenvío</th>
+                    <th className="px-5 py-3.5 text-right">Acciones</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {paginatedWhatsappLines.map((line) => (
+                    <tr key={line.id} className="hover:bg-gray-50/75 transition-colors">
+                      {/* Columna 1: Línea y Número */}
+                      <td className="px-5 py-4">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <PhoneIcon className="h-4 w-4 text-emerald-600 shrink-0" />
+                            <span className="font-bold text-gray-900 text-sm">
+                              {line.display_phone_number || "(Sin número registrado)"}
+                            </span>
+                            <span
+                              className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold border ${
+                                line.status === "connected"
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                  : "bg-red-50 text-red-700 border-red-200"
+                              }`}
+                            >
+                              {line.status === "connected" ? "Conectada" : line.status}
+                            </span>
+                          </div>
+                          {line.verified_name && (
+                            <p className="text-gray-600 text-xs font-medium">
+                              {line.verified_name}
+                            </p>
+                          )}
+                          <div className="flex items-center gap-2 pt-0.5 text-[10px] text-gray-400 font-mono">
+                            <span>ID #{line.id}</span>
+                            <span>•</span>
+                            <span>Phone ID: {line.phone_number_id}</span>
+                            <span>•</span>
+                            <span>WABA: {line.waba_id}</span>
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Columna 2: Cliente Propietario */}
+                      <td className="px-5 py-4">
+                        <div className="space-y-1">
+                          <p className="font-bold text-gray-900">
+                            {line.customer_company_name || `Cliente #${line.customer_id}`}
+                          </p>
+                          {line.customer_email && (
+                            <p className="text-gray-500 text-[11px]">{line.customer_email}</p>
+                          )}
+                          <p className="text-gray-400 text-[10px]">
+                            Cliente ID: {line.customer_id}
+                          </p>
+                        </div>
+                      </td>
+
+                      {/* Columna 3: Inquilino CRM */}
+                      <td className="px-5 py-4">
+                        <div className="space-y-1.5">
+                          {line.organization_name ? (
+                            <p className="font-medium text-gray-800">
+                              {line.organization_name}
+                            </p>
+                          ) : (
+                            <p className="text-gray-400 italic text-[11px]">
+                              Sin inquilino vinculado
+                            </p>
+                          )}
+                          <div>
+                            {line.is_synced_in_crm ? (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 border border-emerald-200">
+                                <CheckCircleIcon className="h-3 w-3" />
+                                <span>Sincronizado en CRM</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 border border-amber-200">
+                                <ExclamationCircleIcon className="h-3 w-3" />
+                                <span>Huérfano (Falta en CRM)</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Columna 4: Webhook de Reenvío */}
+                      <td className="px-5 py-4">
+                        <div className="space-y-1">
+                          {line.webhook_url ? (
+                            <>
+                              <div className="flex items-center gap-1.5">
+                                <SignalIcon className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                                <span
+                                  className="font-mono text-[11px] text-gray-700 truncate max-w-[220px]"
+                                  title={line.webhook_url}
+                                >
+                                  {line.webhook_url}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <span
+                                  className={`inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-medium border ${
+                                    line.webhook_is_active
+                                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                      : "bg-gray-100 text-gray-600 border-gray-200"
+                                  }`}
+                                >
+                                  {line.webhook_is_active ? "Activo" : "Inactivo"}
+                                </span>
+                                {line.webhook_last_delivery_status && (
+                                  <span className="text-[10px] text-gray-400">
+                                    Último: {line.webhook_last_delivery_status}
+                                  </span>
+                                )}
+                              </div>
+                            </>
+                          ) : (
+                            <span className="text-[11px] text-gray-400 italic">
+                              Sin webhook configurado
                             </span>
                           )}
-                      </div>
-                    </div>
-                  </td>
+                        </div>
+                      </td>
 
-                  {/* Columna 4: Estado */}
-                  <td className="px-5 py-4 whitespace-nowrap">
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider ${
-                        t.status === "active"
-                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                          : "bg-red-50 text-red-700 border border-red-200"
-                      }`}
-                    >
-                      <span
-                        className={`h-1.5 w-1.5 rounded-full ${
-                          t.status === "active"
-                            ? "bg-emerald-500"
-                            : "bg-red-500"
-                        }`}
-                      />
-                      {t.status === "active" ? "Activo" : "Suspendido"}
-                    </span>
-                  </td>
+                      {/* Columna 5: Acciones */}
+                      <td className="px-5 py-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {/* Botón Sincronizar / Reprovisionar al CRM */}
+                          <button
+                            onClick={() => handleReprovisionWhatsappLine(line.id)}
+                            disabled={syncingLineId === line.id}
+                            title="Re-aprovisionar credenciales hacia el microservicio CRM"
+                            className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2.5 py-1 text-[11px] font-medium text-gray-700 hover:bg-gray-50 shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+                          >
+                            <ArrowPathIcon
+                              className={`h-3 w-3 ${
+                                syncingLineId === line.id
+                                  ? "animate-spin text-blue-600"
+                                  : "text-gray-500"
+                              }`}
+                            />
+                            <span>Sincronizar</span>
+                          </button>
 
-                  {/* Columna 5: Acciones con amplio espacio y botones claros */}
-                  <td className="px-5 py-4 text-right whitespace-nowrap">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => handleSyncPlan(t.organization_id)}
-                        disabled={
-                          actionLoading === t.organization_id ||
-                          !t.active_plan_name
-                        }
-                        title="Sincronizar límites con su plan contratado"
-                        className="inline-flex items-center gap-1 rounded-lg bg-white border border-gray-300 px-2.5 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition-colors disabled:opacity-40 cursor-pointer"
-                      >
-                        <ArrowPathIcon className="h-3.5 w-3.5 text-gray-500" />
-                        <span>Sync</span>
-                      </button>
+                          {/* Botón Desvincular Forzosamente */}
+                          <button
+                            onClick={() => setDeletingLine(line)}
+                            title="Desvincular línea de la API, CRM y Meta"
+                            className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-semibold text-red-700 hover:bg-red-100 shadow-2xs transition-colors cursor-pointer"
+                          >
+                            <TrashIcon className="h-3 w-3 text-red-600" />
+                            <span>Desvincular</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
 
-                      <button
-                        onClick={() => openOverrideModal(t)}
-                        title="Ajustar límites manualmente (Override)"
-                        className="inline-flex items-center gap-1 rounded-lg bg-blue-50 border border-blue-200 px-2.5 py-1.5 text-xs font-semibold text-blue-700 hover:bg-blue-100 transition-colors cursor-pointer"
-                      >
-                        <AdjustmentsHorizontalIcon className="h-3.5 w-3.5" />
-                        <span>Ajustar</span>
-                      </button>
-
-                      <button
-                        onClick={() =>
-                          handleToggleStatus(t.organization_id, t.status)
-                        }
-                        disabled={actionLoading === t.organization_id}
-                        title={
-                          t.status === "active"
-                            ? "Suspender acceso"
-                            : "Reactivar acceso"
-                        }
-                        className={`rounded-lg p-1.5 border transition-colors cursor-pointer ${
-                          t.status === "active"
-                            ? "bg-red-50 border-red-200 text-red-600 hover:bg-red-100"
-                            : "bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
-                        }`}
-                      >
-                        {t.status === "active" ? (
-                          <NoSymbolIcon className="h-4 w-4" />
+                  {paginatedWhatsappLines.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-12 text-center text-gray-500">
+                        <ChatBubbleLeftRightIcon className="mx-auto h-8 w-8 text-gray-300 mb-2" />
+                        <p className="font-medium text-sm text-gray-700">
+                          No se encontraron líneas de WhatsApp
+                        </p>
+                        {searchTermWhatsapp ? (
+                          <p className="text-xs text-gray-400 mt-1">
+                            No hay resultados para "{searchTermWhatsapp}". Prueba con otro término.
+                          </p>
                         ) : (
-                          <CheckCircleIcon className="h-4 w-4" />
+                          <p className="text-xs text-gray-400 mt-1">
+                            Aún no hay números de WhatsApp registrados en la plataforma.
+                          </p>
                         )}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
 
-              {paginatedTenants.length === 0 && !loading && (
-                <tr>
-                  <td colSpan={5} className="p-12 text-center text-gray-500">
-                    {searchTerm ? (
-                      <p>
-                        No se encontraron cuentas que coincidan con la búsqueda
-                        "{searchTerm}".
-                      </p>
-                    ) : (
-                      <p>
-                        No hay organizaciones registradas en el CRM en este
-                        momento.
-                      </p>
-                    )}
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+            {/* Paginación Inferior de WhatsApp */}
+            {totalWhatsappPages > 1 && (
+              <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-5 py-3 text-xs text-gray-600">
+                <span>
+                  Página <strong>{currentWhatsappPage}</strong> de{" "}
+                  <strong>{totalWhatsappPages}</strong>
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setCurrentWhatsappPage((p) => Math.max(1, p - 1))}
+                    disabled={currentWhatsappPage === 1}
+                    className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 font-medium hover:bg-gray-50 disabled:opacity-40 cursor-pointer"
+                  >
+                    <ChevronLeftIcon className="h-3.5 w-3.5" />
+                    <span>Anterior</span>
+                  </button>
+                  <button
+                    onClick={() =>
+                      setCurrentWhatsappPage((p) => Math.min(totalWhatsappPages, p + 1))
+                    }
+                    disabled={currentWhatsappPage === totalWhatsappPages}
+                    className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 font-medium hover:bg-gray-50 disabled:opacity-40 cursor-pointer"
+                  >
+                    <span>Siguiente</span>
+                    <ChevronRightIcon className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
+      )}
 
-        {/* Paginación Inferior */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between border-t border-gray-200 bg-gray-50 px-5 py-3 text-xs text-gray-600">
-            <span>
-              Página <strong>{currentPage}</strong> de{" "}
-              <strong>{totalPages}</strong>
-            </span>
-            <div className="flex items-center gap-1.5">
+      {/* Modal de Confirmación para Desvincular Línea de WhatsApp */}
+      {deletingLine && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-gray-200">
+            <div className="flex items-start justify-between pb-3 border-b border-gray-100">
+              <div className="flex items-center gap-2 text-red-600">
+                <TrashIcon className="h-5 w-5" />
+                <h3 className="text-base font-bold text-gray-900">
+                  Desvincular Línea de WhatsApp
+                </h3>
+              </div>
               <button
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 font-medium hover:bg-gray-50 disabled:opacity-40 cursor-pointer"
+                type="button"
+                onClick={() => setDeletingLine(null)}
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors cursor-pointer"
               >
-                <ChevronLeftIcon className="h-3.5 w-3.5" />
-                <span>Anterior</span>
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-3 text-xs text-gray-600">
+              <p>
+                ¿Estás seguro de que deseas desvincular forzosamente la línea{" "}
+                <strong className="text-gray-900">
+                  {deletingLine.display_phone_number || deletingLine.phone_number_id}
+                </strong>
+                {deletingLine.verified_name ? ` (${deletingLine.verified_name})` : ""}?
+              </p>
+
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-[11px] text-amber-800 space-y-1">
+                <p className="font-semibold">Esta acción ejecutará:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>Eliminación en la API Central (<code className="font-mono">public.whatsapp_numbers</code>) para liberar el número y permitir re-onboarding.</li>
+                  <li>Eliminación de credenciales en el CRM (<code className="font-mono">crm.meta_credentials</code>).</li>
+                  <li>Desuscripción en Meta (<code className="font-mono">DELETE /{deletingLine.waba_id}/subscribed_apps</code>) si no quedan más líneas en esa cuenta.</li>
+                </ul>
+              </div>
+
+              <div className="text-[11px] text-gray-500 font-mono bg-gray-50 p-2.5 rounded border border-gray-200 space-y-0.5">
+                <p>Phone Number ID: {deletingLine.phone_number_id}</p>
+                <p>WABA ID: {deletingLine.waba_id}</p>
+                <p>Cliente ID: {deletingLine.customer_id} ({deletingLine.customer_company_name || "Sin empresa"})</p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-2 border-t border-gray-100 pt-4">
+              <button
+                type="button"
+                onClick={() => setDeletingLine(null)}
+                className="rounded-lg px-3.5 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                Cancelar
               </button>
               <button
-                onClick={() =>
-                  setCurrentPage((p) => Math.min(totalPages, p + 1))
-                }
-                disabled={currentPage === totalPages}
-                className="inline-flex items-center gap-1 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 font-medium hover:bg-gray-50 disabled:opacity-40 cursor-pointer"
+                type="button"
+                onClick={handleConfirmDeleteWhatsappLine}
+                disabled={actionLoading === "delete-wa"}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-4 py-2 text-xs font-semibold text-white hover:bg-red-700 transition-colors disabled:opacity-50 cursor-pointer shadow-xs"
               >
-                <span>Siguiente</span>
-                <ChevronRightIcon className="h-3.5 w-3.5" />
+                {actionLoading === "delete-wa" ? (
+                  <>
+                    <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
+                    <span>Desvinculando…</span>
+                  </>
+                ) : (
+                  <span>Confirmar Desvinculación</span>
+                )}
               </button>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Modal de Ajuste de Beneficios y Configuración */}
       {selectedTenant && (

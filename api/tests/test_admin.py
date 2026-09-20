@@ -276,6 +276,69 @@ class TestAdminModule(unittest.TestCase):
         self.assertEqual(portal_login_active.status_code, 200)
         self.assertIn("access_token", portal_login_active.json())
 
+    def test_admin_whatsapp_lines_management(self):
+        """Verifica la consulta y desvinculación administrativa de líneas de WhatsApp."""
+        from app.lib.security import create_access_token
+        from app.models.whatsapp_number import WhatsAppNumber
+        from app.models.customer import Customer
+        from app.lib.crypto import encrypt_token
+        from app.config import settings
+
+        # 1. Sin autenticación -> 401
+        res = self.client.get("/api/admin/crm/whatsapp-lines")
+        self.assertEqual(res.status_code, 401)
+
+        # 2. Con token de admin
+        admin = self.db.query(User).filter(User.email == "chava.galindo.82@gmail.com").first()
+        self.assertIsNotNone(admin)
+        token = create_access_token(data={"sub": str(admin.id), "user_id": admin.id, "email": admin.email, "role": "admin"})
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # 3. Crear cliente y línea simulada
+        cust = self.db.query(Customer).first()
+        self.assertIsNotNone(cust)
+
+        test_phone_id = "test_admin_line_998811"
+        test_waba_id = "test_admin_waba_998811"
+        enc_tok = encrypt_token("mock_token_admin_test_123", settings.TOKEN_ENCRYPTION_KEY)
+
+        # Limpiar si existía
+        self.db.query(WhatsAppNumber).filter(WhatsAppNumber.phone_number_id == test_phone_id).delete()
+        self.db.commit()
+
+        mock_line = WhatsAppNumber(
+            customer_id=cust.id,
+            phone_number_id=test_phone_id,
+            waba_id=test_waba_id,
+            display_phone_number="+52 1 33 0011 2233",
+            verified_name="Admin Test Line",
+            encrypted_token=enc_tok,
+            status="connected"
+        )
+        self.db.add(mock_line)
+        self.db.commit()
+        self.db.refresh(mock_line)
+
+        # 4. Listar líneas como admin
+        res_list = self.client.get("/api/admin/crm/whatsapp-lines", headers=headers)
+        self.assertEqual(res_list.status_code, 200)
+        lines = res_list.json()
+        self.assertIsInstance(lines, list)
+        matching = [l for l in lines if l["phone_number_id"] == test_phone_id]
+        self.assertEqual(len(matching), 1)
+        self.assertEqual(matching[0]["display_phone_number"], "+52 1 33 0011 2233")
+        self.assertEqual(matching[0]["customer_id"], cust.id)
+
+        # 5. Desvincular como admin
+        res_del = self.client.delete(f"/api/admin/crm/whatsapp-lines/{mock_line.id}", headers=headers)
+        self.assertEqual(res_del.status_code, 200)
+        self.assertTrue(res_del.json()["ok"])
+
+        # 6. Comprobar que ya no existe en la base de datos central
+        deleted_check = self.db.query(WhatsAppNumber).filter(WhatsAppNumber.id == mock_line.id).first()
+        self.assertIsNone(deleted_check)
+
 
 if __name__ == "__main__":
     unittest.main()
+

@@ -89,15 +89,39 @@ export const GET = withAuth(async (session, req: Request) => {
 });
 
 const postSchema = z.object({
-  name: z.string().trim().min(1).max(60),
+  name: z
+    .string()
+    .trim()
+    .min(1, "El nombre es obligatorio")
+    .max(100, "El nombre no puede superar los 100 caracteres"),
   type: z.enum(["conversational", "tool"]).default("conversational"),
-  description: z.string().max(300).nullable().optional(),
+  description: z
+    .string()
+    .max(1000, "La descripción no puede superar los 1,000 caracteres")
+    .nullable()
+    .optional(),
   enabled: z.boolean().optional().default(true),
   isDefault: z.boolean().optional().default(false),
-  tone: z.string().max(500).nullable().optional(),
-  instructions: z.string().max(8000).nullable().optional(),
-  escalationRules: z.string().max(4000).nullable().optional(),
-  greeting: z.string().max(1000).nullable().optional(),
+  tone: z
+    .string()
+    .max(1500, "El tono no puede superar los 1,500 caracteres")
+    .nullable()
+    .optional(),
+  instructions: z
+    .string()
+    .max(16000, "Las instrucciones no pueden superar los 16,000 caracteres")
+    .nullable()
+    .optional(),
+  escalationRules: z
+    .string()
+    .max(8000, "Las reglas de escalado no pueden superar los 8,000 caracteres")
+    .nullable()
+    .optional(),
+  greeting: z
+    .string()
+    .max(2000, "El mensaje de saludo no puede superar los 2,000 caracteres")
+    .nullable()
+    .optional(),
 });
 
 /**
@@ -148,15 +172,40 @@ export const POST = withAuth(async (session, req: Request) => {
 
 const putSchema = z.object({
   id: z.string().optional(),
-  name: z.string().trim().min(1).max(60).optional(),
+  name: z
+    .string()
+    .trim()
+    .min(1, "El nombre es obligatorio")
+    .max(100, "El nombre no puede superar los 100 caracteres")
+    .optional(),
   type: z.enum(["conversational", "tool"]).optional(),
-  description: z.string().max(300).nullable().optional(),
+  description: z
+    .string()
+    .max(1000, "La descripción no puede superar los 1,000 caracteres")
+    .nullable()
+    .optional(),
   enabled: z.boolean().optional(),
   isDefault: z.boolean().optional(),
-  tone: z.string().max(500).nullable().optional(),
-  instructions: z.string().max(8000).nullable().optional(),
-  escalationRules: z.string().max(4000).nullable().optional(),
-  greeting: z.string().max(1000).nullable().optional(),
+  tone: z
+    .string()
+    .max(1500, "El tono no puede superar los 1,500 caracteres")
+    .nullable()
+    .optional(),
+  instructions: z
+    .string()
+    .max(16000, "Las instrucciones no pueden superar los 16,000 caracteres")
+    .nullable()
+    .optional(),
+  escalationRules: z
+    .string()
+    .max(8000, "Las reglas de escalado no pueden superar los 8,000 caracteres")
+    .nullable()
+    .optional(),
+  greeting: z
+    .string()
+    .max(2000, "El mensaje de saludo no puede superar los 2,000 caracteres")
+    .nullable()
+    .optional(),
 });
 
 /**

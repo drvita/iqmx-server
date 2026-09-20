@@ -7,6 +7,37 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 > **Zona horaria de referencia:** Ciudad de México (CST / UTC-6).
 
+## [1.13.0] - 2026-09-19
+
+### Añadido
+
+- **Contadores Reactivos de Caracteres y Validación Pre-Submit en `/agent`**:
+  - Componente `CharacterCount` en tiempo real (`actual / max car.`) en cada campo del formulario de configuración y creación de Asistentes IA ([crm/src/components/agent/agent-client.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/agent/agent-client.tsx)).
+  - Retroalimentación cromática progresiva: color regular, advertencia en ámbar/amarillo a partir del 85% de ocupación, y estado de alerta en rojo destacando los caracteres excedentes si se sobrepasa el límite.
+  - Validación en cliente antes del envío: el botón **"Guardar cambios"** se deshabilita automáticamente y muestra un mensaje contextual con el campo que genera el conflicto, evitando envíos con cargas inválidas.
+  - Banner de error visual en rojo que expone el detalle exacto devuelto por la API en caso de fallos de validación o del servidor.
+- **Placeholders Didácticos y Ejemplos de Configuración**:
+  - Pautas y ejemplos estructurados de alto nivel para redactar instrucciones (`[ROL Y OBJETIVO]`, `[PAUTAS DE ATENCIÓN]`, `[LO QUE NUNCA DEBE HACER]`), tono empático y profesional, mensajes de bienvenida y reglas de escalado a humanos en WhatsApp.
+
+### Modificado
+
+- **Ampliación de Límites de Caracteres para Asistentes IA**:
+  - Actualización de esquemas Zod `postSchema` y `putSchema` en [crm/src/app/api/agent/profile/route.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/agent/profile/route.ts):
+    - Instrucciones (`instructions`): de 8,000 a **16,000 caracteres** (~3,500 palabras).
+    - Reglas de escalado (`escalationRules`): de 4,000 a **8,000 caracteres**.
+    - Tono de conversación (`tone`): de 500 a **1,500 caracteres**.
+    - Saludo inicial (`greeting`): de 1,000 a **2,000 caracteres**.
+    - Descripción interna (`description`): de 300 a **1,000 caracteres**.
+    - Nombre del asistente (`name`): de 60 a **100 caracteres**.
+  - Transformación de los campos `tone` y `greeting` a componentes `<Textarea>` compactos en [crm/src/components/agent/agent-client.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/agent/agent-client.tsx) para permitir redacciones multilínea y legibles.
+
+### Corregido
+
+- **Falso Éxito y Pérdida Silenciosa de Datos en el Guardado de Asistentes**:
+  - Corrección de `saveAssistant` y `createAssistant` en [crm/src/components/agent/agent-client.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/agent/agent-client.tsx): se eliminó la asunción ciega de éxito en `fetch`. Ahora se verifica estrictamente `res.ok` y se capturan las respuestas `422/400/500`, evitando que el sistema declare erróneamente *"¡Guardado!"* cuando el backend rechaza la solicitud.
+
+---
+
 ## [1.12.0] - 2026-09-19
 
 ### Añadido
