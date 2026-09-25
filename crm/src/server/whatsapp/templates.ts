@@ -324,6 +324,10 @@ export async function syncTemplates(
         category?: string;
         quality_score?: unknown;
         rejected_reason?: string;
+        components?: {
+          type?: string;
+          text?: string;
+        }[];
       }[];
     };
     try {
@@ -359,7 +363,49 @@ export async function syncTemplates(
           (remote.id && t.waTemplateId === remote.id) ||
           (t.name === remote.name && t.language === remote.language)
       );
-      if (!match) continue;
+      if (!match) {
+        // Si existe en Meta pero no en la BD local, la importamos
+        const bodyComp = remote.components?.find(
+          (c) => (c.type ?? "").toUpperCase() === "BODY"
+        );
+        const bodyText = bodyComp?.text;
+        if (!bodyText || !remote.name || !remote.language) continue;
+
+        await db
+          .insert(schema.template)
+          .values({
+            id: newId("template"),
+            organizationId,
+            phoneNumberId: creds.phoneNumberId,
+            wabaId,
+            name: remote.name,
+            language: remote.language,
+            category: remote.category ?? "MARKETING",
+            body: bodyText,
+            status,
+            rejectionReason: remote.rejected_reason ?? null,
+            waTemplateId: remote.id ?? null,
+          })
+          .onConflictDoUpdate({
+            target: [
+              schema.template.organizationId,
+              schema.template.wabaId,
+              schema.template.name,
+              schema.template.language,
+            ],
+            set: {
+              phoneNumberId: creds.phoneNumberId,
+              category: remote.category ?? "MARKETING",
+              body: bodyText,
+              status,
+              rejectionReason: remote.rejected_reason ?? null,
+              waTemplateId: remote.id ?? null,
+              updatedAt: new Date(),
+            },
+          });
+        updated += 1;
+        continue;
+      }
       const category = remote.category ?? match.category;
       if (match.status === status && match.category === category) continue;
       await db
