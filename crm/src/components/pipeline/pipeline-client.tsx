@@ -13,7 +13,7 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
-import { MessageSquareText, Settings2, Trophy, XCircle } from "lucide-react";
+import { Megaphone, MessageSquareText, Settings2, Trophy, XCircle } from "lucide-react";
 import type { LossReason, PriorityValue, StageDto } from "@/lib/types";
 import { formatMoneyCents, sumable } from "@/lib/money";
 import { cn } from "@/lib/utils";
@@ -25,6 +25,7 @@ import { LossReasonDialog } from "./loss-reason-dialog";
 import { AmountDialog } from "./amount-dialog";
 import { PriorityBadge } from "./priority-picker";
 import { LeadDrawer } from "./lead-drawer";
+import { StageBroadcastDialog } from "./stage-broadcast-dialog";
 
 export type BoardLead = {
   id: string;
@@ -52,6 +53,8 @@ export function PipelineClient() {
   } | null>(null);
   /** Tarjeta cuyo monto se está capturando. */
   const [editandoMonto, setEditandoMonto] = useState<BoardLead | null>(null);
+  /** Etapa seleccionada para envío de difusión masiva con plantilla. */
+  const [broadcastStage, setBroadcastStage] = useState<StageDto | null>(null);
   /**
    * Trato abierto en el cajón. Se guarda el ID y no el objeto: así el cajón
    * lee siempre del tablero y refleja al instante lo que se cambie desde
@@ -195,6 +198,7 @@ export function PipelineClient() {
                 currency={currency}
                 onEditAmount={setEditandoMonto}
                 onOpen={(l) => setAbiertoId(l.id)}
+                onBroadcast={() => setBroadcastStage(stage)}
                 leads={leads
                   .filter((l) => l.stageId === stage.id)
                   .sort((a, b) => a.position - b.position)}
@@ -208,6 +212,14 @@ export function PipelineClient() {
           </DragOverlay>
         </DndContext>
       </div>
+
+      {broadcastStage && (
+        <StageBroadcastDialog
+          stage={broadcastStage}
+          onClose={() => setBroadcastStage(null)}
+          onCompleted={() => void refetch()}
+        />
+      )}
 
       {managing && (
         <StageManager
@@ -295,12 +307,14 @@ function StageColumn({
   currency,
   onEditAmount,
   onOpen,
+  onBroadcast,
 }: {
   stage: StageDto;
   leads: BoardLead[];
   currency: string;
   onEditAmount: (lead: BoardLead) => void;
   onOpen: (lead: BoardLead) => void;
+  onBroadcast: () => void;
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
   return (
@@ -319,9 +333,21 @@ function StageColumn({
           )}
           {stage.name}
         </span>
-        <span className="rounded-full border border-border-strong bg-background px-2 py-0.5 font-mono text-[11px] text-text-3">
-          {leads.length}
-        </span>
+        <div className="flex items-center gap-1.5">
+          {leads.length > 0 && (
+            <button
+              type="button"
+              onClick={onBroadcast}
+              title={`Enviar mensaje masivo a ${stage.name}`}
+              className="rounded p-1 text-text-3 hover:bg-background hover:text-foreground transition-colors cursor-pointer"
+            >
+              <Megaphone className="h-3.5 w-3.5" />
+            </button>
+          )}
+          <span className="rounded-full border border-border-strong bg-background px-2 py-0.5 font-mono text-[11px] text-text-3">
+            {leads.length}
+          </span>
+        </div>
       </div>
       <div className="flex-1 space-y-2 overflow-y-auto p-2">
         {leads.map((lead) => (

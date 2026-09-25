@@ -57,3 +57,33 @@ describe("ON CONFLICT sobre contact", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+const TEMPLATE_INDEX_COLUMNS = ["organizationId", "wabaId", "name", "language"];
+
+describe("ON CONFLICT sobre template", () => {
+  it("nombra las cuatro columnas del índice único, en todos los sitios", () => {
+    const offenders: string[] = [];
+
+    for (const file of tsFilesUnder(join(process.cwd(), "src"))) {
+      const source = readFileSync(file, "utf8");
+      if (!source.includes("schema.template.name")) continue;
+
+      const targets = source.matchAll(/target:\s*\[([^\]]*)\]/g);
+      for (const match of targets) {
+        const body = match[1] ?? "";
+        if (!body.includes("schema.template.name")) continue;
+        const faltantes = TEMPLATE_INDEX_COLUMNS.filter(
+          (col) => !body.includes(`schema.template.${col}`)
+        );
+        if (faltantes.length > 0) {
+          offenders.push(
+            `${file.replace(process.cwd(), "")} — le falta: ${faltantes.join(", ")}`
+          );
+        }
+      }
+    }
+
+    expect(offenders).toEqual([]);
+  });
+});
+

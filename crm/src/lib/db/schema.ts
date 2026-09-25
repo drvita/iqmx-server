@@ -709,7 +709,7 @@ export const template = pgTable(
     index("template_org_waba_idx").on(t.organizationId, t.wabaId),
     uniqueIndex("template_org_waba_name_lang_uq").on(
       t.organizationId,
-      sql`coalesce(${t.wabaId}, '')`,
+      t.wabaId,
       t.name,
       t.language
     ),
