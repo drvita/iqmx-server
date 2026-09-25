@@ -55,10 +55,11 @@ export const GET = withAuth(async (session, req: Request, ctx: Params) => {
         sourceUrl: attribution.sourceUrl,
         mediaType: attribution.mediaType,
         channel: row.conversation.channel,
-        imageUrl:
-          (raw.image_url as string | undefined) ??
-          (raw.thumbnail_url as string | undefined) ??
-          null,
+        imageUrl: attribution.imageAssetId
+          ? `/api/media/${attribution.imageAssetId}`
+          : (raw.image_url as string | undefined) ??
+            (raw.thumbnail_url as string | undefined) ??
+            null,
         videoUrl: (raw.video_url as string | undefined) ?? null,
       },
     };

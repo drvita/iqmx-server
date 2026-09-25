@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Search, Sparkles, UserRound, X } from "lucide-react";
+import { Megaphone, Search, Sparkles, UserRound, X } from "lucide-react";
 import type { ConversationDto, ConversationLineDto } from "@/lib/types";
 import { CHANNEL_LABEL, type Channel } from "@/lib/channels";
 import { ChannelBadge } from "@/components/channel-badge";
 import { matchesQuery } from "@/lib/search";
 import { cn } from "@/lib/utils";
+import { etiquetaDeOrigen, titularDeOrigen } from "@/lib/anuncios";
 import { ContactAvatar } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
 import { formatTime, previewText } from "./helpers";
@@ -78,7 +79,7 @@ export function ConversationList({
   onSeeded: () => void;
 }) {
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<"all" | "unread">("all");
+  const [filter, setFilter] = useState<"all" | "unread" | "anuncios">("all");
   const [stage, setStage] = useState<string>("all");
   const [inbox, setInbox] = useState<Channel | "all">("all");
   const [lineFilter, setLineFilter] = useState<string | "all">("all");
@@ -128,8 +129,13 @@ export function ConversationList({
     inInbox.filter((c) => c.phoneNumberId === phoneNumberId).length;
 
   const unreadCount = inLine.filter((c) => c.unreadCount > 0).length;
+  const anunciosCount = inLine.filter((c) => Boolean(c.anuncio)).length;
   const visible =
-    filter === "unread" ? inLine.filter((c) => c.unreadCount > 0) : inLine;
+    filter === "unread"
+      ? inLine.filter((c) => c.unreadCount > 0)
+      : filter === "anuncios"
+        ? inLine.filter((c) => Boolean(c.anuncio))
+        : inLine;
 
   // Distinguir bandejas si hay más de un canal habilitado o con conversaciones activas
   const availableChannels = Array.from(
@@ -284,6 +290,7 @@ export function ConversationList({
           [
             { id: "all", label: "Todas", count: inLine.length },
             { id: "unread", label: "No leídas", count: unreadCount },
+            { id: "anuncios", label: "Anuncios", count: anunciosCount },
           ] as const
         ).map((f) => (
           <button
@@ -440,6 +447,18 @@ export function ConversationList({
                             <span className="inline-flex items-center gap-1 rounded-full border border-warning-soft bg-warning-tint px-2 py-0.5 text-[11px] text-warning-text">
                               <UserRound className="h-3 w-3" strokeWidth={1.7} />
                               Atención humana
+                            </span>
+                          )}
+                          {c.anuncio && (
+                            <span
+                              className="inline-flex min-w-0 max-w-[150px] items-center gap-1 rounded-full border border-info-soft bg-info-tint px-2 py-0.5 text-[11px] text-info-text"
+                              title={titularDeOrigen(c.anuncio.headline, c.anuncio.sourceType)}
+                            >
+                              <Megaphone className="h-3 w-3 shrink-0" strokeWidth={1.7} />
+                              <span className="truncate">
+                                {etiquetaDeOrigen(c.anuncio.sourceType)}
+                                {c.anuncio.headline ? ` · ${c.anuncio.headline}` : ""}
+                              </span>
                             </span>
                           )}
                         </span>

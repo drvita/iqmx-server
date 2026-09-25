@@ -1,23 +1,52 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { BookingsClient } from "@/components/bookings/bookings-client";
-import { isAgendaEnabled } from "@/server/agenda/flag";
 import { getSessionOrNull } from "@/lib/auth/session";
+import { clampListTo, isCalendarView, isIsoDate } from "@/lib/time/calendar";
+import { todayInTz } from "@/lib/time/slots";
+import { isAgendaEnabled } from "@/server/agenda/flag";
+import { getSettings } from "@/server/agenda/settings";
 
 export const dynamic = "force-dynamic";
 
-export default async function BookingsPage() {
+type Params = { vista?: string; fecha?: string; desde?: string; hasta?: string };
+
+/**
+ * 215 — Citas en calendario multi-inquilino.
+ * La vista y la fecha viven en la URL para compartir o recargar.
+ */
+export default async function BookingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<Params>;
+}) {
   const session = await getSessionOrNull();
-  if (!session || !(await isAgendaEnabled(session.organizationId))) {
+  if (!session) redirect("/login");
+  if (!(await isAgendaEnabled(session.organizationId))) {
     notFound();
   }
+
+  const settings = await getSettings(session.organizationId);
+  const params = await searchParams;
+  const view = isCalendarView(params.vista) ? params.vista : null;
+  const listFrom = isIsoDate(params.desde) ? params.desde : null;
+  const date =
+    view === "lista" && listFrom
+      ? listFrom
+      : isIsoDate(params.fecha)
+        ? params.fecha
+        : todayInTz(new Date(), settings.timezone);
+
   return (
-    <div className="flex h-full flex-col">
-      <header className="border-b px-4 py-3 sm:px-6 sm:py-4">
-        <h2 className="text-[17px] font-bold tracking-tight">Citas</h2>
-      </header>
-      <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
-        <BookingsClient />
-      </div>
-    </div>
+    <BookingsClient
+      initialView={view}
+      initialDate={date}
+      initialListTo={
+        view === "lista" && isIsoDate(params.hasta)
+          ? clampListTo(date, params.hasta)
+          : null
+      }
+      timezone={settings.timezone}
+      weeklyHours={settings.weeklyHours}
+    />
   );
 }

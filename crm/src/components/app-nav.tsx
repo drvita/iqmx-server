@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
   CalendarDays,
+  ChartColumn,
   FlaskConical,
   Inbox,
   Kanban,
@@ -40,6 +41,7 @@ const NAV: NavItem[] = [
   { href: "/inbox", label: "Bandeja", icon: Inbox, badge: true, module: "inbox" },
   { href: "/pipeline", label: "Pipeline", icon: Kanban, module: "pipeline" },
   { href: "/contacts", label: "Contactos", icon: Users, module: "contacts" },
+  { href: "/results", label: "Resultados", icon: ChartColumn },
   { href: "/agent", label: "Asistentes", icon: Sparkles, module: "asistentes" },
 ];
 

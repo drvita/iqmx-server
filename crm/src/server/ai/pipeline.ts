@@ -14,7 +14,7 @@ import {
   resolveStage,
   type AgentActionType,
 } from "@/server/ai/actions";
-import { matchesHandoffIntent } from "@/server/ai/handoff";
+import { HANDOFF_BACKUP_ACK, matchesHandoffIntent } from "@/server/ai/handoff";
 import { buildAgentSystemPrompt } from "@/server/ai/prompts";
 import { isAgendaEnabled } from "@/server/agenda/flag";
 import { bookSlot, offerSlots } from "@/server/agenda/agent";
@@ -290,8 +290,11 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
     return;
   }
 
-  // Patrón de respaldo ANTES del LLM (FR-022).
+  // Patrón de respaldo ANTES del LLM (FR-022). Avisa y traspasa, en el mismo
+  // orden que el camino del modelo (`farewell` y luego handoff): callar ante
+  // quien pide una persona se lee como que el bot dejó de contestar.
   if (lastInbound.text && matchesHandoffIntent(lastInbound.text)) {
+    await acknowledgeHandoff(conversation);
     await applyHandoff(conversationId, organizationId, "cliente");
     return;
   }
@@ -512,6 +515,27 @@ async function deliverReply(
       return;
     }
     throw err;
+  }
+}
+
+/**
+ * Acuse del traspaso por patrón de respaldo (FR-022, 019).
+ *
+ * El camino del modelo se despide con `farewell` antes de escalar; el patrón de
+ * respaldo salía en silencio. Enviar este texto fijo evita que el cliente crea
+ * que el bot lo ignoró por pedir una persona.
+ *
+ * Si el envío falla, el traspaso se aplica IGUAL. Quien pidió una persona
+ * tiene que llegar a una aunque el aviso no haya salido.
+ */
+async function acknowledgeHandoff(conversation: Conversation): Promise<void> {
+  try {
+    await deliverReply(conversation, HANDOFF_BACKUP_ACK);
+  } catch (err) {
+    console.error(
+      `[agente] el acuse del traspaso no salió en ${conversation.id}; se traspasa igual:`,
+      err
+    );
   }
 }
 

@@ -24,6 +24,18 @@ export async function listConversations(
     limit 1
   )`;
 
+  const anuncioDeLaConversacion = and(
+    eq(schema.adAttribution.conversationId, schema.conversation.id),
+    eq(schema.adAttribution.organizationId, schema.conversation.organizationId)
+  );
+
+  const anuncioDeLista = {
+    id: schema.adAttribution.id,
+    headline: schema.adAttribution.headline,
+    sourceId: schema.adAttribution.sourceId,
+    sourceType: schema.adAttribution.sourceType,
+  };
+
   const linePhoneSql = sql<string | null>`(
     select coalesce(mc.display_phone_number, mc.phone_number_id)
     from meta_credentials mc
@@ -68,12 +80,14 @@ export async function listConversations(
       lineName: lineNameSql,
       messengerPageName: messengerPageSql,
       igUsername: igUserSql,
+      anuncio: anuncioDeLista,
     })
     .from(schema.conversation)
     .innerJoin(
       schema.contact,
       eq(schema.conversation.contactId, schema.contact.id)
     )
+    .leftJoin(schema.adAttribution, anuncioDeLaConversacion)
     .where(
       scoped(
         schema.conversation.organizationId,
@@ -97,7 +111,14 @@ export async function listConversations(
         ? r.messengerPageName
         : r.conversation.channel === "instagram"
           ? r.igUsername
-          : r.lineName
+          : r.lineName,
+      r.anuncio?.id
+        ? {
+            headline: r.anuncio.headline,
+            sourceId: r.anuncio.sourceId,
+            sourceType: r.anuncio.sourceType,
+          }
+        : null
     )
   );
 }
@@ -187,7 +208,8 @@ export function serializeConversation(
   stageName: string | null = null,
   linePhone: string | null = null,
   lineName: string | null = null,
-  accountName?: string | null
+  accountName?: string | null,
+  anuncio?: ConversationDto["anuncio"]
 ): ConversationDto {
   return {
     id: c.id,
@@ -212,6 +234,7 @@ export function serializeConversation(
     windowOpen: isWindowOpen(c.lastInboundAt),
     windowRemainingMs: windowRemainingMs(c.lastInboundAt),
     preview,
+    anuncio: anuncio ?? null,
   };
 }
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Check, ChevronRight, Sparkles, UserRound } from "lucide-react";
 import type {
+  AnuncioDto,
   ConversationDto,
   FichaDto,
   FichaValue,
@@ -13,7 +14,9 @@ import { cn, formatPhone } from "@/lib/utils";
 import { CHANNEL_LABEL } from "@/lib/channels";
 import { ChannelBadge } from "@/components/channel-badge";
 import { ContactAvatar } from "@/components/avatar";
+import { AnuncioOrigen } from "@/components/anuncio-origen";
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { FichaPanel } from "@/components/ficha-panel";
 import { LineBadge } from "./line-badge";
@@ -48,6 +51,7 @@ export function ContactPanel({
   const [stages, setStages] = useState<StageDto[]>([]);
   const [currentStageId, setCurrentStageId] = useState<string | null>(null);
   const [leadId, setLeadId] = useState<string | null>(null);
+  const [anuncio, setAnuncio] = useState<AnuncioDto | null>(null);
   // Estado global del agente: sin esto, el toggle "Respondiendo" mentiría
   // cuando el agente aún no se ha configurado/encendido.
   const [agentEnabled, setAgentEnabled] = useState(false);
@@ -73,6 +77,7 @@ export function ContactPanel({
       setFicha(detail.contact?.ficha ?? {});
       setCurrentStageId(detail.stage?.id ?? null);
       setLeadId(detail.lead?.id ?? null);
+      setAnuncio(detail.anuncio ?? null);
     }
     if (stagesRes) setStages(stagesRes.stages);
     setAgentEnabled(Boolean(agentRes?.profile?.enabled));
@@ -88,12 +93,10 @@ export function ContactPanel({
       fetch("/api/agent/profile").then((r) => (r.ok ? r.json() : null)),
     ]).catch(() => [null, null]);
     if (detail) {
-      // La ficha SÍ se refresca en vivo: el agente la va llenando mientras la
-      // conversación ocurre, y verla aparecer sola es justo para lo que sirve.
-      // No pisa una edición a medias — el borrador vive dentro del panel.
       setFicha(detail.contact?.ficha ?? {});
       setCurrentStageId(detail.stage?.id ?? null);
       setLeadId(detail.lead?.id ?? null);
+      setAnuncio(detail.anuncio ?? null);
     }
     if (agentRes) {
       setAgentEnabled(Boolean(agentRes.profile?.enabled));
@@ -103,6 +106,7 @@ export function ContactPanel({
 
   useEffect(() => {
     setNotesLoaded(false);
+    setAnuncio(null);
     void refetch();
   }, [refetch]);
 
@@ -254,27 +258,16 @@ export function ContactPanel({
                         : "Activada"}
                 </p>
               </div>
-              <button
-                role="switch"
-                aria-checked={aiActive}
-                aria-label="IA en esta conversación"
-                onClick={() => {
+              <Switch
+                size="sm"
+                checked={aiActive}
+                label="IA en esta conversación"
+                onCheckedChange={() => {
                   void onPatchConversation({
                     aiEnabled: !conversation.aiEnabled,
                   });
                 }}
-                className={cn(
-                  "relative inline-flex h-5 w-9 shrink-0 items-center rounded-full px-0.5 transition-colors",
-                  aiActive ? "bg-brand" : "bg-border-strong"
-                )}
-              >
-                <span
-                  className={cn(
-                    "h-4 w-4 rounded-full bg-knob shadow-sm transition-transform",
-                    aiActive ? "translate-x-4" : "translate-x-0"
-                  )}
-                />
-              </button>
+              />
             </div>
 
             {!agentReady && (
@@ -299,6 +292,12 @@ export function ContactPanel({
               </div>
             )}
           </div>
+
+          {anuncio && (
+            <div className="mt-3">
+              <AnuncioOrigen anuncio={anuncio} />
+            </div>
+          )}
         </section>
 
         {/* Stepper de etapa */}

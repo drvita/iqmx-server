@@ -18,6 +18,7 @@ function createClient() {
     onnotice: () => {},
     connection: {
       search_path: "crm, public",
+      timezone: "UTC",
     },
   });
 }

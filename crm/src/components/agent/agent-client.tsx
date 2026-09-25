@@ -14,6 +14,8 @@ import {
   Trash2,
   Wrench,
 } from "lucide-react";
+import { BrainStatusCard } from "@/components/agent/brain-status-card";
+import type { BrainStatusDto } from "@/lib/brain-status";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import Link from "next/link";
@@ -65,6 +67,22 @@ export function AgentClient() {
   } | null>(null);
   const [loadingKb, setLoadingKb] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [brain, setBrain] = useState<BrainStatusDto | null>(null);
+
+  const loadBrain = useCallback(async () => {
+    const b = await fetch("/api/agent/brain-status")
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+    setBrain(b);
+  }, []);
+
+  useEffect(() => {
+    void loadBrain();
+    const interval = setInterval(() => {
+      void loadBrain();
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [loadBrain]);
 
   // Carga perfiles de asistentes
   const refetchProfiles = useCallback(
@@ -222,6 +240,12 @@ export function AgentClient() {
           </Button>
         </div>
       </header>
+
+      {brain && (
+        <div className="mx-4 mt-4 sm:mx-6 sm:mt-6">
+          <BrainStatusCard status={brain} />
+        </div>
+      )}
 
       {!aiConfigured && (
         <div className="mx-4 mt-4 rounded-lg border border-brand-soft bg-brand-tint p-5 text-center sm:mx-6 sm:mt-6 sm:p-6">

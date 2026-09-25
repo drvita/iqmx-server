@@ -141,6 +141,13 @@
       "when": 1789300000000,
       "tag": "0019_messenger_instagram_assistants",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790048470717,
+      "tag": "0020_ad_attribution_creativo",
+      "breakpoints": true
     }
   ]
 }

@@ -9,6 +9,11 @@ import {
   serializeContact,
 } from "@/server/contacts";
 import { upsertFicha } from "@/server/bot/ficha";
+import { cuentaComoAnuncio } from "@/lib/anuncios";
+import {
+  anuncioDelContacto,
+  repararImagenSiFalta,
+} from "@/server/attribution/store";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +23,16 @@ export const GET = withAuth(async (session, _req: Request, ctx: Params) => {
   const { id } = await ctx.params;
   const contact = await getContactById(session.organizationId, id);
   if (!contact) return apiError(404, "not_found", "Contacto no encontrado");
-  const stageRow = await getContactStage(session.organizationId, id);
+  const [stageRow, anuncio] = await Promise.all([
+    getContactStage(session.organizationId, id),
+    anuncioDelContacto(session.organizationId, id),
+  ]);
+  if (anuncio && !anuncio.imageAssetId) {
+    repararImagenSiFalta(session.organizationId, id);
+  }
   return Response.json({
-    contact: serializeContact(contact),
+    contact: serializeContact(contact, null, null, cuentaComoAnuncio(anuncio)),
+    anuncio,
     stage: stageRow
       ? {
           id: stageRow.stage.id,
@@ -87,5 +99,8 @@ export const PATCH = withAuth(async (session, req: Request, ctx: Params) => {
     )
     .returning();
   if (!updated[0]) return apiError(404, "not_found", "Contacto no encontrado");
-  return Response.json({ contact: serializeContact(updated[0]) });
+  const anuncio = await anuncioDelContacto(session.organizationId, id);
+  return Response.json({
+    contact: serializeContact(updated[0], null, null, cuentaComoAnuncio(anuncio)),
+  });
 });

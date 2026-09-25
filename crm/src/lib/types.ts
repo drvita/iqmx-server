@@ -25,6 +25,27 @@ export type ConversationDto = {
   windowOpen: boolean;
   windowRemainingMs: number;
   preview: string | null;
+  /** 018: de qué anuncio llegó esta conversación (para badge y filtro de bandeja). */
+  anuncio?: {
+    headline: string | null;
+    sourceId: string | null;
+    sourceType: string | null;
+  } | null;
+};
+
+export type AnuncioDto = {
+  sourceId: string | null;
+  sourceType: string | null;
+  /** Solo https. */
+  sourceUrl: string | null;
+  headline: string | null;
+  body: string | null;
+  mediaType: string | null;
+  /** Imagen del creativo, servida por `/api/media/{id}`. */
+  imageAssetId: string | null;
+  /** Si Meta mandó identificador de clic. */
+  hasCtwaClid: boolean;
+  capturedAt: string;
 };
 
 /** Línea/cuenta de WhatsApp disponible para el usuario en la bandeja de entrada. */

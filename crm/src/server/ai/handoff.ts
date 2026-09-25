@@ -10,3 +10,15 @@ export const HANDOFF_BACKUP_REGEX =
 export function matchesHandoffIntent(text: string): boolean {
   return HANDOFF_BACKUP_REGEX.test(text);
 }
+
+/**
+ * Lo que oye el cliente cuando el patrón de respaldo lo traspasa.
+ *
+ * El camino del modelo se despide con su `farewell`; este no mandaba NADA, y
+ * justo atrapa las peticiones más directas («quiero hablar con un humano»).
+ * El traspaso ocurría por dentro, pero del lado de WhatsApp se leía como que
+ * el bot había dejado de contestar a quien pidió una persona.
+ */
+export const HANDOFF_BACKUP_ACK =
+  "Claro, te comunico con una persona del equipo. En breve te responden.";
+

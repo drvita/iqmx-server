@@ -1067,6 +1067,9 @@ export const adAttribution = pgTable(
     headline: text("headline"),
     body: text("body"),
     mediaType: text("media_type"),
+    imageAssetId: text("image_asset_id").references(() => mediaAsset.id, {
+      onDelete: "set null",
+    }),
     /**
      * Payload íntegro del referral. Es la póliza contra "Meta agregó un campo":
      * nada se pierde y un fork puede pintar el creativo sin migrar nada.
@@ -1080,6 +1083,7 @@ export const adAttribution = pgTable(
       t.conversationId
     ),
     index("ad_attribution_org_contact_idx").on(t.organizationId, t.contactId),
+    index("ad_attribution_org_source_idx").on(t.organizationId, t.sourceId),
   ]
 );
 
