@@ -524,6 +524,22 @@ export async function sendTemplate(input: {
     );
   }
 
+  // Si el canal es Messenger o Instagram, Meta no admite plantillas aprobadas:
+  // Renderizamos el cuerpo con sus variables y enviamos como mensaje de texto libre (con HUMAN_AGENT)
+  if (
+    row.conversation.channel === "messenger" ||
+    row.conversation.channel === "instagram"
+  ) {
+    const renderedText = renderBody(template.body, values);
+    const { sendText } = await import("@/server/inbox/send");
+    return await sendText({
+      conversationId: input.conversationId,
+      organizationId: input.organizationId,
+      text: renderedText,
+      aiGenerated: false,
+    });
+  }
+
   const targetPhoneId = row.conversation.phoneNumberId ?? template.phoneNumberId;
   const creds = targetPhoneId
     ? await getCredentialsByPhoneNumberId(targetPhoneId)

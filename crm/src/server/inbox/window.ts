@@ -6,6 +6,7 @@
  */
 
 export const WINDOW_MS = 24 * 60 * 60 * 1000;
+export const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function isWindowOpen(
   lastInboundAt: Date | null,
@@ -13,6 +14,15 @@ export function isWindowOpen(
 ): boolean {
   if (!lastInboundAt) return false;
   return now.getTime() - lastInboundAt.getTime() < WINDOW_MS;
+}
+
+/** Ventana extendida de 7 días para canales de mensajería de Meta con etiqueta HUMAN_AGENT (Messenger / Instagram). */
+export function isWithinSevenDaysWindow(
+  lastInboundAt: Date | null,
+  now: Date = new Date()
+): boolean {
+  if (!lastInboundAt) return false;
+  return now.getTime() - lastInboundAt.getTime() < SEVEN_DAYS_MS;
 }
 
 /** Milisegundos restantes de ventana (0 si está cerrada). */
@@ -24,3 +34,4 @@ export function windowRemainingMs(
   const remaining = WINDOW_MS - (now.getTime() - lastInboundAt.getTime());
   return Math.max(0, remaining);
 }
+

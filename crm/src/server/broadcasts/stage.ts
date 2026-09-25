@@ -1,9 +1,11 @@
 import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { scoped } from "@/lib/db/tenant";
+import type { Channel } from "@/lib/channels";
 import type { LossReason } from "@/lib/types";
 import { countVariables, sendTemplate, TemplateError } from "@/server/whatsapp/templates";
 import { getOrCreateConversation } from "@/server/inbox/ingest";
+import { isWithinSevenDaysWindow } from "@/server/inbox/window";
 
 export type BroadcastAudienceFilter = {
   stageId: string;
@@ -16,7 +18,9 @@ export type BroadcastRecipient = {
   name: string;
   phone: string | null;
   waIdentity: string;
+  channel: Channel;
   conversationId: string | null;
+  lastInboundAt: Date | null;
   lossReason: LossReason | null;
 };
 
@@ -64,7 +68,9 @@ export async function getStageBroadcastAudience(
       name: schema.contact.name,
       phone: schema.contact.phone,
       waIdentity: schema.contact.waIdentity,
+      channel: schema.contact.channel,
       conversationId: schema.conversation.id,
+      lastInboundAt: schema.conversation.lastInboundAt,
       // Subconsulta para obtener el motivo de pérdida más reciente si aplica
       lastLossReason: sql<string | null>`(
         select lse."loss_reason"
@@ -102,7 +108,9 @@ export async function getStageBroadcastAudience(
     name: r.name,
     phone: r.phone,
     waIdentity: r.waIdentity,
+    channel: (r.channel as Channel) || "whatsapp",
     conversationId: r.conversationId,
+    lastInboundAt: r.lastInboundAt,
     lossReason: (r.lastLossReason as LossReason) ?? null,
   }));
 
@@ -126,6 +134,9 @@ export type BroadcastSendResult = {
  * Despacha el envío masivo secuencial con control de tasa y manejo individual de errores.
  * Admite reemplazo dinámico de variables: `{{nombre}}` o `{{1}} = "[nombre]"` se sustituye
  * por el primer nombre del contacto si el usuario así lo configuró.
+ * Omnicanal: contactos en WhatsApp reciben la plantilla oficial de Meta; contactos en
+ * Messenger o Instagram reciben el texto de la plantilla renderizado, siempre que se
+ * encuentren dentro de la ventana permitida de 7 días.
  */
 export async function executeStageBroadcast(input: {
   organizationId: string;
@@ -170,25 +181,41 @@ export async function executeStageBroadcast(input: {
   const errors: { contactName: string; reason: string }[] = [];
 
   for (const recipient of recipients) {
-    // Si no tiene teléfono ni identidad para WhatsApp, omitir
-    if (!recipient.phone && !recipient.waIdentity) {
-      skipped++;
-      continue;
+    // 1. Validaciones por canal antes de intentar el envío
+    if (recipient.channel === "whatsapp") {
+      // Si no tiene teléfono ni identidad para WhatsApp, omitir
+      if (!recipient.phone && !recipient.waIdentity) {
+        skipped++;
+        continue;
+      }
+    } else if (
+      recipient.channel === "messenger" ||
+      recipient.channel === "instagram"
+    ) {
+      // Messenger / Instagram requieren haber tenido interacción en los últimos 7 días (HUMAN_AGENT tag)
+      if (!isWithinSevenDaysWindow(recipient.lastInboundAt)) {
+        skipped++;
+        errors.push({
+          contactName: recipient.name,
+          reason: `Fuera de la ventana de 7 días de ${recipient.channel === "messenger" ? "Facebook Messenger" : "Instagram"}`,
+        });
+        continue;
+      }
     }
 
     try {
-      // 1. Obtener o crear conversación real
+      // 2. Obtener o crear conversación real respetando el canal del contacto
       let conversationId = recipient.conversationId;
       if (!conversationId) {
         const conv = await getOrCreateConversation(
           input.organizationId,
           recipient.contactId,
-          { channel: "whatsapp" }
+          { channel: recipient.channel }
         );
         conversationId = conv.id;
       }
 
-      // 2. Resolver variables personalizadas por contacto
+      // 3. Resolver variables personalizadas por contacto
       const firstName = recipient.name.trim().split(/\s+/)[0] || "Cliente";
       const resolvedVariables: string[] = [];
 
@@ -210,7 +237,7 @@ export async function executeStageBroadcast(input: {
         }
       }
 
-      // 3. Enviar plantilla
+      // 4. Enviar plantilla (sendTemplate redirige a texto renderizado si es messenger/instagram)
       await sendTemplate({
         organizationId: input.organizationId,
         conversationId,

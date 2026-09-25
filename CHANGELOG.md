@@ -7,6 +7,28 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 > **Zona horaria de referencia:** Ciudad de México (CST / UTC-6).
 
+## [1.16.0] - 2026-09-25
+
+### Añadido
+
+- **Difusión Masiva de Etapa Omnicanal con Plantillas Renderizadas**:
+  - Extensión de la difusión en [crm/src/server/broadcasts/stage.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/broadcasts/stage.ts) para abarcar contactos originados en Facebook Messenger e Instagram además de WhatsApp.
+  - Renderizado automático del cuerpo de la plantilla con interpolación de variables dinámicas (`{{1}}` $\rightarrow$ Nombre o valor configurado) y envío mediante etiqueta `HUMAN_AGENT` de Meta.
+  - Validación y salvaguarda de la ventana de 7 días ([crm/src/server/inbox/window.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/inbox/window.ts)): los contactos de Messenger o Instagram fuera de la ventana se omiten de forma segura (`skipped`) con reporte descriptivo individual en lugar de bloquear el proceso.
+  - Soporte de renderizado de plantillas al vuelo en `/inbox` ([crm/src/server/whatsapp/templates.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/whatsapp/templates.ts)): si el operador selecciona un chip de plantilla en un hilo de Messenger o Instagram, se despacha en su formato de texto nativo.
+  - Endpoint de bot externo omnicanal ([crm/src/app/api/bot/messages/template/route.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/bot/messages/template/route.ts)): soporte para disparar plantillas y tickets de pedido a clientes preservando el canal nativo del contacto.
+
+- **Sincronización Bidireccional de Plantillas de WhatsApp**:
+  - Enriquecimiento de `syncTemplates` en [crm/src/server/whatsapp/templates.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/whatsapp/templates.ts) para importar plantillas preexistentes o creadas directamente en Meta Business Manager que aún no estaban registradas en la base de datos del CRM.
+
+### Corregido
+
+- **Restricción de Unicidad de Plantillas de WhatsApp en PostgreSQL (`42P10`)**:
+  - Corrección de discordancia de índice único en [crm/src/lib/db/schema.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/db/schema.ts) sustituyendo la expresión `sql`coalesce(...)`` por la columna directa `t.wabaId`, alineando la sentencia `ON CONFLICT (organization_id, waba_id, name, language)` generada por Drizzle ORM.
+  - Creación y registro de migración `0021_template_unique_index_fix.sql` en [crm/drizzle/meta/_journal.json](file:///Users/laclavees12345/code/iqissmexico/main/crm/drizzle/meta/_journal.json) junto con prueba de regresión en [crm/tests/unit/conflict-targets.test.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/tests/unit/conflict-targets.test.ts).
+
+---
+
 ## [1.15.0] - 2026-09-19
 
 ### Corregido

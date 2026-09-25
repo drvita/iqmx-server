@@ -156,7 +156,7 @@ export async function POST(req: Request) {
     }
 
     const conversation = await getOrCreateConversation(organizationId, contactId, {
-      channel: "whatsapp",
+      channel: contact.channel ?? "whatsapp",
       phoneNumberId: template.phoneNumberId,
     });
     resolvedConvId = conversation.id;

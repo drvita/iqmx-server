@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { isWithinSevenDaysWindow, SEVEN_DAYS_MS } from "@/server/inbox/window";
 
 describe("stage broadcast audience & variable mappings", () => {
   it("resuelve variables dinámicas de plantilla como el nombre del contacto", () => {
@@ -31,4 +32,15 @@ describe("stage broadcast audience & variable mappings", () => {
     expect(soloPrecio.length).toBe(2);
     expect(soloPrecio.map((l) => l.id)).toEqual(["1", "3"]);
   });
+
+  it("verifica ventana de 7 días para contactos de Messenger / Instagram", () => {
+    const now = new Date("2026-09-25T15:00:00Z");
+    const fourDaysAgo = new Date(now.getTime() - 4 * 24 * 60 * 60 * 1000);
+    const eightDaysAgo = new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000);
+
+    expect(isWithinSevenDaysWindow(fourDaysAgo, now)).toBe(true);
+    expect(isWithinSevenDaysWindow(eightDaysAgo, now)).toBe(false);
+    expect(isWithinSevenDaysWindow(null, now)).toBe(false);
+  });
 });
+
