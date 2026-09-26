@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, ilike } from "drizzle-orm";
 import {
   countVariables,
   renderBody,
@@ -62,6 +62,8 @@ export function serializeTemplate(t: TemplateRow) {
     language: t.language,
     category: t.category,
     body: t.body,
+    footer: t.footer,
+    buttons: t.buttons ?? [],
     status: t.status,
     rejectionReason: t.rejectionReason,
     phoneNumberId: t.phoneNumberId,
@@ -154,10 +156,20 @@ export async function createTemplate(
     language: string;
     category: string;
     body: string;
+    footer?: string | null;
+    buttons?: { type: "QUICK_REPLY" | "URL"; text: string; url?: string }[];
   }
 ): Promise<TemplateRow> {
   const variableError = validateBodyVariables(input.body);
   if (variableError) throw new TemplateError("invalid", variableError);
+
+  if (input.footer && input.footer.trim().length > 60) {
+    throw new TemplateError("invalid", "El pie de página no puede exceder 60 caracteres");
+  }
+
+  if (input.buttons && input.buttons.length > 3) {
+    throw new TemplateError("invalid", "Se permite un máximo 3 botones por plantilla");
+  }
 
   if (!input.phoneNumberId || !input.phoneNumberId.trim()) {
     throw new TemplateError(
@@ -192,6 +204,49 @@ export async function createTemplate(
     { length: variableCount },
     (_, i) => `ejemplo ${i + 1}`
   );
+
+  const cleanFooter = input.footer?.trim() || null;
+  const cleanButtons = (input.buttons ?? []).map((b) => {
+    if (b.type === "URL") {
+      return { type: "URL" as const, text: b.text.trim(), url: (b.url ?? "").trim() };
+    }
+    return { type: "QUICK_REPLY" as const, text: b.text.trim() };
+  });
+
+  const components: unknown[] = [
+    {
+      type: "BODY",
+      text: input.body,
+      ...(variableCount > 0 ? { example: { body_text: [examples] } } : {}),
+    },
+  ];
+
+  if (cleanFooter) {
+    components.push({
+      type: "FOOTER",
+      text: cleanFooter,
+    });
+  }
+
+  if (cleanButtons.length > 0) {
+    components.push({
+      type: "BUTTONS",
+      buttons: cleanButtons.map((b) => {
+        if (b.type === "URL") {
+          return {
+            type: "URL",
+            text: b.text,
+            url: b.url,
+          };
+        }
+        return {
+          type: "QUICK_REPLY",
+          text: b.text,
+        };
+      }),
+    });
+  }
+
   let waTemplateId: string | null = null;
   try {
     const res = await graphRequest<{ id?: string; status?: string }>(
@@ -203,15 +258,7 @@ export async function createTemplate(
           name,
           language: input.language,
           category: input.category,
-          components: [
-            {
-              type: "BODY",
-              text: input.body,
-              ...(variableCount > 0
-                ? { example: { body_text: [examples] } }
-                : {}),
-            },
-          ],
+          components,
         },
       }
     );
@@ -242,6 +289,8 @@ export async function createTemplate(
       language: input.language,
       category: input.category,
       body: input.body,
+      footer: cleanFooter,
+      buttons: cleanButtons,
       status: "pending",
       waTemplateId,
     })
@@ -256,6 +305,8 @@ export async function createTemplate(
         phoneNumberId: creds.phoneNumberId,
         category: input.category,
         body: input.body,
+        footer: cleanFooter,
+        buttons: cleanButtons,
         status: "pending",
         rejectionReason: null,
         waTemplateId,
@@ -264,6 +315,70 @@ export async function createTemplate(
     })
     .returning();
   return inserted[0]!;
+}
+
+/**
+ * Elimina una plantilla tanto en Meta Cloud API como en la base de datos local.
+ * Si en Meta ya no existe o devuelve error de not found, procede con la eliminación local.
+ */
+export async function deleteTemplate(
+  organizationId: string,
+  templateId: string
+): Promise<void> {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(schema.template)
+    .where(
+      scoped(
+        schema.template.organizationId,
+        organizationId,
+        eq(schema.template.id, templateId)
+      )
+    )
+    .limit(1);
+
+  const t = rows[0];
+  if (!t) {
+    throw new TemplateError("not_found", "Plantilla no encontrada");
+  }
+
+  // Intentar eliminar en Meta si tenemos WABA ID y credenciales
+  if (t.wabaId) {
+    const creds = t.phoneNumberId
+      ? await getCredentialsByPhoneNumberId(t.phoneNumberId)
+      : await getCredentialsByWabaId(t.wabaId);
+
+    if (creds && creds.status !== "reconnect_required") {
+      try {
+        await graphRequest(
+          `${t.wabaId}/message_templates?name=${encodeURIComponent(t.name)}`,
+          {
+            method: "DELETE",
+            token: creds.token,
+          }
+        );
+      } catch (err) {
+        // Si ya fue borrada en Meta o arroja not found, ignorar error y continuar borrado local
+        if (err instanceof MetaApiError) {
+          if (err.isAuthError) {
+            await markReconnectRequired(organizationId);
+          }
+        }
+      }
+    }
+  }
+
+  // Borrar de la base de datos local
+  await db
+    .delete(schema.template)
+    .where(
+      scoped(
+        schema.template.organizationId,
+        organizationId,
+        eq(schema.template.id, templateId)
+      )
+    );
 }
 
 function mapMetaStatus(
@@ -314,6 +429,16 @@ export async function syncTemplates(
   const db = getDb();
   let updated = 0;
 
+  // Purga de plantillas demo de Meta ('sample_template%') que hayan quedado registradas
+  await db
+    .delete(schema.template)
+    .where(
+      and(
+        scoped(schema.template.organizationId, organizationId),
+        ilike(schema.template.name, "sample_template%")
+      )
+    );
+
   for (const [wabaId, creds] of wabaMap.entries()) {
     let data: {
       data?: {
@@ -327,6 +452,7 @@ export async function syncTemplates(
         components?: {
           type?: string;
           text?: string;
+          buttons?: { type?: string; text?: string; url?: string }[];
         }[];
       }[];
     };
@@ -356,21 +482,43 @@ export async function syncTemplates(
       );
 
     for (const remote of data.data ?? []) {
+      // Ignorar plantillas de prueba generadas por defecto por Meta
+      if (remote.name?.toLowerCase().startsWith("sample_template")) {
+        continue;
+      }
+
       const status = mapMetaStatus(remote.status);
       if (!status) continue;
+
+      const bodyComp = remote.components?.find(
+        (c) => (c.type ?? "").toUpperCase() === "BODY"
+      );
+      const footerComp = remote.components?.find(
+        (c) => (c.type ?? "").toUpperCase() === "FOOTER"
+      );
+      const buttonsComp = remote.components?.find(
+        (c) => (c.type ?? "").toUpperCase() === "BUTTONS"
+      );
+
+      const bodyText = bodyComp?.text;
+      const footerText = footerComp?.text?.trim() || null;
+      const parsedButtons = (buttonsComp?.buttons ?? []).map((b) => {
+        if ((b.type ?? "").toUpperCase() === "URL") {
+          return { type: "URL" as const, text: b.text ?? "", url: b.url ?? "" };
+        }
+        return { type: "QUICK_REPLY" as const, text: b.text ?? "" };
+      });
+
+      if (!bodyText || !remote.name || !remote.language) continue;
+
       const match = local.find(
         (t) =>
           (remote.id && t.waTemplateId === remote.id) ||
           (t.name === remote.name && t.language === remote.language)
       );
+
       if (!match) {
         // Si existe en Meta pero no en la BD local, la importamos
-        const bodyComp = remote.components?.find(
-          (c) => (c.type ?? "").toUpperCase() === "BODY"
-        );
-        const bodyText = bodyComp?.text;
-        if (!bodyText || !remote.name || !remote.language) continue;
-
         await db
           .insert(schema.template)
           .values({
@@ -382,6 +530,8 @@ export async function syncTemplates(
             language: remote.language,
             category: remote.category ?? "MARKETING",
             body: bodyText,
+            footer: footerText,
+            buttons: parsedButtons,
             status,
             rejectionReason: remote.rejected_reason ?? null,
             waTemplateId: remote.id ?? null,
@@ -397,6 +547,8 @@ export async function syncTemplates(
               phoneNumberId: creds.phoneNumberId,
               category: remote.category ?? "MARKETING",
               body: bodyText,
+              footer: footerText,
+              buttons: parsedButtons,
               status,
               rejectionReason: remote.rejected_reason ?? null,
               waTemplateId: remote.id ?? null,
@@ -406,13 +558,16 @@ export async function syncTemplates(
         updated += 1;
         continue;
       }
+
       const category = remote.category ?? match.category;
-      if (match.status === status && match.category === category) continue;
       await db
         .update(schema.template)
         .set({
           status,
           category,
+          body: bodyText,
+          footer: footerText,
+          buttons: parsedButtons,
           rejectionReason: remote.rejected_reason ?? null,
           waTemplateId: match.waTemplateId ?? remote.id ?? null,
           updatedAt: new Date(),

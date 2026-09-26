@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { apiError } from "@/lib/api";
 import { scoped } from "@/lib/db/tenant";
-import { requireBotKey, resolveInstanceOrg } from "@/server/bot/auth";
+import { requireBotKeyAndResolveOrg } from "@/server/bot/auth";
 import { agendaDisabledResponse, isAgendaEnabled } from "@/server/agenda/flag";
 import {
   addDaysISO,
@@ -54,13 +54,9 @@ function clamp(raw: string | null, l: { min: number; max: number; def: number })
 }
 
 export async function GET(req: Request) {
-  const denied = requireBotKey(req);
-  if (denied) return denied;
-
-  const organizationId = await resolveInstanceOrg();
-  if (!organizationId) {
-    return apiError(409, "no_org", "La instancia aún no tiene organización");
-  }
+  const auth = await requireBotKeyAndResolveOrg(req);
+  if (!auth.ok) return auth.error;
+  const { organizationId } = auth;
   if (!(await isAgendaEnabled(organizationId))) return agendaDisabledResponse();
 
   const url = new URL(req.url);

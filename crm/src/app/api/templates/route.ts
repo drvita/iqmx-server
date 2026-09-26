@@ -37,6 +37,17 @@ const createSchema = z.object({
   language: z.string().trim().min(2).max(10),
   category: z.enum(["UTILITY", "MARKETING"]),
   body: z.string().trim().min(1).max(1024),
+  footer: z.string().trim().max(60).nullable().optional(),
+  buttons: z
+    .array(
+      z.object({
+        type: z.enum(["QUICK_REPLY", "URL"]),
+        text: z.string().trim().min(1).max(25),
+        url: z.string().trim().url().optional(),
+      })
+    )
+    .max(3)
+    .optional(),
 });
 
 export const POST = withAuth(async (session, req: Request) => {

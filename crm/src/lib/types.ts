@@ -106,12 +106,18 @@ export type MessageDto = {
   createdAt: string;
 };
 
+export type TemplateButton =
+  | { type: "QUICK_REPLY"; text: string }
+  | { type: "URL"; text: string; url: string };
+
 export type TemplateDto = {
   id: string;
   name: string;
   language: string;
   category: string;
   body: string;
+  footer?: string | null;
+  buttons?: TemplateButton[];
   status: "draft" | "pending" | "approved" | "rejected";
   rejectionReason: string | null;
   phoneNumberId?: string | null;

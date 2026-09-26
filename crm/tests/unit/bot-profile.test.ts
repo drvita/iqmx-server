@@ -23,7 +23,24 @@ vi.mock("@/lib/db", async (importOriginal) => {
 
 vi.mock("@/server/bot/auth", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/server/bot/auth")>();
-  return { ...actual, resolveInstanceOrg: async () => "org_1" };
+  return {
+    ...actual,
+    requireBotKeyAndResolveOrg: async (req: Request) => {
+      const key = req.headers.get("x-api-key");
+      const expected = process.env.BOT_API_KEY;
+      if (!key || !expected || key !== expected) {
+        return {
+          ok: false,
+          error: new Response(JSON.stringify({ error: { code: "unauthorized" } }), {
+            status: 401,
+            headers: { "content-type": "application/json" },
+          }),
+        };
+      }
+      return { ok: true, organizationId: "org_1" };
+    },
+    resolveInstanceOrg: async () => "org_1",
+  };
 });
 
 /** Perfil del agente + knowledge base vía la API de servicio `/api/bot/*`. */

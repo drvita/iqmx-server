@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Check, Copy, Phone, RefreshCw } from "lucide-react";
-import type { TemplateDto } from "@/lib/types";
+import { Check, Copy, ExternalLink, Loader2, MessageSquare, Phone, Plus, RefreshCw, Trash2 } from "lucide-react";
+import type { TemplateButton, TemplateDto } from "@/lib/types";
 import { countVariables, validateBodyVariables } from "@/lib/templates";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -40,6 +40,27 @@ export function TemplatesClient() {
   const [filterPhoneId, setFilterPhoneId] = useState<string>("all");
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const deleteTpl = async (tpl: TemplateDto) => {
+    if (!confirm(`¿Eliminar la plantilla "${tpl.name}" (${tpl.language})? También se eliminará de Meta si está registrada.`)) {
+      return;
+    }
+    setDeletingId(tpl.id);
+    try {
+      const res = await fetch(`/api/templates/${tpl.id}`, { method: "DELETE" });
+      if (res.ok) {
+        void refetch();
+      } else {
+        const data = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+        alert(data?.error?.message ?? "No se pudo eliminar la plantilla");
+      }
+    } catch {
+      alert("Error de red al eliminar la plantilla");
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   const fetchLines = useCallback(async () => {
     const res = await fetch("/api/settings/whatsapp").catch(() => null);
@@ -160,16 +181,16 @@ export function TemplatesClient() {
         </div>
       )}
 
-      <div className="space-y-2">
+      <div className="space-y-3">
         {templates.map((t) => {
           const associatedLine = t.phoneNumberId ? lineMap.get(t.phoneNumberId) : null;
           return (
-            <div key={t.id} className="rounded-lg border bg-card p-4">
+            <div key={t.id} className="rounded-lg border bg-card p-4 space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div className="space-y-0.5">
                   <p className="font-mono text-sm font-medium">
                     {t.name}{" "}
-                    <span className="text-muted-foreground">
+                    <span className="text-muted-foreground text-xs font-normal">
                       ({t.language} · {t.category})
                     </span>
                   </p>
@@ -181,17 +202,65 @@ export function TemplatesClient() {
                     </p>
                   )}
                 </div>
-                <Badge variant={STATUS_BADGE[t.status].variant}>
-                  {STATUS_BADGE[t.status].label}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant={STATUS_BADGE[t.status].variant}>
+                    {STATUS_BADGE[t.status].label}
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                    title="Eliminar plantilla"
+                    disabled={deletingId === t.id}
+                    onClick={() => void deleteTpl(t)}
+                  >
+                    {deletingId === t.id ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
               </div>
-              <p className="mt-2 text-sm text-muted-foreground">{t.body}</p>
+
+              {/* Vista previa enriquecida */}
+              <div className="rounded-lg bg-surface-2 p-3 text-sm border border-border/60 space-y-2">
+                <p className="whitespace-pre-wrap text-text-1">{t.body}</p>
+                {t.footer && (
+                  <p className="text-xs text-muted-foreground italic border-t border-border/40 pt-1.5">
+                    {t.footer}
+                  </p>
+                )}
+                {t.buttons && t.buttons.length > 0 && (
+                  <div className="flex flex-wrap gap-2 pt-1 border-t border-border/40">
+                    {t.buttons.map((b, i) => (
+                      <div
+                        key={i}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-2.5 py-1 text-xs font-medium text-primary"
+                      >
+                        {b.type === "URL" ? (
+                          <>
+                            <ExternalLink className="h-3 w-3" />
+                            <span>{b.text}</span>
+                          </>
+                        ) : (
+                          <>
+                            <MessageSquare className="h-3 w-3" />
+                            <span>{b.text}</span>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               {t.status === "rejected" && t.rejectionReason && (
-                <p className="mt-2 text-xs text-destructive">
+                <p className="text-xs text-destructive">
                   Razón del rechazo: {t.rejectionReason}
                 </p>
               )}
-              <div className="mt-3 flex flex-wrap items-center gap-2 border-t pt-2.5 text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-2 border-t pt-2.5 text-xs text-muted-foreground">
                 <span className="font-mono text-[11px]">ID: {t.id}</span>
                 <CopyButton text={t.id} label="Copiar ID" />
                 <span className="text-border">·</span>
@@ -254,6 +323,8 @@ function CreateForm({
   const [language, setLanguage] = useState("es_MX");
   const [category, setCategory] = useState<"UTILITY" | "MARKETING">("UTILITY");
   const [body, setBody] = useState("");
+  const [footer, setFooter] = useState("");
+  const [buttons, setButtons] = useState<TemplateButton[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -267,6 +338,28 @@ function CreateForm({
   const bodyError = body.trim() ? validateBodyVariables(body) : null;
   const variableCount = countVariables(body);
 
+  const addButton = (type: "QUICK_REPLY" | "URL") => {
+    if (buttons.length >= 3) return;
+    if (type === "URL") {
+      setButtons([...buttons, { type: "URL", text: "Visitar web", url: "https://" }]);
+    } else {
+      setButtons([...buttons, { type: "QUICK_REPLY", text: "Confirmar" }]);
+    }
+  };
+
+  const removeButton = (index: number) => {
+    setButtons(buttons.filter((_, i) => i !== index));
+  };
+
+  const updateButton = (index: number, patch: Partial<TemplateButton>) => {
+    setButtons(
+      buttons.map((b, i) => {
+        if (i !== index) return b;
+        return { ...b, ...patch } as TemplateButton;
+      })
+    );
+  };
+
   async function create() {
     if (!phoneNumberId) {
       setError("Debes seleccionar la línea de WhatsApp a la que pertenece esta plantilla");
@@ -277,7 +370,15 @@ function CreateForm({
     const res = await fetch("/api/templates", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ phoneNumberId, name, language, category, body }),
+      body: JSON.stringify({
+        phoneNumberId,
+        name,
+        language,
+        category,
+        body,
+        footer: footer.trim() || undefined,
+        buttons: buttons.length > 0 ? buttons : undefined,
+      }),
     }).catch(() => null);
     setSaving(false);
     if (!res?.ok) {
@@ -289,6 +390,8 @@ function CreateForm({
     }
     setName("");
     setBody("");
+    setFooter("");
+    setButtons([]);
     onCreated();
   }
 
@@ -360,6 +463,7 @@ function CreateForm({
             </select>
           </div>
         </div>
+
         <div className="space-y-1.5">
           <Label htmlFor="tpl-body">Cuerpo</Label>
           <Textarea
@@ -381,6 +485,93 @@ function CreateForm({
             )
           )}
         </div>
+
+        {/* Pie de página (Footer) */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="tpl-footer">Pie de página (opcional)</Label>
+            <span className="text-[11px] text-muted-foreground">
+              {footer.length}/60 caracteres
+            </span>
+          </div>
+          <Input
+            id="tpl-footer"
+            placeholder="Rastrea tu pedido en icefrutmexico.com"
+            maxLength={60}
+            value={footer}
+            onChange={(e) => setFooter(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            Aparece en texto gris al final del mensaje de WhatsApp.
+          </p>
+        </div>
+
+        {/* Botones (Buttons) */}
+        <div className="space-y-2 border-t pt-3">
+          <div className="flex items-center justify-between">
+            <Label>Botones interactivos (opcional, máx. 3)</Label>
+            {buttons.length < 3 && (
+              <div className="flex items-center gap-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => addButton("URL")}
+                >
+                  <Plus className="h-3 w-3" />
+                  Botón URL
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => addButton("QUICK_REPLY")}
+                >
+                  <Plus className="h-3 w-3" />
+                  Respuesta Rápida
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {buttons.map((btn, idx) => (
+            <div
+              key={idx}
+              className="flex items-center gap-2 rounded-lg border bg-surface-2 p-2 text-sm"
+            >
+              <span className="text-xs font-semibold px-2 py-0.5 rounded bg-muted text-muted-foreground">
+                {btn.type === "URL" ? "URL" : "Rápido"}
+              </span>
+              <Input
+                placeholder="Texto del botón"
+                value={btn.text}
+                maxLength={25}
+                onChange={(e) => updateButton(idx, { text: e.target.value })}
+                className="h-8 text-xs max-w-[160px]"
+              />
+              {btn.type === "URL" && (
+                <Input
+                  placeholder="https://ejemplo.com"
+                  value={btn.url ?? ""}
+                  onChange={(e) => updateButton(idx, { url: e.target.value })}
+                  className="h-8 text-xs flex-1"
+                />
+              )}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive shrink-0"
+                onClick={() => removeButton(idx)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          ))}
+        </div>
+
         {error && <p className="text-sm text-destructive">{error}</p>}
         <Button
           disabled={saving || !phoneNumberId || !name.trim() || !body.trim() || bodyError !== null}

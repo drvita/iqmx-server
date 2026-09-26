@@ -11,6 +11,20 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Añadido
 
+- **Gestión Multi-Tenant de Bot API Key (`/settings/ai`)**:
+  - Implementación de generación, almacenamiento cifrado y regeneración de token de API para agentes y sistemas externos por organización ([crm/src/app/api/settings/bot-api-key/route.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/settings/bot-api-key/route.ts)).
+  - Validación multi-inquilino estricta en el middleware de autenticación del bot ([crm/src/server/bot/auth.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/bot/auth.ts)): cada token identifica de forma única a su organización correspondiente, eliminando cualquier fallback a variables de entorno globales.
+  - Actualización de todos los endpoints de integración externa ([crm/src/app/api/bot/](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/bot)) para operar bajo el contexto seguro del inquilino autenticado.
+
+- **Eliminación Sincronizada de Plantillas de WhatsApp**:
+  - Endpoint `DELETE /api/templates/[id]` ([crm/src/app/api/templates/[id]/route.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/templates/%5Bid%5D/route.ts)) con eliminación remota en Meta Graph API (`DELETE /{wabaId}/message_templates?name=...`) y purga local en la base de datos ([crm/src/server/whatsapp/templates.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/whatsapp/templates.ts)).
+  - Botón de eliminación directa con diálogo de confirmación y estado de carga en la vista de plantillas ([crm/src/components/settings/templates-client.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/settings/templates-client.tsx)).
+
+- **Soporte de Pie de Página (Footer) y Botones en Plantillas**:
+  - Soporte para componentes `FOOTER` (hasta 60 caracteres) y `BUTTONS` (hasta 3 botones interactivos de tipo Respuesta Rápida y URL externa) en el esquema de base de datos ([crm/src/lib/db/schema.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/db/schema.ts)), contratos de API ([crm/src/lib/types.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/types.ts)) y sincronización con Meta.
+  - Constructor dinámico de botones y pie de página en el formulario de creación, y previsualización gráfica fiel estilo burbuja de WhatsApp en tiempo real ([crm/src/components/settings/templates-client.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/settings/templates-client.tsx)).
+  - Migración de base de datos `0022_template_footer_buttons.sql` ([crm/drizzle/0022_template_footer_buttons.sql](file:///Users/laclavees12345/code/iqissmexico/main/crm/drizzle/0022_template_footer_buttons.sql)) y snapshot Drizzle actualizado.
+
 - **Difusión Masiva de Etapa Omnicanal con Plantillas Renderizadas**:
   - Extensión de la difusión en [crm/src/server/broadcasts/stage.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/broadcasts/stage.ts) para abarcar contactos originados en Facebook Messenger e Instagram además de WhatsApp.
   - Renderizado automático del cuerpo de la plantilla con interpolación de variables dinámicas (`{{1}}` $\rightarrow$ Nombre o valor configurado) y envío mediante etiqueta `HUMAN_AGENT` de Meta.
@@ -20,6 +34,11 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 - **Sincronización Bidireccional de Plantillas de WhatsApp**:
   - Enriquecimiento de `syncTemplates` en [crm/src/server/whatsapp/templates.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/whatsapp/templates.ts) para importar plantillas preexistentes o creadas directamente en Meta Business Manager que aún no estaban registradas en la base de datos del CRM.
+
+### Optimizado
+
+- **Filtrado y Purga Automática de Plantillas Demo (`sample_template`)**:
+  - En la sincronización de plantillas (`syncTemplates`), se excluyen automáticamente las plantillas de prueba generadas por defecto por Meta en inglés (`sample_template%`) y se purgan registros huérfanos de la base de datos para mantener un catálogo limpio para los operadores ([crm/src/server/whatsapp/templates.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/whatsapp/templates.ts)).
 
 ### Corregido
 

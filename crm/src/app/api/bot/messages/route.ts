@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
 import { apiError, parseBody } from "@/lib/api";
-import { requireBotKey, resolveInstanceOrg } from "@/server/bot/auth";
+import { requireBotKeyAndResolveOrg } from "@/server/bot/auth";
 import { SendError, sendText } from "@/server/inbox/send";
 import {
   resolveApprovedTemplate,
@@ -39,13 +39,9 @@ const bodySchema = z.object({
  * - Si recibe `templateId` o `templateName`: envía plantilla aprobada (abre o reabre ventana).
  */
 export async function POST(req: Request) {
-  const denied = requireBotKey(req);
-  if (denied) return denied;
-
-  const organizationId = await resolveInstanceOrg();
-  if (!organizationId) {
-    return apiError(409, "no_org", "La instancia aún no tiene organización");
-  }
+  const auth = await requireBotKeyAndResolveOrg(req);
+  if (!auth.ok) return auth.error;
+  const { organizationId } = auth;
 
   const body = await parseBody(req, bodySchema);
   if (!body.ok) return body.response;

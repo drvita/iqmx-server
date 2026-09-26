@@ -13,6 +13,9 @@ import {
   Loader2,
   ShieldCheck,
   Gift,
+  Copy,
+  Trash2,
+  KeyRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -40,6 +43,11 @@ export function AiClient() {
   const [aiJudgeModel, setAiJudgeModel] = useState(DEFAULT_FREE_MODEL);
   const [aiBaseUrl, setAiBaseUrl] = useState("https://openrouter.ai/api");
   const [agentCoalesceMs, setAgentCoalesceMs] = useState(6000);
+  const [botApiKey, setBotApiKey] = useState<string | null>(null);
+  const [newlyGeneratedKey, setNewlyGeneratedKey] = useState<string | null>(null);
+  const [generatingBotKey, setGeneratingBotKey] = useState(false);
+  const [revokingBotKey, setRevokingBotKey] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
   // Modelos dinámicos desde la API de OpenRouter
@@ -64,6 +72,7 @@ export function AiClient() {
           if (d.settings.aiJudgeModel) setAiJudgeModel(d.settings.aiJudgeModel);
           if (d.settings.aiBaseUrl) setAiBaseUrl(d.settings.aiBaseUrl);
           if (d.settings.agentCoalesceMs) setAgentCoalesceMs(d.settings.agentCoalesceMs);
+          if (d.settings.botApiKey) setBotApiKey(d.settings.botApiKey);
         }
         setLoaded(true);
       })
@@ -117,6 +126,58 @@ export function AiClient() {
     } finally {
       setTesting(false);
     }
+  }
+
+  async function handleGenerateBotKey() {
+    setGeneratingBotKey(true);
+    setErrorMessage(null);
+    setNewlyGeneratedKey(null);
+    try {
+      const res = await fetch("/api/settings/bot-api-key/generate", {
+        method: "POST",
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setBotApiKey(data.apiKey);
+        setNewlyGeneratedKey(data.apiKey);
+      } else {
+        setErrorMessage(data.error || "No se pudo generar la API Key.");
+      }
+    } catch (err: any) {
+      setErrorMessage(`Error de red: ${err.message || err}`);
+    } finally {
+      setGeneratingBotKey(false);
+    }
+  }
+
+  async function handleRevokeBotKey() {
+    if (!confirm("¿Estás seguro de que deseas revocar la API Key? Los sistemas externos como tu bot o ERP perderán acceso inmediatamente.")) {
+      return;
+    }
+    setRevokingBotKey(true);
+    setErrorMessage(null);
+    try {
+      const res = await fetch("/api/settings/bot-api-key/generate", {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setBotApiKey(null);
+        setNewlyGeneratedKey(null);
+      } else {
+        setErrorMessage(data.error || "No se pudo revocar la API Key.");
+      }
+    } catch (err: any) {
+      setErrorMessage(`Error de red: ${err.message || err}`);
+    } finally {
+      setRevokingBotKey(false);
+    }
+  }
+
+  function handleCopyKey(keyToCopy: string) {
+    navigator.clipboard.writeText(keyToCopy);
+    setCopiedKey(true);
+    setTimeout(() => setCopiedKey(false), 2500);
   }
 
   async function handleSave() {
@@ -347,6 +408,125 @@ export function AiClient() {
               </p>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Tarjeta de API Key de Integración Externa (Bot / ERP / Sistemas externos) */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <KeyRound className="h-4 w-4 text-primary" />
+            Integración Externa (API Key para Bots o ERPs)
+          </CardTitle>
+          <CardDescription>
+            Credencial exclusiva de tu organización para conectar sistemas externos (ej. bots de IA externos, tu ERP o el sistema de pedidos de tu negocio) a través de los endpoints <code>/api/bot/*</code>.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {newlyGeneratedKey && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-950 space-y-2">
+              <div className="flex items-center gap-2 font-medium text-amber-900">
+                <AlertCircle className="h-4 w-4 text-amber-700" />
+                <span>Copia tu nueva API Key ahora</span>
+              </div>
+              <p className="text-xs text-amber-800">
+                Por seguridad, no podremos volver a mostrar este valor completo. Guárdalo inmediatamente en tu archivo <code>.env</code> como <code>CRM_BOT_API_KEY</code>.
+              </p>
+              <div className="flex items-center gap-2 pt-1">
+                <Input
+                  readOnly
+                  value={newlyGeneratedKey}
+                  className="font-mono text-xs bg-white text-zinc-900 select-all"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleCopyKey(newlyGeneratedKey)}
+                  className="shrink-0 gap-1.5"
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                  {copiedKey ? "Copiado" : "Copiar"}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {botApiKey ? (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between p-3 rounded-lg border border-border bg-surface-2 text-sm">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs text-text-1">
+                      {botApiKey.length > 18
+                        ? `${botApiKey.slice(0, 10)}••••••••••••${botApiKey.slice(-4)}`
+                        : "••••••••••••••••"}
+                    </span>
+                    <span className="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-800">
+                      Activa
+                    </span>
+                  </div>
+                  <p className="text-xs text-text-3">
+                    Header requerido en peticiones: <code>X-API-Key: {botApiKey.slice(0, 8)}...</code>
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleCopyKey(botApiKey)}
+                    className="h-8 gap-1 text-xs"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                    {copiedKey ? "Copiado" : "Copiar"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleRevokeBotKey}
+                    disabled={revokingBotKey}
+                    className="h-8 gap-1 text-xs"
+                  >
+                    {revokingBotKey ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-3.5 w-3.5" />
+                    )}
+                    Revocar
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-text-3">
+                Si revocas esta clave, cualquier microservicio o bot externo que esté enviando mensajes dejará de autenticar hasta que configures una nueva clave.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-text-2">
+                Aún no has generado una API Key para esta organización. Si deseas que un sistema externo (como tu backend o bot externo) envíe mensajes o consulte contexto por WhatsApp, genera una credencial.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleGenerateBotKey}
+                disabled={generatingBotKey}
+                className="gap-2 text-xs"
+              >
+                {generatingBotKey ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Generando…
+                  </>
+                ) : (
+                  <>
+                    <KeyRound className="h-3.5 w-3.5" /> Generar API Key de Integración
+                  </>
+                )}
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
 

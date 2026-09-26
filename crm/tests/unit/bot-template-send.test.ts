@@ -57,6 +57,19 @@ const mockConversationPaused = {
 const sentTemplates: unknown[] = [];
 
 vi.mock("@/server/bot/auth", () => ({
+  requireBotKeyAndResolveOrg: async (req: Request) => {
+    const key = req.headers.get("x-api-key");
+    if (!key || key !== BOT_KEY) {
+      return {
+        ok: false,
+        error: new Response(JSON.stringify({ error: { message: "No autorizado" } }), {
+          status: 401,
+          headers: { "content-type": "application/json" },
+        }),
+      };
+    }
+    return { ok: true, organizationId: "org_test" };
+  },
   requireBotKey: (req: Request) => {
     const key = req.headers.get("x-api-key");
     if (!key || key !== BOT_KEY) {
