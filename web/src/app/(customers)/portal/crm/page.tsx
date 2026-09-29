@@ -64,6 +64,7 @@ export default function PortalCrmPage() {
   const [feedbackMsg, setFeedbackMsg] = useState<FeedbackMessage | null>(null);
   const [claimingTrial, setClaimingTrial] = useState(false);
   const [registeringCrm, setRegisteringCrm] = useState(false);
+  const [resettingPassword, setResettingPassword] = useState(false);
   const [justRegisteredCreds, setJustRegisteredCreds] = useState<{ email?: string; password?: string } | null>(null);
   const [copiedPass, setCopiedPass] = useState(false);
   const [showPass, setShowPass] = useState(false);
@@ -198,6 +199,44 @@ export default function PortalCrmPage() {
     }
   };
 
+  // Restablecer contraseña temporal en el CRM oficial
+  const handleResetPassword = async () => {
+    setResettingPassword(true);
+    setFeedbackMsg(null);
+    try {
+      const res = await fetch('/api/portal/crm/reset-password', {
+        method: 'POST',
+        headers: getHeaders(),
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        if (data.temp_password) {
+          setJustRegisteredCreds({
+            email: data.crm_owner_email || crmInfo?.crm_owner_email || undefined,
+            password: data.temp_password,
+          });
+        }
+        setFeedbackMsg({
+          type: 'success',
+          text: 'Se ha generado una nueva contraseña temporal. Úsala para iniciar sesión en el CRM y establecer tu contraseña definitiva.',
+        });
+        await loadData();
+      } else {
+        setFeedbackMsg({
+          type: 'error',
+          text: data.detail || data.message || 'No fue posible restablecer la contraseña.',
+        });
+      }
+    } catch {
+      setFeedbackMsg({
+        type: 'error',
+        text: 'Error de red al restablecer la contraseña en el CRM.',
+      });
+    } finally {
+      setResettingPassword(false);
+    }
+  };
+
   const formatDate = (isoStr: string) => {
     try {
       return new Date(isoStr).toLocaleDateString('es-MX', {
@@ -309,11 +348,11 @@ export default function PortalCrmPage() {
                   Credenciales Provisionales de Acceso al CRM
                 </h3>
                 <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[11px] font-semibold text-amber-800 border border-amber-300">
-                  Primer Inicio de Sesión
+                  {crmInfo?.crm_registered ? 'Contraseña Temporal' : 'Primer Inicio de Sesión'}
                 </span>
               </div>
               <p className="text-xs text-gray-600 max-w-2xl">
-                Utiliza estas credenciales para acceder por primera vez a la aplicación CRM Web. Al ingresar, el sistema te solicitará de forma obligatoria establecer tu contraseña definitiva.
+                Utiliza estas credenciales provisionales para acceder a la aplicación CRM Web. Al ingresar, el sistema te solicitará de forma obligatoria establecer tu contraseña definitiva.
               </p>
 
               <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1 max-w-xl">
@@ -707,6 +746,17 @@ export default function PortalCrmPage() {
                     <span>Abrir CRM Web</span>
                     <ArrowTopRightOnSquareIcon className="h-4 w-4" />
                   </a>
+                )}
+
+                {isCrmRegistered && (
+                  <button
+                    onClick={handleResetPassword}
+                    disabled={resettingPassword}
+                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-amber-300 bg-amber-50 px-5 py-3 text-xs font-bold text-amber-800 hover:bg-amber-100 shadow-xs transition-colors disabled:opacity-50 cursor-pointer"
+                  >
+                    <KeyIcon className="h-4 w-4 text-amber-700" />
+                    <span>{resettingPassword ? 'Restableciendo...' : 'Restablecer Contraseña'}</span>
+                  </button>
                 )}
 
                 {!isCrmRegistered && (

@@ -212,7 +212,26 @@ export async function provisionTenant(
     let userId = existingUsers[0]?.id;
     let userName = existingUsers[0]?.name ?? input.ownerName.trim();
 
-    if (!userId) {
+    if (userId) {
+      // Candado de Seguridad: Si el usuario ya existe, verificar si ya pertenece a otra organización.
+      // En arquitectura multi-tenant SaaS de IQISSMexico, cada tenant tiene su propio owner aislado.
+      const existingMemberships = await tx
+        .select({
+          orgId: schema.member.organizationId,
+          orgName: schema.organization.name,
+          externalCustomerId: schema.organization.externalCustomerId,
+        })
+        .from(schema.member)
+        .innerJoin(schema.organization, eq(schema.member.organizationId, schema.organization.id))
+        .where(eq(schema.member.userId, userId))
+        .limit(1);
+
+      if (existingMemberships[0]) {
+        throw new Error(
+          `CONFLICT_USER_ALREADY_EXISTS: El correo ${normalizedEmail} ya está vinculado a la organización "${existingMemberships[0].orgName}". Cada inquilino requiere una cuenta independiente.`
+        );
+      }
+    } else {
       userId = newId("user");
       userName = input.ownerName.trim();
       await tx.insert(schema.user).values({

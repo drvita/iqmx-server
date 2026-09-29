@@ -64,6 +64,7 @@ class Settings(BaseSettings):
     MAILTRAP_TEMPLATE_CANCELLED_EXPIRING: str = "18382bc8-7694-45fb-ae98-fd96df453546"
     MAILTRAP_TEMPLATE_TRIAL_EXPIRING: str = "90d1a17d-3ebe-457d-940f-0857dff7a224"
     MAILTRAP_TEMPLATE_EXPIRED: str = "03312624-4bca-4944-b63b-f3f39cc5d6b4"
+    MAILTRAP_TEMPLATE_FORGOT_PASSWORD: str = "26d33f0e-d992-4187-a4ab-c0b610ebdda1"
     SUPPORT_WHATSAPP_PHONE: str = "5213141560219"
 
     # URL base del Portal / Frontend para enlaces en correos y pasarelas

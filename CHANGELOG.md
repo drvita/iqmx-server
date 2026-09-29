@@ -7,6 +7,38 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 > **Zona horaria de referencia:** Ciudad de México (CST / UTC-6).
 
+## [1.17.0] - 2026-09-28
+
+### Añadido
+
+- **Flujo Integral de Recuperación de Contraseña para el Portal Web (`/portal`)**:
+  - Creación y registro de plantilla transaccional oficial en Mailtrap vía API (`UUID: 26d33f0e-d992-4187-a4ab-c0b610ebdda1`) con diseño responsive, marca institucional y variables dinámicas de seguridad (`user_name`, `company`, `reset_url`, `expiry_hours`, `support_email`) configurada en [api/app/config.py](file:///Users/laclavees12345/code/iqissmexico/main/api/app/config.py) y [api/.env](file:///Users/laclavees12345/code/iqissmexico/main/api/.env).
+  - Almacenamiento seguro de tokens efímeros en Redis ([api/app/lib/redis_client.py](file:///Users/laclavees12345/code/iqissmexico/main/api/app/lib/redis_client.py)):
+    - `save_password_reset_token`: Asigna TTL de 2 horas (7,200 segundos) e invalida atómicamente tokens previos del mismo usuario.
+    - `get_user_id_from_password_reset_token`: Permite inspección pasiva en frontend sin consumir el token.
+    - `consume_password_reset_token`: Consumo atómico de un solo uso.
+  - Endpoints dedicados en la API de autenticación ([api/app/api/portal_auth.py](file:///Users/laclavees12345/code/iqissmexico/main/api/app/api/portal_auth.py)):
+    - `POST /api/portal/auth/forgot-password`: Endpoint público con protección anti-enumeración de usuarios y encolamiento asíncrono de correos vía Mailtrap.
+    - `GET /api/portal/auth/reset-password/preview`: Valida vigencia del token y provee datos de UI con correo enmascarado para mayor seguridad.
+    - `POST /api/portal/auth/reset-password`: Valida reglas de seguridad (mínimo 8 caracteres), consume el token en Redis y actualiza el hash de contraseña en la base de datos.
+  - Interfaces de usuario en Next.js (`web/`):
+    - Página de solicitud ([web/src/app/(customers)/portal/forgot-password/page.tsx](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/%28customers%29/portal/forgot-password/page.tsx)): Formulario limpio con validación de correo y pantalla informativa de confirmación.
+    - Formulario de nueva contraseña ([web/src/app/(customers)/portal/reset-password/page.tsx](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/%28customers%29/portal/reset-password/page.tsx)): Inspección pasiva del enlace, visibilidad de contraseña, validación de coincidencia y feedback de éxito con redirección automática.
+    - Enlace de acceso directo y banner de confirmación en Login ([web/src/app/(customers)/portal/login/page.tsx](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/%28customers%29/portal/login/page.tsx)): Enlace *"¿Olvidaste tu contraseña?"* y detección del parámetro `?reset=ok` envuelto en boundary `Suspense`.
+
+- **Aprovisionamiento y Restablecimiento Dedicado de Propietario en CRM (`crm/`)**:
+  - Servicio dedicado de restablecimiento de contraseña para usuarios con rol propietario (`owner`) ([crm/src/server/provision/reset-password.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/provision/reset-password.ts)).
+  - Endpoint de comunicación interna M2M ([crm/src/app/api/provision/reset-owner-password/route.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/provision/reset-owner-password/route.ts)) protegido con `CRM_PROVISION_SECRET`.
+  - Integración en el portal de backend Python ([api/app/api/portal_crm.py](file:///Users/laclavees12345/code/iqissmexico/main/api/app/api/portal_crm.py)) para invocar el endpoint dedicado en lugar de reutilizar el flujo de creación inicial.
+  - Suite de pruebas unitarias con cobertura completa ([crm/tests/unit/reset-owner-password.test.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/tests/unit/reset-owner-password.test.ts)).
+
+### Corregido
+
+- **Acceso a Rutas Públicas en el Layout del Portal de Clientes**:
+  - Inclusión de `/portal/forgot-password` y `/portal/reset-password` en la lista blanca de páginas públicas `isAuthPage` en [web/src/app/(customers)/portal/layout.tsx](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/%28customers%29/portal/layout.tsx), resolviendo el ciclo de redirección involuntaria hacia `/portal/login` para usuarios sin sesión activa.
+
+---
+
 ## [1.16.0] - 2026-09-25
 
 ### Añadido

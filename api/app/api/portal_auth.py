@@ -27,7 +27,10 @@ from app.services.notifications.manager import NotificationManager
 from app.lib.redis_client import (
     save_email_verification_token,
     consume_email_verification_token,
-    get_user_id_from_verification_token
+    get_user_id_from_verification_token,
+    save_password_reset_token,
+    consume_password_reset_token,
+    get_user_id_from_password_reset_token,
 )
 
 logger = logging.getLogger("uvicorn.error")
@@ -92,6 +95,33 @@ class VerifyEmailResponse(BaseModel):
     success: bool
     message: str
     email: str
+
+class ForgotPasswordRequest(BaseModel):
+    email: str = Field(..., min_length=5, max_length=150)
+
+    @field_validator("email")
+    def validate_email_format(cls, v: str) -> str:
+        clean = v.strip().lower()
+        if not re.match(EMAIL_REGEX, clean):
+            raise ValueError("Formato de correo electrónico no válido.")
+        return clean
+
+class ForgotPasswordResponse(BaseModel):
+    success: bool
+    message: str
+
+class ResetPasswordPreviewResponse(BaseModel):
+    valid: bool
+    email_masked: Optional[str] = None
+    contact_name: Optional[str] = None
+
+class ResetPasswordConfirmRequest(BaseModel):
+    token: str = Field(..., min_length=10, max_length=120)
+    new_password: str = Field(..., min_length=8, max_length=100)
+
+class ResetPasswordConfirmResponse(BaseModel):
+    success: bool
+    message: str
 
 class AuthResponse(BaseModel):
     access_token: str
@@ -444,3 +474,151 @@ def resend_email_verification(
         "success": True,
         "message": f"Se ha enviado un nuevo enlace de confirmación a {current_user.email}."
     }
+
+
+def _mask_email(email: str) -> str:
+    """Enmascara una dirección de email para vista previa segura (ej. ch***o@gmail.com)."""
+    if "@" not in email:
+        return email
+    local, domain = email.split("@", 1)
+    if len(local) <= 2:
+        masked_local = local[0] + "*"
+    else:
+        masked_local = local[0] + "*" * (len(local) - 2) + local[-1]
+    return f"{masked_local}@{domain}"
+
+
+@router.post("/forgot-password", response_model=ForgotPasswordResponse)
+async def forgot_password(
+    req: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """
+    Solicitud de recuperación de contraseña:
+    - Diseñado con anti-enumeración de usuarios: siempre retorna mensaje de éxito genérico.
+    - Si el correo existe y pertenece a un cliente activo, genera un token efímero de 2 horas en Redis
+      y despacha la plantilla de correo de recuperación vía Mailtrap en background.
+    """
+    clean_email = req.email.strip().lower()
+    generic_msg = (
+        "Si el correo electrónico está registrado en nuestra plataforma, "
+        "recibirás un enlace con instrucciones para restablecer tu contraseña en los próximos minutos."
+    )
+
+    user = db.query(User).filter(User.email == clean_email).first()
+    if not user:
+        # Anti-enumeración: log informativo interno y respuesta idéntica
+        logger.info(f"[ForgotPassword] Solicitud para correo no existente: {clean_email}")
+        return ForgotPasswordResponse(success=True, message=generic_msg)
+
+    # Obtener nombre de contacto y empresa si existe cliente asociado
+    customer = db.query(Customer).filter(Customer.user_id == user.id).first()
+    user_name = customer.contact_name if (customer and customer.contact_name) else (user.name or "Estimado Usuario")
+    company_name = customer.company_name if (customer and customer.company_name) else "IQISSMexico"
+
+    # Generar token seguro y persistir en Redis con TTL de 2 horas (7200s)
+    reset_token = generate_secure_secret(32)
+    saved = save_password_reset_token(user.id, reset_token, ttl_seconds=7200)
+
+    if not saved:
+        logger.error(f"[ForgotPassword] Fallo al almacenar token de reset en Redis para User #{user.id}")
+        return ForgotPasswordResponse(success=True, message=generic_msg)
+
+    reset_url = f"{settings.PORTAL_BASE_URL}/portal/reset-password?token={reset_token}"
+
+    background_tasks.add_task(
+        NotificationManager.notify_customer_template,
+        to_email=user.email,
+        template_uuid=settings.MAILTRAP_TEMPLATE_FORGOT_PASSWORD,
+        template_variables={
+            "user_name": user_name,
+            "company": company_name,
+            "reset_url": reset_url,
+            "expiry_hours": 2,
+            "support_email": settings.MAIL_FROM_EMAIL,
+        },
+        from_name="IQISSMexico",
+        from_email=settings.MAIL_FROM_EMAIL,
+        to_name=user_name,
+    )
+
+    logger.info(f"[ForgotPassword] Token de reset generado y correo encolado para User #{user.id} ({user.email})")
+    return ForgotPasswordResponse(success=True, message=generic_msg)
+
+
+@router.get("/reset-password/preview", response_model=ResetPasswordPreviewResponse)
+def preview_reset_password(
+    token: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Inspección pasiva de validez del token de restablecimiento:
+    - NO consume el token en Redis.
+    - Permite al formulario de React validar si el enlace sigue vigente y mostrar el correo enmascarado.
+    """
+    if not token or not token.strip():
+        return ResetPasswordPreviewResponse(valid=False)
+
+    user_id = get_user_id_from_password_reset_token(token.strip())
+    if not user_id:
+        return ResetPasswordPreviewResponse(valid=False)
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        return ResetPasswordPreviewResponse(valid=False)
+
+    customer = db.query(Customer).filter(Customer.user_id == user.id).first()
+    contact_name = customer.contact_name if (customer and customer.contact_name) else user.name
+
+    return ResetPasswordPreviewResponse(
+        valid=True,
+        email_masked=_mask_email(user.email),
+        contact_name=contact_name
+    )
+
+
+@router.post("/reset-password", response_model=ResetPasswordConfirmResponse)
+def confirm_reset_password(
+    req: ResetPasswordConfirmRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Aplica el cambio definitivo de contraseña:
+    - Consume atómicamente el token de Redis (un solo uso).
+    - Hashea y actualiza el campo password_hash del usuario.
+    """
+    token_clean = req.token.strip()
+    user_id = consume_password_reset_token(token_clean)
+
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El enlace de recuperación es inválido o ha expirado. Por favor, solicita uno nuevo."
+        )
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Usuario no encontrado en el sistema."
+        )
+
+    # Validar longitud mínima de la nueva contraseña
+    if len(req.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="La nueva contraseña debe tener al menos 8 caracteres."
+        )
+
+    # Actualizar hash de contraseña
+    user.password_hash = hash_password(req.new_password)
+    db.commit()
+
+    logger.info(f"[ResetPassword] Contraseña actualizada exitosamente para User #{user.id} ({user.email})")
+
+    return ResetPasswordConfirmResponse(
+        success=True,
+        message="Tu contraseña ha sido restablecida exitosamente. Ya puedes iniciar sesión con tu nueva credencial."
+    )
+

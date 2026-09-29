@@ -106,6 +106,13 @@ export async function POST(req: Request) {
       { status: statusCode }
     );
   } catch (err) {
+    const errorMsg = err instanceof Error ? err.message : String(err);
+    if (errorMsg.includes("CONFLICT_USER_ALREADY_EXISTS")) {
+      return Response.json(
+        { ok: false, error: errorMsg },
+        { status: 409 }
+      );
+    }
     console.error("[CRM PROVISION ERROR] Error al aprovisionar organización:", err);
     return Response.json(
       { ok: false, error: "Error interno al aprovisionar la organización." },

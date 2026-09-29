@@ -69,6 +69,14 @@ class RegisterCrmAccountResponse(BaseModel):
     must_change_password: bool = False
 
 
+class ResetPasswordResponse(BaseModel):
+    ok: bool
+    message: str
+    temp_password: Optional[str] = None
+    crm_owner_email: Optional[str] = None
+    must_change_password: bool = True
+
+
 def get_crm_internal_url_and_secret(db: Session) -> tuple[str, str]:
     """
     Retorna la URL interna de comunicación M2M con el CRM y la clave secreta descifrada.
@@ -325,5 +333,66 @@ async def register_crm_account(
         crm_owner_email=owner_email,
         service_url=browser_service_url,
         temp_password=temp_password,
+        must_change_password=True,
+    )
+
+
+@router.post("/reset-password", response_model=ResetPasswordResponse)
+async def reset_crm_password(
+    db: Session = Depends(get_db),
+    customer: Customer = Depends(get_current_customer)
+):
+    """
+    Regenera una contraseña temporal para el usuario propietario del CRM
+    y actualiza sus credenciales con la bandera mustChangePassword para recuperar el acceso.
+    """
+    cust_email = customer.user.email if customer.user else ""
+    crm_info = get_customer_crm_info(db, customer.id, cust_email)
+
+    if not crm_info["crm_registered"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="La cuenta no tiene un espacio registrado en el CRM para restablecer contraseña."
+        )
+
+    temp_password = generate_temporary_password(12)
+    m2m_url, m2m_secret = get_crm_internal_url_and_secret(db)
+    provision_endpoint = f"{m2m_url}/api/provision/reset-owner-password"
+
+    payload = {
+        "externalCustomerId": f"iqmx_cust_{customer.id}",
+        "ownerEmail": cust_email,
+        "password": temp_password,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            headers = {
+                "Authorization": f"Bearer {m2m_secret}",
+                "Content-Type": "application/json"
+            }
+            res = await client.post(provision_endpoint, json=payload, headers=headers)
+            if res.status_code not in (200, 201):
+                logger.error(f"Fallo al restablecer contraseña en CRM: HTTP {res.status_code} - {res.text}")
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail=f"El servicio CRM rechazó el restablecimiento: {res.text}"
+                )
+            crm_res = res.json()
+    except httpx.RequestError as exc:
+        logger.error(f"Error de red contactando servicio CRM en '{provision_endpoint}': {type(exc).__name__} - {exc}")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"No fue posible comunicarse con el servicio CRM en '{provision_endpoint}': {type(exc).__name__} - {exc}"
+        )
+
+    owner_data = crm_res.get("owner", {})
+    owner_email = owner_data.get("email") or cust_email
+
+    return ResetPasswordResponse(
+        ok=True,
+        message="Se ha generado una nueva contraseña temporal exitosamente.",
+        temp_password=temp_password,
+        crm_owner_email=owner_email,
         must_change_password=True,
     )

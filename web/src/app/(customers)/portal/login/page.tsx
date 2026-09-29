@@ -1,27 +1,32 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { getCheckoutIntent, CheckoutIntent } from '@/utils/checkoutIntent';
-import { ShoppingBagIcon } from '@heroicons/react/24/outline';
+import { ShoppingBagIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
 import { GuestGuard } from '@/components/AuthGuard';
 
-export default function PortalLoginPage() {
+function PortalLoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [resetSuccessMsg, setResetSuccessMsg] = useState<string | null>(null);
   const [pendingIntent, setPendingIntent] = useState<CheckoutIntent | null>(null);
 
   useEffect(() => {
+    if (searchParams.get('reset') === 'ok') {
+      setResetSuccessMsg('Tu contraseña ha sido restablecida con éxito. Inicia sesión con tu nueva contraseña.');
+    }
     const intent = getCheckoutIntent();
     if (intent) {
       setPendingIntent(intent);
     }
-  }, []);
+  }, [searchParams]);
 
   const handleSubmit = async (e?: React.FormEvent | React.MouseEvent | React.KeyboardEvent) => {
     if (e) {
@@ -86,8 +91,7 @@ export default function PortalLoginPage() {
   };
 
   return (
-    <GuestGuard role="customer">
-      <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans text-gray-900">
+    <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8 font-sans text-gray-900">
       <div className="sm:mx-auto sm:w-full sm:max-w-md flex flex-col items-center text-center">
         <Link href="/" className="inline-flex justify-center mb-2">
           <Image
@@ -118,6 +122,16 @@ export default function PortalLoginPage() {
 
       <div className="mt-8 sm:mx-auto sm:w-full sm:max-w-md px-4 sm:px-0">
         <div className="bg-white border border-gray-200 py-8 px-6 shadow-md rounded-2xl sm:px-10">
+          {resetSuccessMsg && (
+            <div className="mb-6 rounded-xl bg-emerald-50 border border-emerald-200 p-4 text-sm text-emerald-800 flex items-start space-x-3 shadow-xs">
+              <CheckCircleIcon className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <span className="font-semibold block text-emerald-900">¡Contraseña restablecida!</span>
+                <span className="text-xs text-emerald-700 leading-relaxed mt-0.5 block">{resetSuccessMsg}</span>
+              </div>
+            </div>
+          )}
+
           {errorMsg && (
             <div className="mb-6 rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-800 flex items-start space-x-3 shadow-xs">
               <span className="text-red-500 font-bold text-base leading-none mt-0.5">⚠️</span>
@@ -155,6 +169,12 @@ export default function PortalLoginPage() {
                 <label className="block text-sm font-medium text-gray-700">
                   Contraseña
                 </label>
+                <Link
+                  href="/portal/forgot-password"
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-500 hover:underline transition-colors"
+                >
+                  ¿Olvidaste tu contraseña?
+                </Link>
               </div>
               <input
                 type="password"
@@ -190,18 +210,31 @@ export default function PortalLoginPage() {
             </button>
           </form>
 
-          <div className="mt-6 text-center text-sm text-gray-600 border-t border-gray-100 pt-5">
-            ¿Aún no tienes una cuenta de cliente?{' '}
-            <Link
-              href="/portal/register"
-              className="font-semibold text-blue-600 hover:text-blue-700 transition-colors"
-            >
-              Regístrate aquí
-            </Link>
+            <div className="mt-6 text-center text-sm text-gray-600 border-t border-gray-100 pt-5">
+              ¿Aún no tienes una cuenta de cliente?{' '}
+              <Link
+                href="/portal/register"
+                className="font-semibold text-blue-600 hover:text-blue-700 transition-colors"
+              >
+                Regístrate aquí
+              </Link>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  </GuestGuard>
-);
-}
+    );
+  }
+
+  export default function PortalLoginPage() {
+    return (
+      <GuestGuard role="customer">
+        <Suspense fallback={
+          <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+            <p className="text-sm text-gray-500">Cargando...</p>
+          </div>
+        }>
+          <PortalLoginForm />
+        </Suspense>
+      </GuestGuard>
+    );
+  }

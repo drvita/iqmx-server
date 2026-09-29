@@ -34,6 +34,8 @@ export default function PortalLayout({
   const isAuthPage =
     pathname === '/portal/login' ||
     pathname === '/portal/register' ||
+    pathname.startsWith('/portal/forgot-password') ||
+    pathname.startsWith('/portal/reset-password') ||
     pathname.startsWith('/portal/verify-email') ||
     pathname.startsWith('/portal/checkout/status');
 
