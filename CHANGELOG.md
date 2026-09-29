@@ -7,6 +7,16 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 > **Zona horaria de referencia:** Ciudad de México (CST / UTC-6).
 
+## [1.17.1] - 2026-09-29
+
+### Corregido
+
+- **Personalización de Identidad Institucional (Favicon y Título) en Acceso a CRM (`crm/`)**:
+  - Homologación del favicon oficial copiando el asset vectorial [crm/public/icon.svg](file:///Users/laclavees12345/code/iqissmexico/main/crm/public/icon.svg) y favicon base.
+  - Sobreescritura de metadatos estáticos en el layout de autenticación ([crm/src/app/(auth)/layout.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/%28auth%29/layout.tsx)) asignando `title: "IQMX — CRM de WhatsApp"` e `icons: { icon: "/icon.svg" }`, evitando que en páginas públicas sin sesión activa se muestre el branding por defecto ("Vocero") del root layout.
+
+---
+
 ## [1.17.0] - 2026-09-28
 
 ### Añadido

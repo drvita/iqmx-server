@@ -1,8 +1,14 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import { isVoceroName } from "@/lib/brand";
 import { DEFAULT_BRANDING } from "@/lib/branding";
 import { getBranding } from "@/server/branding";
 import { BrandLogo } from "@/components/brand-mark";
+
+export const metadata: Metadata = {
+  title: "IQMX — CRM de WhatsApp",
+  icons: { icon: "/icon.svg" },
+};
 
 export default async function AuthLayout({
   children,

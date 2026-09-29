@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <defs>
+    <linearGradient id="gradDev" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0ea5e9;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#6366f1;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background with gradient -->
+  <rect width="32" height="32" rx="6" fill="url(#gradDev)"/>
+  
+  <!-- Code brackets decoration -->
+  <path d="M 4 12 L 2 16 L 4 20" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"/>
+  <path d="M 28 12 L 30 16 L 28 20" stroke="white" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"/>
+  
+  <!-- Letter I -->
+  <g>
+    <rect x="8" y="10" width="3" height="12" rx="1" fill="white"/>
+  </g>
+  
+  <!-- Letter Q -->
+  <g>
+    <circle cx="20" cy="15" r="5" stroke="white" stroke-width="3" fill="none"/>
+    <line x1="23" y1="18" x2="25" y2="21" stroke="white" stroke-width="3" stroke-linecap="round"/>
+  </g>
+  
+  <!-- Subtle pixel/code accent -->
+  <rect x="12" y="23" width="1.5" height="1.5" fill="white" opacity="0.6"/>
+  <rect x="15" y="23" width="1.5" height="1.5" fill="white" opacity="0.4"/>
+  <rect x="18" y="23" width="1.5" height="1.5" fill="white" opacity="0.6"/>
+</svg>
