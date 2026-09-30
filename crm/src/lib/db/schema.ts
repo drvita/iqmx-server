@@ -656,6 +656,8 @@ export const agentProfile = pgTable(
     instructions: text("instructions"),
     escalationRules: text("escalation_rules"),
     greeting: text("greeting"),
+    /** Zona horaria IANA propia del asistente. NULL = hereda la de la organización. */
+    timezone: text("timezone"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
@@ -1259,6 +1261,8 @@ export const organizationSettings = pgTable(
     aiBaseUrl: text("ai_base_url").default("https://openrouter.ai/api"),
     agentCoalesceMs: integer("agent_coalesce_ms").notNull().default(6000),
     botApiKey: text("bot_api_key"),
+    /** Zona horaria IANA oficial de la organización (ej: America/Mexico_City). */
+    timezone: text("timezone").notNull().default("America/Mexico_City"),
 
     // --- Extensibilidad Futura sin Migraciones DDL ---
     extra: jsonb("extra").notNull().default({}),

@@ -22,6 +22,7 @@ export type PlanLimits = {
   aiVisionModel?: string | null;
   aiBaseUrl?: string | null;
   agentCoalesceMs?: number;
+  timezone?: string | null;
   extra?: Record<string, unknown>;
 };
 
@@ -34,6 +35,7 @@ export type TenantAiInput = {
   aiBaseUrl?: string | null;
   agentCoalesceMs?: number;
   botApiKey?: string | null;
+  timezone?: string | null;
 };
 
 /**
@@ -111,6 +113,7 @@ export async function updateOrganizationPlanLimits(
   if (limits.aiVisionModel !== undefined) updateData.aiVisionModel = limits.aiVisionModel?.trim() || null;
   if (limits.aiBaseUrl !== undefined) updateData.aiBaseUrl = limits.aiBaseUrl?.trim() || "https://openrouter.ai/api";
   if (limits.agentCoalesceMs !== undefined) updateData.agentCoalesceMs = limits.agentCoalesceMs;
+  if (limits.timezone !== undefined) updateData.timezone = limits.timezone?.trim() || "America/Mexico_City";
 
   const [updated] = await db
     .update(schema.organizationSettings)
@@ -157,6 +160,7 @@ export async function updateTenantAiConfig(
   if (input.aiBaseUrl !== undefined) updateData.aiBaseUrl = input.aiBaseUrl?.trim() || "https://openrouter.ai/api";
   if (input.agentCoalesceMs !== undefined) updateData.agentCoalesceMs = input.agentCoalesceMs;
   if (input.botApiKey !== undefined) updateData.botApiKey = input.botApiKey?.trim() || null;
+  if (input.timezone !== undefined) updateData.timezone = input.timezone?.trim() || "America/Mexico_City";
 
   const [updated] = await db
     .update(schema.organizationSettings)

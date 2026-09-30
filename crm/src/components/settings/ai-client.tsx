@@ -18,7 +18,9 @@ import {
   KeyRound,
   Mic,
   Image as ImageIcon,
+  MapPin,
 } from "lucide-react";
+import { COMMON_TIMEZONES } from "@/lib/time/context";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -47,6 +49,7 @@ export function AiClient() {
   const [aiVisionModel, setAiVisionModel] = useState("");
   const [aiBaseUrl, setAiBaseUrl] = useState("https://openrouter.ai/api");
   const [agentCoalesceMs, setAgentCoalesceMs] = useState(6000);
+  const [timezone, setTimezone] = useState("America/Mexico_City");
   const [botApiKey, setBotApiKey] = useState<string | null>(null);
   const [newlyGeneratedKey, setNewlyGeneratedKey] = useState<string | null>(null);
   const [generatingBotKey, setGeneratingBotKey] = useState(false);
@@ -78,6 +81,7 @@ export function AiClient() {
           if (d.settings.aiVisionModel) setAiVisionModel(d.settings.aiVisionModel);
           if (d.settings.aiBaseUrl) setAiBaseUrl(d.settings.aiBaseUrl);
           if (d.settings.agentCoalesceMs) setAgentCoalesceMs(d.settings.agentCoalesceMs);
+          if (d.settings.timezone) setTimezone(d.settings.timezone);
           if (d.settings.botApiKey) setBotApiKey(d.settings.botApiKey);
         }
         setLoaded(true);
@@ -198,6 +202,7 @@ export function AiClient() {
       aiVisionModel: aiVisionModel.trim() || null,
       aiBaseUrl: aiBaseUrl.trim() || "https://openrouter.ai/api",
       agentCoalesceMs,
+      timezone: timezone.trim() || "America/Mexico_City",
     };
 
     if (apiKey.trim().length > 0) {
@@ -475,6 +480,32 @@ export function AiClient() {
                 Tiempo de espera para juntar ráfagas de mensajes del cliente en una sola respuesta (ej. 6000 ms = 6s).
               </p>
             </div>
+          </div>
+
+          {/* Zona Horaria del Negocio */}
+          <div className="space-y-2 pt-2 border-t border-border">
+            <Label htmlFor="ai-timezone" className="flex items-center gap-1.5">
+              <MapPin className="h-3.5 w-3.5 text-primary" />
+              Zona Horaria del Negocio (Referencia para IA)
+            </Label>
+            <Input
+              id="ai-timezone"
+              list="timezones-list"
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+              placeholder="America/Mexico_City"
+              className="font-mono text-sm"
+            />
+            <datalist id="timezones-list">
+              {COMMON_TIMEZONES.map((tz) => (
+                <option key={tz.id} value={tz.id}>
+                  {tz.label} ({tz.country})
+                </option>
+              ))}
+            </datalist>
+            <p className="text-xs text-text-3">
+              Determina el día, fecha y hora local con que el asistente evalúa horarios de atención, días laborales y disponibilidad.
+            </p>
           </div>
         </CardContent>
       </Card>

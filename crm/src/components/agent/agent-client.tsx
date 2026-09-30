@@ -6,14 +6,13 @@ import {
   Bot,
   Check,
   Loader2,
-  MessageSquare,
   Pencil,
   Plus,
-  Settings2,
   Sparkles,
   Trash2,
-  Wrench,
+  MapPin,
 } from "lucide-react";
+import { COMMON_TIMEZONES } from "@/lib/time/context";
 import { BrainStatusCard } from "@/components/agent/brain-status-card";
 import type { BrainStatusDto } from "@/lib/brain-status";
 import { Badge } from "@/components/ui/badge";
@@ -41,6 +40,7 @@ export type Assistant = {
   instructions: string | null;
   escalationRules: string | null;
   greeting: string | null;
+  timezone: string | null;
 };
 
 type KbEntry = {
@@ -109,26 +109,29 @@ export function AgentClient() {
     assistants.find((a) => a.id === selectedId) ?? assistants[0] ?? null;
 
   // Carga la base de conocimiento exclusiva del asistente activo
-  const refetchKb = useCallback(async (assistantId?: string) => {
-    const targetId = assistantId ?? selectedAssistant?.id;
-    if (!targetId) return;
+  const refetchKb = useCallback(
+    async (assistantId?: string) => {
+      const targetId = assistantId ?? selectedAssistant?.id;
+      if (!targetId) return;
 
-    setLoadingKb(true);
-    try {
-      const [kb, size] = await Promise.all([
-        fetch(`/api/kb?assistantId=${targetId}`).then((r) =>
-          r.ok ? r.json() : null
-        ),
-        fetch(`/api/kb/size?assistantId=${targetId}`).then((r) =>
-          r.ok ? r.json() : null
-        ),
-      ]);
-      if (kb) setEntries(kb.entries ?? []);
-      if (size) setKbSize(size);
-    } finally {
-      setLoadingKb(false);
-    }
-  }, [selectedAssistant?.id]);
+      setLoadingKb(true);
+      try {
+        const [kb, size] = await Promise.all([
+          fetch(`/api/kb?assistantId=${targetId}`).then((r) =>
+            r.ok ? r.json() : null,
+          ),
+          fetch(`/api/kb/size?assistantId=${targetId}`).then((r) =>
+            r.ok ? r.json() : null,
+          ),
+        ]);
+        if (kb) setEntries(kb.entries ?? []);
+        if (size) setKbSize(size);
+      } finally {
+        setLoadingKb(false);
+      }
+    },
+    [selectedAssistant?.id],
+  );
 
   useEffect(() => {
     void refetchProfiles();
@@ -177,8 +180,7 @@ export function AgentClient() {
 
     if (!res.ok) {
       const msg =
-        result?.error?.message ||
-        `Error al crear asistente (${res.status})`;
+        result?.error?.message || `Error al crear asistente (${res.status})`;
       throw new Error(msg);
     }
 
@@ -254,10 +256,14 @@ export function AgentClient() {
             Configura tu motor de IA para activar los asistentes
           </p>
           <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-            Ingresa tu clave de OpenRouter y selecciona el modelo para que tu agente pueda interactuar con tus clientes.
+            Ingresa tu clave de OpenRouter y selecciona el modelo para que tu
+            agente pueda interactuar con tus clientes.
           </p>
           <div className="mt-3">
-            <Link href="/settings/ai" className={buttonVariants({ size: "sm" })}>
+            <Link
+              href="/settings/ai"
+              className={buttonVariants({ size: "sm" })}
+            >
               Configurar Inteligencia Artificial
             </Link>
           </div>
@@ -400,8 +406,8 @@ function CharacterCount({
         isOver
           ? "text-destructive font-bold"
           : isNear
-          ? "text-amber-500 dark:text-amber-400 font-medium"
-          : "text-muted-foreground"
+            ? "text-amber-500 dark:text-amber-400 font-medium"
+            : "text-muted-foreground"
       } ${className}`}
     >
       {current.toLocaleString()} / {max.toLocaleString()} car.
@@ -496,7 +502,10 @@ function CreateAssistantForm({
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
           <Label htmlFor="create-description">Descripción o Propósito</Label>
-          <CharacterCount current={description.length} max={LIMITS.description} />
+          <CharacterCount
+            current={description.length}
+            max={LIMITS.description}
+          />
         </div>
         <Input
           id="create-description"
@@ -592,7 +601,7 @@ function AssistantEditor({
       setSaveError(
         err instanceof Error
           ? err.message
-          : "Ocurrió un error inesperado al guardar los cambios."
+          : "Ocurrió un error inesperado al guardar los cambios.",
       );
     } finally {
       setSaving(false);
@@ -612,7 +621,7 @@ function AssistantEditor({
       setSaveError(
         err instanceof Error
           ? err.message
-          : "No se pudo cambiar el estado del asistente."
+          : "No se pudo cambiar el estado del asistente.",
       );
     } finally {
       setToggling(false);
@@ -717,6 +726,47 @@ function AssistantEditor({
           </div>
         </div>
 
+        {/* Zona Horaria del Asistente (Opcional: sobrescribe la de la organización) */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between">
+            <Label htmlFor="asst-tz" className="flex items-center gap-1.5">
+              <MapPin className="h-3.5 w-3.5 text-primary" />
+              Zona Horaria del Asistente
+            </Label>
+            {form.timezone && (
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, timezone: null })}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Restablecer a predeterminada del negocio
+              </button>
+            )}
+          </div>
+          <Input
+            id="asst-tz"
+            list="asst-timezones-list"
+            placeholder="Heredar de la organización (predeterminada del negocio)"
+            value={form.timezone ?? ""}
+            onChange={(e) =>
+              setForm({ ...form, timezone: e.target.value.trim() || null })
+            }
+            className="font-mono text-sm"
+          />
+          <datalist id="asst-timezones-list">
+            {COMMON_TIMEZONES.map((tz) => (
+              <option key={tz.id} value={tz.id}>
+                {tz.label} ({tz.country})
+              </option>
+            ))}
+          </datalist>
+          <p className="text-[11px] text-muted-foreground">
+            Opcional. Si este asistente atiende una sucursal en otro huso
+            horario (ej. Tijuana o Cancún), selecciona su zona específica. Si se
+            deja vacío, usa la zona horaria del negocio.
+          </p>
+        </div>
+
         {form.type === "conversational" && (
           <>
             <div className="space-y-1.5">
@@ -752,8 +802,17 @@ function AssistantEditor({
           <div className="rounded-lg border border-primary/20 bg-primary/5 p-3.5 text-xs text-muted-foreground leading-relaxed flex items-start gap-2.5">
             <Sparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
             <div>
-              <span className="font-semibold text-foreground">Tip de configuración:</span>{" "}
-              El CRM ya coordina automáticamente la <strong>agenda de citas</strong> (según Ajustes → Agenda), la <strong>base de conocimiento</strong>, el <strong>pipeline de ventas</strong> y la <strong>transferencia a humanos</strong> cuando el cliente lo solicita. No necesitas redactar horarios ni catálogos aquí: enfócate en el objetivo comercial, la personalidad del negocio y cómo deseas que atienda a tus prospectos.
+              <span className="font-semibold text-foreground">
+                Tip de configuración:
+              </span>{" "}
+              El CRM ya coordina automáticamente la{" "}
+              <strong>agenda de citas</strong> (según Ajustes → Agenda), la{" "}
+              <strong>base de conocimiento</strong>, el{" "}
+              <strong>pipeline de ventas</strong> y la{" "}
+              <strong>transferencia a humanos</strong> cuando el cliente lo
+              solicita. No necesitas redactar horarios ni catálogos aquí:
+              enfócate en el objetivo comercial, la personalidad del negocio y
+              cómo deseas que atienda a tus prospectos.
             </div>
           </div>
         )}
@@ -789,9 +848,7 @@ Eres el asesor virtual de la clínica. Tu meta es responder dudas con amabilidad
 Analizar las conversaciones cerradas para calificar el sentimiento y clasificar los motivos de pérdida según la taxonomía definida.`
             }
             value={form.instructions ?? ""}
-            onChange={(e) =>
-              setForm({ ...form, instructions: e.target.value })
-            }
+            onChange={(e) => setForm({ ...form, instructions: e.target.value })}
           />
         </div>
 
@@ -803,7 +860,9 @@ Analizar las conversaciones cerradas para calificar el sentimiento y clasificar 
                   Reglas de Escalado a Humano
                 </Label>
                 <span className="text-[11px] text-muted-foreground">
-                  El sistema transfiere automáticamente si el cliente pide un asesor humano o fuera de ventana. Especifica aquí condiciones adicionales propias de tu negocio.
+                  El sistema transfiere automáticamente si el cliente pide un
+                  asesor humano o fuera de ventana. Especifica aquí condiciones
+                  adicionales propias de tu negocio.
                 </span>
               </div>
               <CharacterCount
@@ -852,16 +911,16 @@ Analizar las conversaciones cerradas para calificar el sentimiento y clasificar 
                 {isInstructionsOver
                   ? `Las instrucciones exceden el límite de ${LIMITS.instructions.toLocaleString()} caracteres.`
                   : isEscalationOver
-                  ? `Las reglas de escalado exceden el límite de ${LIMITS.escalationRules.toLocaleString()} caracteres.`
-                  : isToneOver
-                  ? `El tono excede el límite de ${LIMITS.tone.toLocaleString()} caracteres.`
-                  : isGreetingOver
-                  ? `El saludo excede el límite de ${LIMITS.greeting.toLocaleString()} caracteres.`
-                  : isDescOver
-                  ? `La descripción excede el límite de ${LIMITS.description.toLocaleString()} caracteres.`
-                  : !form.name?.trim()
-                  ? "El nombre es obligatorio."
-                  : "Por favor corrige los campos que exceden el límite."}
+                    ? `Las reglas de escalado exceden el límite de ${LIMITS.escalationRules.toLocaleString()} caracteres.`
+                    : isToneOver
+                      ? `El tono excede el límite de ${LIMITS.tone.toLocaleString()} caracteres.`
+                      : isGreetingOver
+                        ? `El saludo excede el límite de ${LIMITS.greeting.toLocaleString()} caracteres.`
+                        : isDescOver
+                          ? `La descripción excede el límite de ${LIMITS.description.toLocaleString()} caracteres.`
+                          : !form.name?.trim()
+                            ? "El nombre es obligatorio."
+                            : "Por favor corrige los campos que exceden el límite."}
               </span>
             )}
 
@@ -999,7 +1058,9 @@ function KbSection({
         <div className="flex items-center justify-between">
           <CardTitle>Base de Conocimiento · {assistantName}</CardTitle>
           {loading ? (
-            <span className="text-xs text-muted-foreground animate-pulse">Cargando…</span>
+            <span className="text-xs text-muted-foreground animate-pulse">
+              Cargando…
+            </span>
           ) : kbSize ? (
             <span
               className={`text-xs ${
@@ -1013,8 +1074,8 @@ function KbSection({
           ) : null}
         </div>
         <CardDescription>
-          Información del negocio exclusiva de este asistente para responder preguntas
-          frecuentes.
+          Información del negocio exclusiva de este asistente para responder
+          preguntas frecuentes.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

@@ -21,6 +21,7 @@ const tenantAiSchema = z.object({
   aiBaseUrl: z.string().trim().url().nullable().optional(),
   agentCoalesceMs: z.number().int().min(500).max(30000).optional(),
   botApiKey: z.string().trim().max(128).nullable().optional(),
+  timezone: z.string().trim().max(64).nullable().optional(),
 });
 
 /**
@@ -47,6 +48,7 @@ export async function GET() {
       aiBaseUrl: settings.aiBaseUrl,
       agentCoalesceMs: settings.agentCoalesceMs,
       botApiKey: settings.botApiKey,
+      timezone: settings.timezone,
       aiEnabled: settings.aiEnabled,
       labEnabled: settings.labEnabled,
     },
@@ -107,6 +109,7 @@ export async function POST(req: Request) {
         aiBaseUrl: updated.aiBaseUrl,
         agentCoalesceMs: updated.agentCoalesceMs,
         botApiKey: updated.botApiKey,
+        timezone: updated.timezone,
       },
     });
   } catch (err: any) {

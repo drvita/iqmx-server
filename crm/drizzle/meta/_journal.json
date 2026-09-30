@@ -169,6 +169,13 @@
       "when": 1790733458972,
       "tag": "0023_yielding_proteus",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1790735747263,
+      "tag": "0024_aromatic_hydra",
+      "breakpoints": true
     }
   ]
 }

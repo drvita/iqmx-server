@@ -438,6 +438,11 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
 
   const agenda = await isAgendaEnabled(organizationId);
 
+  // Resolver zona horaria efectiva (Asistente > Organización > Default)
+  const { buildTemporalContext } = await import("@/lib/time/context");
+  const effectiveTimezone = (profile as any).timezone || settings.timezone || "America/Mexico_City";
+  const temporalContext = buildTemporalContext(effectiveTimezone);
+
   /**
    * 015 — Los huecos vigentes, con su instante exacto.
    *
@@ -464,6 +469,7 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
         kb,
         stages,
         currentStage,
+        temporalContext,
         agenda,
       }),
     },

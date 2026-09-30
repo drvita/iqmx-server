@@ -11,6 +11,21 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Añadido
 
+- **Inyección de Contexto Temporal y Configuración de Zonas Horarias (`crm/`)**:
+  - **Esquema de Base de Datos y Persistencia Jerárquica**:
+    - Nueva columna `timezone` en `organizationSettings` con valor predeterminado `"America/Mexico_City"` ([crm/src/lib/db/schema.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/db/schema.ts#L614)).
+    - Nueva columna opcional `timezone` en `agentProfile` para sobrescritura específica por asistente o sucursal ([crm/src/lib/db/schema.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/db/schema.ts#L644)).
+    - Migración DDL generada y registrada en Drizzle Journal: [crm/drizzle/0024_aromatic_hydra.sql](file:///Users/laclavees12345/code/iqissmexico/main/crm/drizzle/0024_aromatic_hydra.sql) y [crm/drizzle/meta/_journal.json](file:///Users/laclavees12345/code/iqissmexico/main/crm/drizzle/meta/_journal.json).
+  - **Módulo de Tiempo y Catálogo de Zonas Horarias ([crm/src/lib/time/context.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/time/context.ts))**:
+    - Catálogo `COMMON_TIMEZONES` para autocompletado enfocado en México (Centro, Cancún, Pacífico, Noroeste), España (Península/Madrid, Canarias) y Latinoamérica (Bogotá, Lima, Buenos Aires, Santiago, São Paulo, Caracas, Santo Domingo, etc.).
+    - Helper determinista `buildTemporalContext` basado en `Intl.DateTimeFormat` (`es-MX`) que genera el bloque formateado con día de la semana capitalizado, fecha completa, hora local en 24h y 12h, y zona horaria IANA.
+  - **Inyección Dinámica en System Prompt y Pipeline del Agente**:
+    - Integración en `buildAgentSystemPrompt` ([crm/src/server/ai/prompts.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/ai/prompts.ts)) del bloque de fecha y hora local del negocio, permitiendo que el LLM comprenda referencias relativas ("hoy", "mañana"), determine si el negocio está abierto o cerrado y respete días inhábiles.
+    - Resolución de zona horaria efectiva en `runAgentTurn` ([crm/src/server/ai/pipeline.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/ai/pipeline.ts#L614)): asistente -> organización -> `"America/Mexico_City"`.
+  - **Interfaces de Usuario y Configuración ([crm/src/components/settings/ai-client.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/settings/ai-client.tsx) y [crm/src/components/agent/agent-client.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/agent/agent-client.tsx))**:
+    - Selector con autocompletado `datalist` en `/settings/ai` para la zona horaria predeterminada de la empresa.
+    - Selector en `/agent` para cada asistente con opción de sobrescritura y acción para restablecer a la zona horaria predeterminada de la organización.
+
 - **Transcripción de Audio (STT) y Descripción Visual con IA en Agente Interno (`crm/`)**:
   - **Ampliación del esquema de datos y persistencia**:
     - Nuevas columnas en `organizationSettings`: `aiSttModel` y `aiVisionModel` para configurar modelos especializados de voz e imagen por organización ([crm/src/lib/db/schema.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/db/schema.ts)).

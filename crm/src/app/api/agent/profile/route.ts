@@ -68,6 +68,7 @@ export const GET = withAuth(async (session, req: Request) => {
       instructions: p.instructions,
       escalationRules: p.escalationRules,
       greeting: p.greeting,
+      timezone: p.timezone,
     })),
     // Compatibilidad con la vista actual que lee `profile`
     profile: selected
@@ -82,6 +83,7 @@ export const GET = withAuth(async (session, req: Request) => {
           instructions: selected.instructions,
           escalationRules: selected.escalationRules,
           greeting: selected.greeting,
+          timezone: selected.timezone,
         }
       : null,
     aiConfigured,
@@ -120,6 +122,11 @@ const postSchema = z.object({
   greeting: z
     .string()
     .max(2000, "El mensaje de saludo no puede superar los 2,000 caracteres")
+    .nullable()
+    .optional(),
+  timezone: z
+    .string()
+    .max(64, "La zona horaria no puede superar los 64 caracteres")
     .nullable()
     .optional(),
 });
@@ -164,6 +171,7 @@ export const POST = withAuth(async (session, req: Request) => {
       instructions: body.data.instructions ?? null,
       escalationRules: body.data.escalationRules ?? null,
       greeting: body.data.greeting ?? null,
+      timezone: body.data.timezone ?? null,
     })
     .returning();
 
@@ -204,6 +212,11 @@ const putSchema = z.object({
   greeting: z
     .string()
     .max(2000, "El mensaje de saludo no puede superar los 2,000 caracteres")
+    .nullable()
+    .optional(),
+  timezone: z
+    .string()
+    .max(64, "La zona horaria no puede superar los 64 caracteres")
     .nullable()
     .optional(),
 });

@@ -28,6 +28,10 @@ export function buildAgentSystemPrompt(input: {
   stages: { name: string }[];
   currentStage?: string | null;
   /**
+   * Bloque dinámico con día de la semana, fecha, hora y zona horaria actual.
+   */
+  temporalContext?: string | null;
+  /**
    * 015 — ¿esta instancia tiene agenda? Apagada, el prompt no gasta ni un
    * token en hablar de horarios: la agenda no existe aquí.
    */
@@ -53,6 +57,7 @@ export function buildAgentSystemPrompt(input: {
     : [];
   return [
     `Eres "${profile.name}", el asistente virtual de WhatsApp de este negocio.`,
+    input.temporalContext ?? null,
     `REGLA TÉCNICA OBLIGATORIA DE FORMATO:
 Tu salida en CADA turno debe ser EXCLUSIVAMENTE un único objeto JSON válido que represente la acción a tomar.
 NUNCA respondas con texto conversacional suelto o sin estructurar.
