@@ -418,14 +418,14 @@ export function ConversationList({
                       </span>
                       <span className="mt-1.5 flex flex-wrap items-center justify-between gap-1.5">
                         <span className="flex items-center gap-1.5">
-                          {c.channel === "whatsapp" && c.lineName ? (
+                          {showLineFilter && c.channel === "whatsapp" && c.lineName ? (
                             <LineBadge
                               name={c.lineName}
                               seed={c.phoneNumberId ?? c.lineName}
                               size="xs"
                               showIcon
                             />
-                          ) : c.accountName ? (
+                          ) : showLineFilter && c.accountName ? (
                             <span className="inline-flex items-center gap-1 rounded-full border border-border-strong bg-background px-2 py-0.5 text-[11px] font-medium text-text-3">
                               {c.accountName}
                             </span>
@@ -444,21 +444,21 @@ export function ConversationList({
                             </span>
                           )}
                           {c.handoffAt && (
-                            <span className="inline-flex items-center gap-1 rounded-full border border-warning-soft bg-warning-tint px-2 py-0.5 text-[11px] text-warning-text">
-                              <UserRound className="h-3 w-3" strokeWidth={1.7} />
-                              Atención humana
+                            <span
+                              className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-warning-soft bg-warning-tint text-warning-text transition-colors hover:border-warning"
+                              title="Atención humana"
+                              aria-label="Atención humana"
+                            >
+                              <UserRound className="h-3 w-3" strokeWidth={1.8} />
                             </span>
                           )}
                           {c.anuncio && (
                             <span
-                              className="inline-flex min-w-0 max-w-[150px] items-center gap-1 rounded-full border border-info-soft bg-info-tint px-2 py-0.5 text-[11px] text-info-text"
+                              className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-info-soft bg-info-tint text-info-text transition-colors hover:border-info"
                               title={titularDeOrigen(c.anuncio.headline, c.anuncio.sourceType)}
+                              aria-label={titularDeOrigen(c.anuncio.headline, c.anuncio.sourceType)}
                             >
-                              <Megaphone className="h-3 w-3 shrink-0" strokeWidth={1.7} />
-                              <span className="truncate">
-                                {etiquetaDeOrigen(c.anuncio.sourceType)}
-                                {c.anuncio.headline ? ` · ${c.anuncio.headline}` : ""}
-                              </span>
+                              <Megaphone className="h-3 w-3" strokeWidth={1.8} />
                             </span>
                           )}
                         </span>

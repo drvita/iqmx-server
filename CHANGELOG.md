@@ -11,6 +11,13 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Corregido
 
+- **Optimización y Corrección de Desbordamiento de Badges en Bandeja de Entrada (`crm/`)**:
+  - Resolución del salto de línea y scroll vertical indeseado en las tarjetas de conversación ([crm/src/components/inbox/conversation-list.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/conversation-list.tsx)):
+    - **Ocultamiento condicional de cuenta/línea:** Se condicionó el badge de línea de WhatsApp/cuenta a `showLineFilter`, ocultándolo automáticamente cuando la organización o usuario solo opera una sola línea.
+    - **Compactación de insignia de Atención Humana:** Transformación del badge de texto en chip circular interactivo con ícono y tooltip explicativo (`title="Atención humana"`).
+    - **Compactación de insignia de Anuncio:** Transformación del badge extenso en chip circular interactivo con ícono y tooltip con el titular completo del anuncio o publicación.
+    - **Preservación de Etapa:** Mantenimiento intacto del badge de etapa del embudo para lectura rápida sin alterar la visibilidad operativa del lead.
+
 - **Personalización de Identidad Institucional (Favicon y Título) en Acceso a CRM (`crm/`)**:
   - Homologación del favicon oficial copiando el asset vectorial [crm/public/icon.svg](file:///Users/laclavees12345/code/iqissmexico/main/crm/public/icon.svg) y favicon base.
   - Sobreescritura de metadatos estáticos en el layout de autenticación ([crm/src/app/(auth)/layout.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/%28auth%29/layout.tsx)) asignando `title: "IQMX — CRM de WhatsApp"` e `icons: { icon: "/icon.svg" }`, evitando que en páginas públicas sin sesión activa se muestre el branding por defecto ("Vocero") del root layout.
