@@ -16,6 +16,8 @@ import {
   Copy,
   Trash2,
   KeyRound,
+  Mic,
+  Image as ImageIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -41,6 +43,8 @@ export function AiClient() {
   const [apiKey, setApiKey] = useState("");
   const [aiModel, setAiModel] = useState(DEFAULT_FREE_MODEL);
   const [aiJudgeModel, setAiJudgeModel] = useState(DEFAULT_FREE_MODEL);
+  const [aiSttModel, setAiSttModel] = useState("");
+  const [aiVisionModel, setAiVisionModel] = useState("");
   const [aiBaseUrl, setAiBaseUrl] = useState("https://openrouter.ai/api");
   const [agentCoalesceMs, setAgentCoalesceMs] = useState(6000);
   const [botApiKey, setBotApiKey] = useState<string | null>(null);
@@ -70,6 +74,8 @@ export function AiClient() {
           setHasCustomApiKey(Boolean(d.settings.hasCustomApiKey));
           if (d.settings.aiModel) setAiModel(d.settings.aiModel);
           if (d.settings.aiJudgeModel) setAiJudgeModel(d.settings.aiJudgeModel);
+          if (d.settings.aiSttModel) setAiSttModel(d.settings.aiSttModel);
+          if (d.settings.aiVisionModel) setAiVisionModel(d.settings.aiVisionModel);
           if (d.settings.aiBaseUrl) setAiBaseUrl(d.settings.aiBaseUrl);
           if (d.settings.agentCoalesceMs) setAgentCoalesceMs(d.settings.agentCoalesceMs);
           if (d.settings.botApiKey) setBotApiKey(d.settings.botApiKey);
@@ -188,6 +194,8 @@ export function AiClient() {
     const payload: Record<string, unknown> = {
       aiModel: aiModel.trim(),
       aiJudgeModel: aiJudgeModel.trim() || null,
+      aiSttModel: aiSttModel.trim() || null,
+      aiVisionModel: aiVisionModel.trim() || null,
       aiBaseUrl: aiBaseUrl.trim() || "https://openrouter.ai/api",
       agentCoalesceMs,
     };
@@ -365,6 +373,66 @@ export function AiClient() {
             />
             <p className="text-xs text-text-3">
               Se utiliza exclusivamente en el Laboratorio para calificar la precisión y coherencia de las respuestas.
+            </p>
+          </div>
+
+          {/* Modelo Transcripción de Audio (STT) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="ai-stt-model" className="flex items-center gap-1.5">
+                <Mic className="h-3.5 w-3.5 text-primary" />
+                Modelo de Transcripción de Audio (Notas de voz)
+              </Label>
+              {aiSttModel && (
+                <button
+                  type="button"
+                  onClick={() => setAiSttModel("")}
+                  className="text-xs text-text-3 hover:text-text transition-colors"
+                >
+                  Desactivar
+                </button>
+              )}
+            </div>
+            <Input
+              id="ai-stt-model"
+              list="openrouter-models-list"
+              value={aiSttModel}
+              onChange={(e) => setAiSttModel(e.target.value)}
+              placeholder="openai/whisper-1"
+              className="font-mono text-sm"
+            />
+            <p className="text-xs text-text-3">
+              Recomendado: <code>openai/whisper-1</code>. Convierte notas de voz en texto. Si se deja vacío, el asistente pedirá al contacto escribir su mensaje.
+            </p>
+          </div>
+
+          {/* Modelo de Visión Artificial (Imágenes) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="ai-vision-model" className="flex items-center gap-1.5">
+                <ImageIcon className="h-3.5 w-3.5 text-primary" />
+                Modelo de Visión Artificial (Imágenes)
+              </Label>
+              {aiVisionModel && (
+                <button
+                  type="button"
+                  onClick={() => setAiVisionModel("")}
+                  className="text-xs text-text-3 hover:text-text transition-colors"
+                >
+                  Desactivar
+                </button>
+              )}
+            </div>
+            <Input
+              id="ai-vision-model"
+              list="openrouter-models-list"
+              value={aiVisionModel}
+              onChange={(e) => setAiVisionModel(e.target.value)}
+              placeholder="google/gemini-2.5-flash"
+              className="font-mono text-sm"
+            />
+            <p className="text-xs text-text-3">
+              Recomendado: <code>google/gemini-2.5-flash</code>. Describe imágenes y comprobantes para el agente. Si se deja vacío, el asistente pedirá al contacto escribir su consulta en texto.
             </p>
           </div>
 

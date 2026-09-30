@@ -7,7 +7,28 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 > **Zona horaria de referencia:** Ciudad de México (CST / UTC-6).
 
-## [1.17.1] - 2026-09-29
+## [1.18.0] - 2026-09-29
+
+### Añadido
+
+- **Transcripción de Audio (STT) y Descripción Visual con IA en Agente Interno (`crm/`)**:
+  - **Ampliación del esquema de datos y persistencia**:
+    - Nuevas columnas en `organizationSettings`: `aiSttModel` y `aiVisionModel` para configurar modelos especializados de voz e imagen por organización ([crm/src/lib/db/schema.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/db/schema.ts)).
+    - Nuevas columnas en `mediaAsset`: `aiTranscript`, `aiDescription` y `aiProcessedAt` para almacenamiento persistente y reutilización sin costo adicional de API ([crm/src/lib/db/schema.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/db/schema.ts)).
+    - Migración DDL generada y aplicada con Drizzle: [crm/drizzle/0023_yielding_proteus.sql](file:///Users/laclavees12345/code/iqissmexico/main/crm/drizzle/0023_yielding_proteus.sql).
+  - **Servicio de Enriquecimiento Multimedia ([crm/src/server/ai/media-enrichment.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/ai/media-enrichment.ts))**:
+    - `enrichAudioMedia`: Transcribe notas de voz y audios mediante `/v1/audio/transcriptions` (OpenAI/Whisper) en español.
+    - `enrichImageMedia`: Genera descripciones contextuales de comprobantes, fotos y capturas usando modelos multimodales (Gemini 2.5 Flash).
+    - Ejecución desacoplada en segundo plano iniciada durante la ingesta del mensaje ([crm/src/server/inbox/ingest.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/inbox/ingest.ts)), aprovechando la ventana de coalescing (~6s) previa al turno del agente.
+  - **Pipeline Inteligente y Manejo Determinista ([crm/src/server/ai/pipeline.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/ai/pipeline.ts))**:
+    - Inyección estructurada en el historial del LLM con prefijos claros: `"El usuario envió una nota de voz: [...]"` y `"El usuario envió una imagen: [...]"`.
+    - **Mensaje de orientación a texto:** Respuesta automática cordial si el cliente envía multimedia y la organización no tiene modelo configurado o se trata de archivos no soportados.
+    - **Escalamiento automático por fallo:** Si la API de STT/Visión falla por timeout, cuota o red, se activa handoff con `handoffReason: "error"` y se notifica al asesor humano mediante el badge correspondiente.
+  - **Interfaz de Configuración de Modelos ([crm/src/components/settings/ai-client.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/settings/ai-client.tsx))**:
+    - Selectores con autocompletado datalist de OpenRouter para STT (`openai/whisper-1`) y Visión (`google/gemini-2.5-flash`), con botón de desactivación rápida.
+    - Actualización de esquema y controladores en [crm/src/app/api/settings/ai/route.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/settings/ai/route.ts) y [crm/src/server/settings/service.ts](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/settings/service.ts).
+  - **Visualización en Bandeja de Entrada ([crm/src/components/inbox/message-thread.tsx](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/message-thread.tsx))**:
+    - Renderizado de transcripción de texto debajo del reproductor de audio para lectura inmediata por operadores humanos.
 
 ### Corregido
 

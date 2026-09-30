@@ -477,6 +477,12 @@ export const mediaAsset = pgTable(
     payload: jsonb("payload"),
     /** Ruta relativa dentro de MEDIA_DIR; NULL si aún no descargado o no aplica. */
     storagePath: text("storage_path"),
+    /** Transcripción del audio generada por IA (STT). */
+    aiTranscript: text("ai_transcript"),
+    /** Descripción contextual de la imagen generada por visión artificial. */
+    aiDescription: text("ai_description"),
+    /** Fecha en que se completó el enriquecimiento por IA. */
+    aiProcessedAt: timestamp("ai_processed_at", { withTimezone: true }),
     fetchStatus: text("fetch_status", {
       enum: ["available", "pending", "failed"],
     })
@@ -1248,6 +1254,8 @@ export const organizationSettings = pgTable(
     aiApiKeyEncrypted: text("ai_api_key_encrypted"),
     aiModel: text("ai_model").default("anthropic/claude-sonnet-4.5"),
     aiJudgeModel: text("ai_judge_model"),
+    aiSttModel: text("ai_stt_model"),
+    aiVisionModel: text("ai_vision_model"),
     aiBaseUrl: text("ai_base_url").default("https://openrouter.ai/api"),
     agentCoalesceMs: integer("agent_coalesce_ms").notNull().default(6000),
     botApiKey: text("bot_api_key"),

@@ -162,6 +162,13 @@
       "when": 1790384640119,
       "tag": "0022_template_footer_buttons",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1790733458972,
+      "tag": "0023_yielding_proteus",
+      "breakpoints": true
     }
   ]
 }

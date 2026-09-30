@@ -18,6 +18,8 @@ export type PlanLimits = {
   aiApiKey?: string | null;
   aiModel?: string | null;
   aiJudgeModel?: string | null;
+  aiSttModel?: string | null;
+  aiVisionModel?: string | null;
   aiBaseUrl?: string | null;
   agentCoalesceMs?: number;
   extra?: Record<string, unknown>;
@@ -27,6 +29,8 @@ export type TenantAiInput = {
   aiApiKey?: string | null;
   aiModel?: string | null;
   aiJudgeModel?: string | null;
+  aiSttModel?: string | null;
+  aiVisionModel?: string | null;
   aiBaseUrl?: string | null;
   agentCoalesceMs?: number;
   botApiKey?: string | null;
@@ -103,6 +107,8 @@ export async function updateOrganizationPlanLimits(
   }
   if (limits.aiModel !== undefined) updateData.aiModel = limits.aiModel?.trim() || null;
   if (limits.aiJudgeModel !== undefined) updateData.aiJudgeModel = limits.aiJudgeModel?.trim() || null;
+  if (limits.aiSttModel !== undefined) updateData.aiSttModel = limits.aiSttModel?.trim() || null;
+  if (limits.aiVisionModel !== undefined) updateData.aiVisionModel = limits.aiVisionModel?.trim() || null;
   if (limits.aiBaseUrl !== undefined) updateData.aiBaseUrl = limits.aiBaseUrl?.trim() || "https://openrouter.ai/api";
   if (limits.agentCoalesceMs !== undefined) updateData.agentCoalesceMs = limits.agentCoalesceMs;
 
@@ -146,6 +152,8 @@ export async function updateTenantAiConfig(
 
   if (input.aiModel !== undefined) updateData.aiModel = input.aiModel?.trim() || null;
   if (input.aiJudgeModel !== undefined) updateData.aiJudgeModel = input.aiJudgeModel?.trim() || null;
+  if (input.aiSttModel !== undefined) updateData.aiSttModel = input.aiSttModel?.trim() || null;
+  if (input.aiVisionModel !== undefined) updateData.aiVisionModel = input.aiVisionModel?.trim() || null;
   if (input.aiBaseUrl !== undefined) updateData.aiBaseUrl = input.aiBaseUrl?.trim() || "https://openrouter.ai/api";
   if (input.agentCoalesceMs !== undefined) updateData.agentCoalesceMs = input.agentCoalesceMs;
   if (input.botApiKey !== undefined) updateData.botApiKey = input.botApiKey?.trim() || null;

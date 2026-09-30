@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
@@ -274,15 +274,117 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
     return;
   }
 
-  const history = await db
+  const rawMessages = await db
     .select()
     .from(schema.message)
     .where(eq(schema.message.conversationId, conversationId))
     .orderBy(desc(schema.message.createdAt))
     .limit(20);
-  history.reverse();
+  rawMessages.reverse();
+
+  // Cargar assets correspondientes a los mensajes multimedia
+  const mediaAssetIds = rawMessages
+    .map((m) => (m as any).mediaAssetId)
+    .filter((id): id is string => Boolean(id));
+
+  const assetMap = new Map<string, typeof schema.mediaAsset.$inferSelect>();
+  if (mediaAssetIds.length > 0) {
+    try {
+      const assets = await db
+        .select()
+        .from(schema.mediaAsset)
+        .where(
+          scoped(
+            schema.mediaAsset.organizationId,
+            organizationId,
+            inArray(schema.mediaAsset.id, mediaAssetIds)
+          )
+        );
+      for (const a of assets) {
+        assetMap.set(a.id, a);
+      }
+    } catch (err) {
+      console.warn("[agente] Error cargando media assets para historial:", err);
+    }
+  }
+
+  // Enriquecer el texto efectivo de cada mensaje si tiene multimedia
+  const history = await Promise.all(
+    rawMessages.map(async (m) => {
+      let effectiveText = m.text;
+      const asset = (m as any).mediaAssetId ? assetMap.get((m as any).mediaAssetId) ?? null : null;
+
+      // Si el mensaje es entrante y tiene archivo multimedia pero no texto procesado
+      if (m.direction === "in" && asset) {
+        // Si aún no está enriquecido pero hay modelo configurado, intentar enriquecerlo ahora
+        if (asset.kind === "audio" && !asset.aiTranscript && settings.aiSttModel) {
+          try {
+            const { enrichAudioMedia } = await import("@/server/ai/media-enrichment");
+            const res = await enrichAudioMedia(organizationId, asset.id);
+            if (res.ok && res.transcript) {
+              asset.aiTranscript = res.transcript;
+            }
+          } catch (e) {
+            console.warn("[agente] Error intentando enriquecer audio on-demand:", e);
+          }
+        } else if (asset.kind === "image" && !asset.aiDescription && settings.aiVisionModel) {
+          try {
+            const { enrichImageMedia } = await import("@/server/ai/media-enrichment");
+            const res = await enrichImageMedia(organizationId, asset.id);
+            if (res.ok && res.description) {
+              asset.aiDescription = res.description;
+            }
+          } catch (e) {
+            console.warn("[agente] Error intentando enriquecer imagen on-demand:", e);
+          }
+        }
+
+        // Sintetizar el texto para el LLM siguiendo las instrucciones del Ingeniero
+        if (asset.kind === "audio" && asset.aiTranscript) {
+          effectiveText = `El usuario envió una nota de voz: "${asset.aiTranscript}"`;
+        } else if (asset.kind === "image" && asset.aiDescription) {
+          const captionPart = m.text ? `\nTexto adjunto del usuario: "${m.text}"` : "";
+          effectiveText = `El usuario envió una imagen: ${asset.aiDescription}${captionPart}`;
+        }
+      }
+
+      return {
+        ...m,
+        text: effectiveText,
+        asset,
+      };
+    })
+  );
+
   const lastInbound = [...history].reverse().find((m) => m.direction === "in");
   if (!lastInbound) return;
+
+  // Validación de mensajes multimedia sin procesar:
+  // Si el último mensaje es multimedia y no tiene texto (ni directo ni enriquecido)
+  if (!lastInbound.text && lastInbound.asset) {
+    const asset = lastInbound.asset;
+    const isAudioWithoutModel = asset.kind === "audio" && !settings.aiSttModel;
+    const isImageWithoutModel = asset.kind === "image" && !settings.aiVisionModel;
+    const isUnsupportedMedia = !["audio", "image"].includes(asset.kind);
+
+    if (isAudioWithoutModel || isImageWithoutModel || isUnsupportedMedia) {
+      console.log(
+        `[agente] Mensaje multimedia ${asset.kind} sin modelo configurado o no soportado. Enviando redirección a texto.`
+      );
+      await deliverReply(
+        conversation,
+        "Por el momento no puedo procesar este tipo de archivo. ¿Podrías escribir tu consulta en texto para poder ayudarte con gusto?"
+      );
+      return;
+    }
+
+    // Si había modelo pero no se pudo enriquecer (error de API / cuota / timeout):
+    console.warn(
+      `[agente] Fallo en enriquecimiento de media para conversación ${conversationId}. Escalando a atención humana.`
+    );
+    await applyHandoff(conversationId, organizationId, "error");
+    return;
+  }
 
   // Ventana cerrada: el agente JAMÁS envía texto libre → handoff 'ventana'.
   if (!conversation.isTest && !isWindowOpen(conversation.lastInboundAt)) {

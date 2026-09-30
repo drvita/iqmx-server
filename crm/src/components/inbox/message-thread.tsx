@@ -241,11 +241,16 @@ export function MessageThread({ messages }: { messages: MessageDto[] }) {
                 {m.media ? (
                   <span className="block">
                     <MediaBlock media={m.media} />
-                    {m.media.caption && (
+                    {m.media.kind === "audio" && (m.media.aiTranscript || m.media.caption) ? (
+                      <div className="mt-1.5 rounded-md border border-border/60 bg-background/60 p-2 text-[12px] leading-relaxed text-text-2">
+                        <span className="font-semibold text-text">Transcripción: </span>
+                        {m.media.aiTranscript || m.media.caption}
+                      </div>
+                    ) : m.media.caption ? (
                       <span className="mt-1 block whitespace-pre-wrap break-words">
                         {m.media.caption}
                       </span>
-                    )}
+                    ) : null}
                   </span>
                 ) : m.type === "text" || m.type === "template" ? (
                   <span className="whitespace-pre-wrap break-words">

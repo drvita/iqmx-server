@@ -71,6 +71,8 @@ export type MessageMediaDto = {
   fileName: string | null;
   fileSize: number | null;
   caption: string | null;
+  /** Transcripción del audio generada por IA (STT). */
+  aiTranscript?: string | null;
   fetchStatus: "available" | "pending" | "failed";
   /** location {latitude, longitude, name?, address?} / contacts (subset). */
   payload: unknown;

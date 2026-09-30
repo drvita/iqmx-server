@@ -137,7 +137,23 @@ async function attachMediaAsset(
       .where(eq(schema.message.id, messageId));
     if (asset.fetchStatus === "pending") {
       // Descarga in-process, sin bloquear la ingesta; on-demand reintenta.
-      void ensureAssetAvailable(organizationId, asset.id).catch(() => {});
+      void ensureAssetAvailable(organizationId, asset.id)
+        .then(async (available) => {
+          if (!available) return;
+          try {
+            const { enrichAudioMedia, enrichImageMedia } = await import(
+              "@/server/ai/media-enrichment"
+            );
+            if (available.kind === "audio") {
+              await enrichAudioMedia(organizationId, available.id);
+            } else if (available.kind === "image") {
+              await enrichImageMedia(organizationId, available.id);
+            }
+          } catch (enrichErr) {
+            console.warn(`[media-enrichment] Error en background para asset ${available.id}:`, enrichErr);
+          }
+        })
+        .catch(() => {});
     }
     return asset;
   } catch (err) {
@@ -526,6 +542,7 @@ export function serializeMessage(
           fileName: media.fileName,
           fileSize: media.fileSize,
           caption: media.caption,
+          aiTranscript: media.aiTranscript,
           fetchStatus: media.fetchStatus,
           payload: media.payload,
         }
