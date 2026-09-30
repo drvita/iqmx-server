@@ -9,7 +9,7 @@ export type MediaEnrichmentResult =
 
 /**
  * Transcribe un archivo de audio/nota de voz usando el modelo STT configurado
- * por la organización (ej: openai/whisper-1).
+ * por la organización (ej: openai/whisper-large-v3-turbo).
  */
 export async function enrichAudioMedia(
   organizationId: string,

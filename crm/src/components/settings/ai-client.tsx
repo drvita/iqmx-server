@@ -59,6 +59,8 @@ export function AiClient() {
 
   // Modelos dinámicos desde la API de OpenRouter
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
+  const [sttModels, setSttModels] = useState<AvailableModel[]>([]);
+  const [visionModels, setVisionModels] = useState<AvailableModel[]>([]);
   const [loadingModels, setLoadingModels] = useState(false);
 
   const [testing, setTesting] = useState(false);
@@ -97,6 +99,12 @@ export function AiClient() {
       .then((d) => {
         if (d?.models && Array.isArray(d.models)) {
           setAvailableModels(d.models);
+        }
+        if (d?.sttModels && Array.isArray(d.sttModels)) {
+          setSttModels(d.sttModels);
+        }
+        if (d?.visionModels && Array.isArray(d.visionModels)) {
+          setVisionModels(d.visionModels);
         }
       })
       .catch(() => {})
@@ -400,14 +408,21 @@ export function AiClient() {
             </div>
             <Input
               id="ai-stt-model"
-              list="openrouter-models-list"
+              list="openrouter-stt-models-list"
               value={aiSttModel}
               onChange={(e) => setAiSttModel(e.target.value)}
-              placeholder="openai/whisper-1"
+              placeholder="openai/whisper-large-v3-turbo"
               className="font-mono text-sm"
             />
+            <datalist id="openrouter-stt-models-list">
+              {sttModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} {m.isFree ? "— [GRATIS]" : ""}
+                </option>
+              ))}
+            </datalist>
             <p className="text-xs text-text-3">
-              Recomendado: <code>openai/whisper-1</code>. Convierte notas de voz en texto. Si se deja vacío, el asistente pedirá al contacto escribir su mensaje.
+              Recomendado: <code>openai/whisper-large-v3-turbo</code>. Convierte notas de voz en texto con alta velocidad y bajo costo. Si se deja vacío, el asistente pedirá al contacto escribir su mensaje.
             </p>
           </div>
 
@@ -430,12 +445,19 @@ export function AiClient() {
             </div>
             <Input
               id="ai-vision-model"
-              list="openrouter-models-list"
+              list="openrouter-vision-models-list"
               value={aiVisionModel}
               onChange={(e) => setAiVisionModel(e.target.value)}
               placeholder="google/gemini-2.5-flash"
               className="font-mono text-sm"
             />
+            <datalist id="openrouter-vision-models-list">
+              {visionModels.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name} {m.isFree ? "— [GRATIS]" : ""}
+                </option>
+              ))}
+            </datalist>
             <p className="text-xs text-text-3">
               Recomendado: <code>google/gemini-2.5-flash</code>. Describe imágenes y comprobantes para el agente. Si se deja vacío, el asistente pedirá al contacto escribir su consulta en texto.
             </p>
