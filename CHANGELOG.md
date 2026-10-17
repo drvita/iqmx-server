@@ -7,6 +7,18 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 > **Zona horaria de referencia:** Ciudad de México (CST / UTC-6).
 
+## [1.18.1] - 2026-10-16
+
+### Corregido
+
+- **Resolución Multi-Inquilino de Configuración de IA en Estado del Agente (`crm/`)**:
+  - **Consulta Directa a Base de Datos en Endpoint de Estado**: Corrección en [`crm/src/app/api/agent/brain-status/route.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/agent/brain-status/route.ts) para consultar `getOrganizationSettings(session.organizationId)` en paralelo y determinar `aiConfigured` validando `Boolean(orgSettings.aiApiKeyEncrypted) || isAiConfigured(orgSettings)`. Se resuelve la discrepancia donde el backend buscaba la variable de entorno obsoleta `OPENROUTER_API_TOKEN` en lugar de la clave cifrada de la organización en PostgreSQL (`organization_settings.ai_api_key_encrypted`).
+  - **Experiencia de Usuario y Limpieza de UI en Tarjeta de Estado**: Actualización en [`crm/src/components/agent/brain-status-card.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/agent/brain-status-card.tsx) eliminando tecnicismos y referencias a nombres de variables de entorno del sistema (`OPENROUTER_API_TOKEN`) o reinicio de contenedores.
+  - **Navegación Asistida**: Incorporación de mensajes claros orientados a negocio y enlace directo a [`crm/src/app/(app)/settings/ai`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/%28app%29/settings/ai) (*"Ajustes > Inteligencia Artificial"*) cuando la organización no cuenta con clave configurada.
+  - **Actualización de Contrato de Tipos**: Ajuste en [`crm/src/lib/brain-status.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/brain-status.ts) para documentar el estado `configured` en función de la clave registrada por organización.
+
+---
+
 ## [1.18.0] - 2026-09-29
 
 ### Añadido

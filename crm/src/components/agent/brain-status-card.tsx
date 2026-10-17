@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { AlertTriangle, Cable, Info, Sparkles, type LucideIcon } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -51,14 +52,17 @@ export function BrainStatusCard({
           <Callout tone="danger" icon={AlertTriangle} title="Tus clientes pueden recibir dos respuestas">
             El agente incluido y {name ? `tu cerebro externo (${name})` : "tu cerebro externo"}{" "}
             contestan los mismos mensajes: apaga el agente incluido con el interruptor
-            de arriba o quita <Env>OPENROUTER_API_TOKEN</Env> del CRM.
+            de arriba o desactiva la clave de IA en Ajustes.
           </Callout>
         )}
         {status.warning === "sin_cerebro" && (
           <Callout tone="warning" icon={Info} title="Nadie contesta en automático">
             Tus clientes solo reciben lo que respondas desde la bandeja: enciende el
-            agente incluido (necesita <Env>OPENROUTER_API_TOKEN</Env>) o conecta tu
-            cerebro externo con <Env>BOT_API_KEY</Env>.
+            agente incluido (configura tu clave en{" "}
+            <Link href="/settings/ai" className="underline font-medium hover:text-foreground">
+              Ajustes &gt; Inteligencia Artificial
+            </Link>
+            ) o conecta tu cerebro externo con una clave de bot autorizada.
           </Callout>
         )}
 
@@ -93,10 +97,14 @@ export function BrainStatusCard({
 function embeddedView(s: BrainStatusDto): RowView {
   const { configured, enabled, answering } = s.embedded;
   const headline = `${enabled ? "Encendido" : "Apagado"} · ${
-    configured ? "token de IA: sí" : "sin token de IA"
+    configured ? "clave de IA: sí" : "sin clave de IA"
   }`;
   if (enabled && !configured) {
-    return { tone: "warn", headline, detail: "No contesta: a la instancia le falta OPENROUTER_API_TOKEN." };
+    return {
+      tone: "warn",
+      headline,
+      detail: "No contesta: falta configurar la clave de IA en Ajustes > Inteligencia Artificial.",
+    };
   }
   if (answering) {
     return {
@@ -116,7 +124,7 @@ function embeddedView(s: BrainStatusDto): RowView {
     headline,
     detail: configured
       ? "Enciéndelo con el interruptor de arriba para que conteste."
-      : "Para usarlo, agrega OPENROUTER_API_TOKEN a la instancia y reiníciala.",
+      : "Para usarlo, configura la clave de IA en Ajustes > Inteligencia Artificial y enciende el interruptor.",
   };
 }
 
