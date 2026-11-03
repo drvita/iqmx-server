@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ZernioConnect } from "@/components/settings/zernio-connect";
 import { cn } from "@/lib/utils";
 
 type Source = "zernio" | "meta";
@@ -297,64 +298,48 @@ export function InstagramClient() {
             ))}
           </ul>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            {source === "zernio" ? (
-              <div className="space-y-1.5">
-                <Label htmlFor="ig-account">accountId de Zernio</Label>
-                <Input
-                  id="ig-account"
-                  value={accountRef}
-                  onChange={(e) => setAccountRef(e.target.value)}
-                  placeholder="665f1c2e8b3a4d0012345678"
-                  autoComplete="off"
-                />
+          {source === "zernio" ? (
+            <ZernioConnect
+              endpoint="/api/settings/instagram"
+              extraBody={{ source: "zernio" }}
+              what="tu cuenta de Instagram"
+              idPrefix="ig"
+              onSaved={() => void refetch()}
+            />
+          ) : (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="ig-user-id">ID de usuario de Instagram (IG User ID)</Label>
+                  <Input
+                    id="ig-user-id"
+                    value={igUserId}
+                    onChange={(e) => setIgUserId(e.target.value)}
+                    placeholder="17841400000000000"
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="ig-token">Token de Instagram</Label>
+                  <Input
+                    id="ig-token"
+                    type="password"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    placeholder="IGQV… / EAAG…"
+                    autoComplete="off"
+                  />
+                </div>
               </div>
-            ) : (
-              <div className="space-y-1.5">
-                <Label htmlFor="ig-user-id">ID de usuario de Instagram (IG User ID)</Label>
-                <Input
-                  id="ig-user-id"
-                  value={igUserId}
-                  onChange={(e) => setIgUserId(e.target.value)}
-                  placeholder="17841400000000000"
-                  autoComplete="off"
-                />
-              </div>
-            )}
-            <div className="space-y-1.5">
-              <Label htmlFor="ig-token">
-                {source === "zernio" ? "API key de Zernio" : "Token de Instagram"}
-              </Label>
-              <Input
-                id="ig-token"
-                type="password"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder={source === "zernio" ? "sk_…" : "IGQV… / EAAG…"}
-                autoComplete="off"
-              />
-            </div>
-            {source === "zernio" && (
-              <div className="space-y-1.5">
-                <Label htmlFor="ig-secret">Secreto del webhook (opcional)</Label>
-                <Input
-                  id="ig-secret"
-                  type="password"
-                  value={webhookSecret}
-                  onChange={(e) => setWebhookSecret(e.target.value)}
-                  placeholder="el mismo que pusiste en Zernio"
-                  autoComplete="off"
-                />
-              </div>
-            )}
-          </div>
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          {saved && <p className="text-sm text-success-text">{saved} ✓</p>}
+              {error && <p className="text-sm text-destructive">{error}</p>}
+              {saved && <p className="text-sm text-success-text">{saved} ✓</p>}
 
-          <Button disabled={saving || !canSave} onClick={() => void save()}>
-            {saving ? "Probando…" : "Probar y guardar"}
-          </Button>
+              <Button disabled={saving || !canSave} onClick={() => void save()}>
+                {saving ? "Probando…" : "Probar y guardar"}
+              </Button>
+            </>
+          )}
         </CardContent>
       </Card>
 

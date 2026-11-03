@@ -176,6 +176,48 @@
       "when": 1790735747263,
       "tag": "0024_aromatic_hydra",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793655926889,
+      "tag": "0025_redundant_beast",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1793656819550,
+      "tag": "0026_funny_nightshade",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1793658993153,
+      "tag": "0027_charming_komodo",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1793678410363,
+      "tag": "0028_lazy_sir_ram",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1793678675335,
+      "tag": "0029_silly_ares",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1793678890275,
+      "tag": "0030_smooth_flatman",
+      "breakpoints": true
     }
   ]
 }

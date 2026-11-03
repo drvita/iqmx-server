@@ -11,7 +11,10 @@ import {
   isChannelEnabledForOrg,
 } from "@/server/channels/enabled";
 import { verifyZernioToken } from "@/server/zernio";
-
+import { ensureWebhookForOrg } from "@/server/zernio/conexiones";
+import { accountHealth, zernioAccountName } from "@/server/zernio/cuentas";
+import { resolveZernioAccount } from "@/server/zernio/guardar";
+import { canConfigure } from "@/lib/auth/roles";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { scoped } from "@/lib/db/tenant";
@@ -74,13 +77,11 @@ const putSchema = z.object({
  */
 export const PUT = withAuth(async (session, req: Request) => {
   if (!(await isChannelEnabledForOrg("messenger", session.organizationId))) return channelDisabledResponse();
-  if (session.role !== "owner") {
-    return apiError(403, "forbidden", "Solo el propietario puede conectar la página");
+  if (!canConfigure(session.role)) {
+    return apiError(403, "forbidden", "Solo el propietario o administrador puede conectar la página");
   }
   const body = await parseBody(req, putSchema);
   if (!body.ok) return body.response;
-  // `.default()` deja el tipo opcional aunque Zod siempre lo rellene: se fija
-  // aquí para que el resto del handler trabaje con un valor cerrado.
   const data = { ...body.data, source: body.data.source ?? "meta" };
   const existing = await getMessengerCredentialsByOrg(session.organizationId);
 
@@ -103,18 +104,44 @@ export const PUT = withAuth(async (session, req: Request) => {
     return Response.json({ ok: true, pageName: existing.pageName });
   }
 
+  const webhookSecret =
+    data.webhookSecret ??
+    (existing?.source === data.source ? existing.webhookSecret : null) ??
+    null;
+
+  if (data.source === "zernio") {
+    const cuenta = await resolveZernioAccount(data.token, data.accountRef, "messenger");
+    if (!cuenta.ok) return cuenta.response;
+    const pageName = zernioAccountName(cuenta.account);
+
+    await saveMessengerCredentials({
+      organizationId: session.organizationId,
+      source: "zernio",
+      pageId: cuenta.account.metadata?.selectedPageId || data.pageId || null,
+      pageName,
+      accountRef: cuenta.account._id,
+      token: data.token,
+      webhookSecret,
+      aiEnabled: data.aiEnabled !== undefined ? data.aiEnabled : existing?.aiEnabled ?? true,
+      assistantId: data.assistantId !== undefined ? data.assistantId : existing?.assistantId ?? null,
+    });
+    const webhook = await ensureWebhookForOrg(session.organizationId, {
+      secret: data.webhookSecret,
+    });
+    return Response.json({
+      ok: true,
+      pageName,
+      accountRef: cuenta.account._id,
+      health: accountHealth(cuenta.account, "messenger"),
+      webhook,
+    });
+  }
+
   if (data.source === "meta" && !data.pageId) {
     return apiError(
       422,
       "invalid_body",
       "En modo Meta hace falta el ID de la página"
-    );
-  }
-  if (data.source === "zernio" && !data.accountRef) {
-    return apiError(
-      422,
-      "invalid_body",
-      "En modo Zernio hace falta el accountId de la cuenta conectada"
     );
   }
 
@@ -126,15 +153,14 @@ export const PUT = withAuth(async (session, req: Request) => {
     source: data.source,
     pageId: data.pageId ?? null,
     pageName: check.pageName,
-    accountRef: data.accountRef ?? null,
+    accountRef: null,
     token: data.token,
-    webhookSecret: data.webhookSecret ?? null,
+    webhookSecret,
     aiEnabled: data.aiEnabled !== undefined ? data.aiEnabled : existing?.aiEnabled ?? true,
     assistantId: data.assistantId !== undefined ? data.assistantId : existing?.assistantId ?? null,
   });
 
-  if (data.source === "meta" && data.pageId) {
-    // Intenta auto-suscribir la app a la página para que el webhook comience a recibir eventos de inmediato.
+  if (data.pageId) {
     void subscribeMessengerApp(data.pageId, data.token).catch((err) => {
       console.warn(`[messenger] no se pudo auto-suscribir la página ${data.pageId}:`, err);
     });

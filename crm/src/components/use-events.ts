@@ -12,6 +12,12 @@ export type EventHandlers = {
     error?: string | null;
   }) => void;
   onConversationUpdated?: (data: { conversation: unknown }) => void;
+  /** 026 — Se eliminó una conversación (o el contacto entero). */
+  onConversationDeleted?: (data: {
+    conversationId: string;
+    contactId: string;
+    contactDeleted: boolean;
+  }) => void;
   onLabRun?: (data: {
     runId: string;
     status: string;
@@ -55,6 +61,9 @@ export function useEvents(handlers: EventHandlers): void {
     );
     listen("conversation.updated", (d) =>
       handlersRef.current.onConversationUpdated?.(d as never)
+    );
+    listen("conversation.deleted", (d) =>
+      handlersRef.current.onConversationDeleted?.(d as never)
     );
     listen("lab.run", (d) => handlersRef.current.onLabRun?.(d as never));
     listen("booking.updated", (d) =>

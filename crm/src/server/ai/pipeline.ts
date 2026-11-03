@@ -15,7 +15,14 @@ import {
   type AgentActionType,
 } from "@/server/ai/actions";
 import { HANDOFF_BACKUP_ACK, matchesHandoffIntent } from "@/server/ai/handoff";
-import { buildAgentSystemPrompt } from "@/server/ai/prompts";
+import { buildAgentSystemPrompt, TURN_FORMAT_REMINDER } from "@/server/ai/prompts";
+import { herramientasEfectivas } from "@/lib/agent-roles";
+import {
+  atendidoPorPersona,
+  debidosVigentes,
+  ordenarParaElTurno,
+  quedanDebidos,
+} from "@/server/ai/orden-turno";
 import { isAgendaEnabled } from "@/server/agenda/flag";
 import { bookSlot, offerSlots } from "@/server/agenda/agent";
 import { getOffers, mapaDeHuecosParaModelo } from "@/server/agenda/offers";
@@ -34,6 +41,8 @@ type CoalesceEntry = {
   timer: ReturnType<typeof setTimeout> | null;
   running: boolean;
   pending: boolean;
+  /** 025 — Entrantes anotados para el siguiente turno. */
+  debidos: Set<string>;
 };
 
 const globalForAgent = globalThis as unknown as {
@@ -47,18 +56,26 @@ function coalesceMap(): Map<string, CoalesceEntry> {
   return globalForAgent.__agentCoalesce;
 }
 
-/** Punto de entrada con debounce (mensajes entrantes reales). */
+/**
+ * Punto de entrada con debounce (mensajes entrantes reales).
+ * `messageId` es el entrante que lo provoca.
+ */
 export async function scheduleAgentTurn(
   conversationId: string,
-  organizationId?: string | null
+  organizationId?: string | null,
+  messageId?: string
 ): Promise<void> {
   const map = coalesceMap();
   const entry = map.get(conversationId) ?? {
     timer: null,
     running: false,
     pending: false,
+    debidos: new Set<string>(),
   };
   map.set(conversationId, entry);
+  if (messageId) {
+    entry.debidos.add(messageId);
+  }
 
   if (entry.running) {
     entry.pending = true; // se re-encola al terminar el turno actual
@@ -116,14 +133,25 @@ async function executeTurn(conversationId: string): Promise<void> {
   const entry = map.get(conversationId);
   if (!entry || entry.running) return;
   entry.running = true;
+
+  const deEsteTurno = [...entry.debidos];
+  entry.debidos = new Set();
+  let leido: TurnoLeido | undefined;
+
   try {
-    await runAgentTurn(conversationId);
+    leido = await runAgentTurn(conversationId, { debidos: deEsteTurno });
   } catch (err) {
     console.error("[agente] turno falló:", err);
   } finally {
     entry.running = false;
-    if (entry.pending) {
-      entry.pending = false;
+    if (!leido) {
+      for (const id of deEsteTurno) entry.debidos.add(id);
+    }
+    const quedan = quedanDebidos(entry.debidos, leido?.vistos);
+    entry.debidos = new Set(quedan);
+    const repetir = entry.pending && quedan.length > 0;
+    entry.pending = false;
+    if (repetir) {
       void executeTurn(conversationId);
     } else {
       map.delete(conversationId);
@@ -131,11 +159,17 @@ async function executeTurn(conversationId: string): Promise<void> {
   }
 }
 
+/** Lo que el turno alcanzó a leer. Ausente si no llegó a abrir el historial. */
+export type TurnoLeido = { vistos: string[] };
+
 /**
  * Ejecuta UN turno del agente ahora (el Laboratorio lo llama directo, con
  * debounce 0 y sin pasar por el coalesce).
  */
-export async function runAgentTurn(conversationId: string): Promise<void> {
+export async function runAgentTurn(
+  conversationId: string,
+  opciones: { debidos?: readonly string[] } = {}
+): Promise<TurnoLeido | undefined> {
   const db = getDb();
   const convRows = await db
     .select()
@@ -157,6 +191,17 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
   if (conversation.handoffAt || !conversation.aiEnabled) {
     console.log(`[agente] Conversación ${conversationId} silenciada: handoffAt=${conversation.handoffAt}, aiEnabled=${conversation.aiEnabled}`);
     return;
+  }
+
+  // Verificación de cuota de IA (para conversaciones reales con IA del sistema)
+  if (!conversation.isTest) {
+    const { checkAiQuota } = await import("@/server/ai/quota");
+    const quota = await checkAiQuota(organizationId);
+    if (quota.exceeded) {
+      console.warn(`[agente] Cuota de IA excedida para org ${organizationId} (${quota.usedTokensIn + quota.usedTokensOut} tokens consumidos). Pausando IA.`);
+      await applyHandoff(conversationId, organizationId, "cuota");
+      return;
+    }
   }
 
   // Resolver el asistente conversacional asignado:
@@ -282,8 +327,31 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
     .limit(20);
   rawMessages.reverse();
 
+  // 025 — Traer mensajes debidos adicionales que hayan quedado fuera de los últimos 20
+  const debidosRaw = opciones.debidos?.length
+    ? await db
+        .select()
+        .from(schema.message)
+        .where(
+          scoped(
+            schema.message.organizationId,
+            organizationId,
+            and(
+              eq(schema.message.conversationId, conversationId),
+              eq(schema.message.direction, "in"),
+              inArray(schema.message.id, [...opciones.debidos])
+            )
+          )
+        )
+    : [];
+
+  const todosRaw = [
+    ...rawMessages,
+    ...debidosRaw.filter((d) => !rawMessages.some((m) => m.id === d.id)),
+  ];
+
   // Cargar assets correspondientes a los mensajes multimedia
-  const mediaAssetIds = rawMessages
+  const mediaAssetIds = todosRaw
     .map((m) => (m as any).mediaAssetId)
     .filter((id): id is string => Boolean(id));
 
@@ -309,55 +377,67 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
   }
 
   // Enriquecer el texto efectivo de cada mensaje si tiene multimedia
-  const history = await Promise.all(
-    rawMessages.map(async (m) => {
-      let effectiveText = m.text;
-      const asset = (m as any).mediaAssetId ? assetMap.get((m as any).mediaAssetId) ?? null : null;
+  const procesarMensaje = async (m: typeof rawMessages[number]) => {
+    let effectiveText = m.text;
+    const asset = (m as any).mediaAssetId ? assetMap.get((m as any).mediaAssetId) ?? null : null;
 
-      // Si el mensaje es entrante y tiene archivo multimedia pero no texto procesado
-      if (m.direction === "in" && asset) {
-        // Si aún no está enriquecido pero hay modelo configurado, intentar enriquecerlo ahora
-        if (asset.kind === "audio" && !asset.aiTranscript && settings.aiSttModel) {
-          try {
-            const { enrichAudioMedia } = await import("@/server/ai/media-enrichment");
-            const res = await enrichAudioMedia(organizationId, asset.id);
-            if (res.ok && res.transcript) {
-              asset.aiTranscript = res.transcript;
-            }
-          } catch (e) {
-            console.warn("[agente] Error intentando enriquecer audio on-demand:", e);
+    if (m.direction === "in" && asset) {
+      if (asset.kind === "audio" && !asset.aiTranscript && settings.aiSttModel) {
+        try {
+          const { enrichAudioMedia } = await import("@/server/ai/media-enrichment");
+          const res = await enrichAudioMedia(organizationId, asset.id);
+          if (res.ok && res.transcript) {
+            asset.aiTranscript = res.transcript;
           }
-        } else if (asset.kind === "image" && !asset.aiDescription && settings.aiVisionModel) {
-          try {
-            const { enrichImageMedia } = await import("@/server/ai/media-enrichment");
-            const res = await enrichImageMedia(organizationId, asset.id);
-            if (res.ok && res.description) {
-              asset.aiDescription = res.description;
-            }
-          } catch (e) {
-            console.warn("[agente] Error intentando enriquecer imagen on-demand:", e);
-          }
+        } catch (e) {
+          console.warn("[agente] Error intentando enriquecer audio on-demand:", e);
         }
-
-        // Sintetizar el texto para el LLM siguiendo las instrucciones del Ingeniero
-        if (asset.kind === "audio" && asset.aiTranscript) {
-          effectiveText = `El usuario envió una nota de voz: "${asset.aiTranscript}"`;
-        } else if (asset.kind === "image" && asset.aiDescription) {
-          const captionPart = m.text ? `\nTexto adjunto del usuario: "${m.text}"` : "";
-          effectiveText = `El usuario envió una imagen: ${asset.aiDescription}${captionPart}`;
+      } else if (asset.kind === "image" && !asset.aiDescription && settings.aiVisionModel) {
+        try {
+          const { enrichImageMedia } = await import("@/server/ai/media-enrichment");
+          const res = await enrichImageMedia(organizationId, asset.id);
+          if (res.ok && res.description) {
+            asset.aiDescription = res.description;
+          }
+        } catch (e) {
+          console.warn("[agente] Error intentando enriquecer imagen on-demand:", e);
         }
       }
 
-      return {
-        ...m,
-        text: effectiveText,
-        asset,
-      };
-    })
-  );
+      if (asset.kind === "audio" && asset.aiTranscript) {
+        effectiveText = `El usuario envió una nota de voz: "${asset.aiTranscript}"`;
+      } else if (asset.kind === "image" && asset.aiDescription) {
+        const captionPart = m.text ? `\nTexto adjunto del usuario: "${m.text}"` : "";
+        effectiveText = `El usuario envió una imagen: ${asset.aiDescription}${captionPart}`;
+      }
+    }
+
+    return {
+      ...m,
+      text: effectiveText,
+      asset,
+    };
+  };
+
+  const [recientes, debidosProcesados] = await Promise.all([
+    Promise.all(rawMessages.map(procesarMensaje)),
+    Promise.all(debidosRaw.map(procesarMensaje)),
+  ]);
+
+  const vigentes = debidosVigentes(recientes, debidosProcesados);
+  const history = ordenarParaElTurno(recientes, vigentes);
 
   const lastInbound = [...history].reverse().find((m) => m.direction === "in");
   if (!lastInbound) return;
+
+  const leido: TurnoLeido = {
+    vistos: history.filter((m) => m.direction === "in").map((m) => m.id),
+  };
+
+  // 025 — Si una persona contestó antes del arranque del turno
+  if (opciones.debidos && !vigentes.length && atendidoPorPersona(recientes)) {
+    return leido;
+  }
 
   // Validación de mensajes multimedia sin procesar:
   // Si el último mensaje es multimedia y no tiene texto (ni directo ni enriquecido)
@@ -375,7 +455,7 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
         conversation,
         "Por el momento no puedo procesar este tipo de archivo. ¿Podrías escribir tu consulta en texto para poder ayudarte con gusto?"
       );
-      return;
+      return leido;
     }
 
     // Si había modelo pero no se pudo enriquecer (error de API / cuota / timeout):
@@ -383,13 +463,13 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
       `[agente] Fallo en enriquecimiento de media para conversación ${conversationId}. Escalando a atención humana.`
     );
     await applyHandoff(conversationId, organizationId, "error");
-    return;
+    return leido;
   }
 
   // Ventana cerrada: el agente JAMÁS envía texto libre → handoff 'ventana'.
   if (!conversation.isTest && !isWindowOpen(conversation.lastInboundAt)) {
     await applyHandoff(conversationId, organizationId, "ventana");
-    return;
+    return leido;
   }
 
   // Patrón de respaldo ANTES del LLM (FR-022). Avisa y traspasa, en el mismo
@@ -398,7 +478,7 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
   if (lastInbound.text && matchesHandoffIntent(lastInbound.text)) {
     await acknowledgeHandoff(conversation);
     await applyHandoff(conversationId, organizationId, "cliente");
-    return;
+    return leido;
   }
 
   // Cargar base de conocimiento exclusiva del asistente asignado.
@@ -489,6 +569,7 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
     ...(mapaDeHuecos
       ? [{ role: "system" as const, content: mapaDeHuecos }]
       : []),
+    { role: "system" as const, content: TURN_FORMAT_REMINDER },
   ];
  
   // Enviar indicador "escribiendo…" a WhatsApp y marcar como leído mientras el LLM genera la respuesta
@@ -513,14 +594,22 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
       }
     } else {
       console.error(`[agente] Fallo al generar respuesta de IA (${result.error}): ${result.detail}`);
-      if (result.error === "not_configured") return;
+      if (result.error === "not_configured") return leido;
       // Fallo persistente del proveedor o salida imposible → escalar (FR-022).
       console.error(`[agente] fallo del proveedor (raw): ${result.detail}`);
       await applyHandoff(conversationId, organizationId, "error");
-      return;
+      return leido;
     }
   } else {
     action = result.data;
+    if (!conversation.isTest && result.usage) {
+      const { recordAiTokens } = await import("@/server/ai/quota");
+      void recordAiTokens(
+        organizationId,
+        result.usage.prompt_tokens ?? 0,
+        result.usage.completion_tokens ?? 0
+      ).catch((err) => console.error("[agente] Error registrando consumo de tokens:", err));
+    }
   }
   console.log(`[agente] IA respondió exitosamente con acción: '${action.action}'`);
 
@@ -551,7 +640,7 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
             data: { conversation: { id: conversationId } },
           });
         }
-        return;
+        return leido;
       } catch (err) {
         console.error(`[agente] el motor de agenda falló: ${err}`);
         action = degradeAction(action);
@@ -559,42 +648,51 @@ export async function runAgentTurn(conversationId: string): Promise<void> {
     }
   }
 
+  const tools = herramientasEfectivas(profile.tools);
+
   if (action.action === "move_stage") {
-    const stage = resolveStage(action.stage, stages);
-    if (!stage) {
+    if (!tools.includes("etapa")) {
       action = degradeAction(action);
     } else {
-      await moveLeadToStage(organizationId, conversation.contactId, stage.id);
-      publish(organizationId, {
-        type: "conversation.updated",
-        data: { conversation: { id: conversationId } },
-      });
-      if (action.reply) {
-        await deliverReply(conversation, action.reply);
+      const stage = resolveStage(action.stage, stages);
+      if (!stage) {
+        action = degradeAction(action);
+      } else {
+        await moveLeadToStage(organizationId, conversation.contactId, stage.id);
+        publish(organizationId, {
+          type: "conversation.updated",
+          data: { conversation: { id: conversationId } },
+        });
+        if (action.reply) {
+          await deliverReply(conversation, action.reply);
+        }
+        return leido;
       }
-      return;
     }
   }
 
   switch (action.action) {
     case "none":
-      return;
+      return leido;
     case "reply":
       await deliverReply(conversation, action.text);
-      return;
+      return leido;
     case "update_lead": {
-      await appendLeadNote(organizationId, conversation.contactId, action.note);
+      if (tools.includes("ficha")) {
+        await appendLeadNote(organizationId, conversation.contactId, action.note);
+      }
       if (action.reply) await deliverReply(conversation, action.reply);
-      return;
+      return leido;
     }
     case "handoff": {
       if (action.farewell) {
         await deliverReply(conversation, action.farewell);
       }
       await applyHandoff(conversationId, organizationId, "modelo");
-      return;
+      return leido;
     }
   }
+  return leido;
 }
 
 type Conversation = typeof schema.conversation.$inferSelect;
@@ -673,7 +771,7 @@ async function persistTestOutbound(
 export async function applyHandoff(
   conversationId: string,
   organizationId: string,
-  reason: "cliente" | "modelo" | "error" | "ventana"
+  reason: "cliente" | "modelo" | "error" | "ventana" | "cuota"
 ): Promise<void> {
   const db = getDb();
   const updated = await db

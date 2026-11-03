@@ -8,7 +8,8 @@ import { isAiConfigured } from "@/lib/env";
  */
 export async function maybeRunAgentTurn(
   conversationId: string,
-  organizationId?: string | null
+  organizationId?: string | null,
+  messageId?: string
 ): Promise<void> {
-  await scheduleAgentTurn(conversationId, organizationId);
+  await scheduleAgentTurn(conversationId, organizationId, messageId);
 }

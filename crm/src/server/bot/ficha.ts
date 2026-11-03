@@ -124,3 +124,24 @@ export function serializeFicha(
 ): Ficha {
   return (contact.ficha as Ficha | null) ?? {};
 }
+
+/**
+ * 026 — Vacía la ficha entera. Solo para cuando se elimina la conversación de
+ * la que salió (`server/inbox/eliminar.ts`).
+ */
+export async function vaciarFicha(
+  ejecutor: Pick<ReturnType<typeof getDb>, "update">,
+  organizationId: string,
+  contactId: string
+): Promise<void> {
+  await ejecutor
+    .update(schema.contact)
+    .set({ ficha: null, updatedAt: new Date() })
+    .where(
+      scoped(
+        schema.contact.organizationId,
+        organizationId,
+        eq(schema.contact.id, contactId)
+      )
+    );
+}

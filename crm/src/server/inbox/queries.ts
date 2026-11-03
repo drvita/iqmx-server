@@ -1,7 +1,8 @@
 import { and, desc, eq, gt, inArray, isNull, or, sql } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { scoped } from "@/lib/db/tenant";
-import { isWindowOpen, windowRemainingMs } from "@/server/inbox/window";
+import { isWindowOpen, replyWindow, windowRemainingMs } from "@/server/inbox/window";
+import { capabilitiesFor, windowMsFor } from "@/server/channels/capabilities";
 import type { ConversationDto } from "@/lib/types";
 
 export async function listConversations(
@@ -211,6 +212,12 @@ export function serializeConversation(
   accountName?: string | null,
   anuncio?: ConversationDto["anuncio"]
 ): ConversationDto {
+  // 024: la extensión humana solo existe en los canales que la declaran (Instagram y Messenger).
+  const caps = capabilitiesFor(c.channel);
+  const reply =
+    caps.humanAgentWindowMs !== null
+      ? replyWindow(c.channel, c.lastInboundAt)
+      : null;
   return {
     id: c.id,
     channel: c.channel,
@@ -231,8 +238,12 @@ export function serializeConversation(
     lastInboundAt: c.lastInboundAt?.toISOString() ?? null,
     lastMessageAt: c.lastMessageAt?.toISOString() ?? null,
     unreadCount: c.unreadCount,
-    windowOpen: isWindowOpen(c.lastInboundAt),
+    windowOpen: isWindowOpen(c.lastInboundAt, new Date(), windowMsFor(c.channel)),
     windowRemainingMs: windowRemainingMs(c.lastInboundAt),
+    humanWindow: reply
+      ? { open: reply.humanAgentTag, remainingMs: reply.humanAgentTag ? reply.operatorRemainingMs : 0 }
+      : null,
+    composer: { media: caps.outboundMedia, structured: caps.structuredMessages },
     preview,
     anuncio: anuncio ?? null,
   };

@@ -139,6 +139,12 @@ export type SalesBlockDto = {
     wonCents: Comparable;
     winRate: RateDto;
     avgTicketCents: number | null;
+    roiAi?: {
+      wonAiAssistedCount: number;
+      wonAiAssistedCents: number;
+      wonHumanOnlyCount: number;
+      wonHumanOnlyCents: number;
+    };
   };
   /**
    * El embudo de HOY, no del periodo. Sin «dinero esperado»: la probabilidad
@@ -277,4 +283,5 @@ export const HANDOFF_LABEL: Record<string, string> = {
   ventana: "Ventana de 24 h cerrada",
   hostilidad: "El cliente se puso agresivo",
   manual_reply: "Respondiste desde el teléfono",
+  cuota: "Límite mensual de IA alcanzado",
 };

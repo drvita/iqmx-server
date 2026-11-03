@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { etiquetaDeOrigen, titularDeOrigen } from "@/lib/anuncios";
 import { ContactAvatar } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
-import { formatTime, previewText } from "./helpers";
+import { emptyInboxDescription, formatTime, previewText } from "./helpers";
 import { LineBadge, getLineColor } from "./line-badge";
 
 /* Puntos de etapa con la paleta de la landing: azul, ámbar, verde WhatsApp. */
@@ -23,7 +23,13 @@ const STAGE_DOT: Record<string, string> = {
 };
 const STAGE_DOT_FALLBACK = "#8391aa";
 
-function EmptyState({ onSeeded }: { onSeeded: () => void }) {
+function EmptyState({
+  onSeeded,
+  channels,
+}: {
+  onSeeded: () => void;
+  channels: readonly Channel[];
+}) {
   const [seeding, setSeeding] = useState(false);
   const [failed, setFailed] = useState(false);
 
@@ -42,9 +48,8 @@ function EmptyState({ onSeeded }: { onSeeded: () => void }) {
       <p className="font-serif text-[21px] italic leading-tight text-foreground">
         Sin conversaciones todavía
       </p>
-      <p className="text-xs text-text-3">
-        Cuando alguien escriba a tu número de WhatsApp, su conversación
-        aparecerá aquí en tiempo real.
+      <p className="text-xs text-muted-foreground">
+        {emptyInboxDescription(channels.map((ch) => CHANNEL_LABEL[ch]))}
       </p>
       {!failed && (
         <Button
@@ -341,10 +346,17 @@ export function ConversationList({
         {loading ? (
           <p className="p-6 text-center text-xs text-text-3">Cargando…</p>
         ) : conversations.length === 0 ? (
-          <EmptyState onSeeded={onSeeded} />
+          <EmptyState onSeeded={onSeeded} channels={channels} />
         ) : visible.length === 0 ? (
           <p className="p-6 text-center text-xs text-text-3">
-            Sin resultados para este filtro.
+            {/* 028: un canal en el que nadie ha escrito no es una búsqueda fallida */}
+            {inbox !== "all" &&
+            !query &&
+            filter === "all" &&
+            stage === "all" &&
+            !conversations.some((c) => c.channel === inbox)
+              ? `Nadie ha escrito por ${CHANNEL_LABEL[inbox]} todavía.`
+              : "Sin resultados para este filtro."}
           </p>
         ) : (
           <ul>

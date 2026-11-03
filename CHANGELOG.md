@@ -7,6 +7,52 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 > **Zona horaria de referencia:** Ciudad de México (CST / UTC-6).
 
+## [1.19.0] - 2026-11-02
+
+### Añadido
+
+- **Almacenamiento en Nube AWS S3 / Compatible por Organización (`crm/`)**:
+  - **Esquema de Base de Datos y Persistencia Cifrada**:
+    - Nueva tabla `storage_credentials` con soporte multi-tenant (`organization_id`), campos `endpoint`, `bucket_name`, `region`, `access_key_id` y secreto `secret_access_key` cifrado en reposo con AES-256-GCM ([`crm/src/lib/db/schema.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/db/schema.ts)).
+    - Migración DDL generada y aplicada: [`crm/drizzle/0029_silly_ares.sql`](file:///Users/laclavees12345/code/iqissmexico/main/crm/drizzle/0029_silly_ares.sql).
+  - **Cliente y Adaptador Híbrido S3**:
+    - Cliente SigV4 ligero sin SDK pesado en [`crm/src/lib/storage/objetos.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/storage/objetos.ts).
+    - Adaptador multi-tenant en [`crm/src/lib/storage/medios.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/storage/medios.ts) que sube al bucket S3 configurado por la empresa con respaldo y fallback transparente al disco local ante interrupciones de red.
+  - **Interfaz de Usuario y Gestión en Configuración**:
+    - Nueva pestaña **«Almacenamiento»** en el menú de navegación de ajustes ([`crm/src/components/settings/settings-nav.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/settings/settings-nav.tsx)).
+    - Nueva pantalla y cliente en [`crm/src/app/(app)/settings/storage/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/%28app%29/settings/storage/page.tsx) y [`crm/src/components/settings/storage-client.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/settings/storage-client.tsx) con interruptor de activación, campos para AWS S3, Cloudflare R2 o MinIO, y botón de validación inmediata con subida y lectura de prueba.
+
+- **Control de Cuotas Mensuales de Tokens de Inteligencia Artificial (`crm/`)**:
+  - **Contabilización y Control de Consumo**:
+    - Nueva tabla `ai_usage_monthly` para registro mensual estructurado de tokens de entrada (`tokens_in`) y de salida (`tokens_out`) por organización ([`crm/src/lib/db/schema.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/db/schema.ts)).
+    - Migración DDL generada y aplicada: [`crm/drizzle/0030_smooth_flatman.sql`](file:///Users/laclavees12345/code/iqissmexico/main/crm/drizzle/0030_smooth_flatman.sql).
+    - Servicio [`crm/src/server/ai/quota.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/ai/quota.ts) para verificar cuota mensual y registrar consumos reales extraídos del adaptador LLM.
+    - Captura de uso de tokens en `callProvider` ([`crm/src/lib/ai/index.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/ai/index.ts)).
+  - **Pausa Automática y Transferencia a Humanos por Cuota**:
+    - Pausa automática de IA en el pipeline conversacional ([`crm/src/server/ai/pipeline.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/ai/pipeline.ts)) ante el agotamiento de cuota (`maxTokensIn` o `maxTokensOut`) en planes con IA del sistema, aplicando `handoffReason: "cuota"` y cediendo el turno a asesores humanos sin perder mensajes.
+    - Inclusión del nuevo motivo en [`crm/src/components/inbox/contact-panel.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/contact-panel.tsx) y [`crm/src/lib/analytics.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/analytics.ts).
+  - **Visualización en Interfaz de Usuario**:
+    - Tarjeta interactiva **«Consumo y Cuota Mensual de IA»** en [`crm/src/components/settings/ai-client.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/settings/ai-client.tsx) con barras de progreso de tokens de entrada y salida, semáforo de estado (Activo, Preventivo 80%, Límite alcanzado) y distinción para cuentas con llave privada de OpenRouter.
+
+- **Modo Híbrido de IA y Contexto de Anuncio (`adOrigen`) para Bots Externos**:
+  - Enriquecimiento del endpoint [`crm/src/app/api/bot/context/route.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/bot/context/route.ts) con el bloque `adOrigen` (titular, cuerpo, URL de origen y flag de Click-to-WhatsApp) permitiendo que asistentes externos sincronicen el anuncio publicitario de Meta que atrajo al prospecto.
+  - Sección visual explicativa del Modo Híbrido y contratos de integración en [`crm/src/components/settings/ai-client.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/settings/ai-client.tsx).
+
+- **Métricas de Retorno de Inversión (ROI) de Ventas con IA (`crm/`)**:
+  - Desglose analítico en [`crm/src/server/analytics/sales.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/analytics/sales.ts) y [`crm/src/lib/analytics.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/analytics.ts) clasificando el monto y volumen de tratos ganados asistidos por IA versus tratos cerrados exclusivamente por vendedores humanos.
+  - Bloque visual **«Impacto del Asistente IA en Ventas Cerradas»** en [`crm/src/components/results/sales-section.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/results/sales-section.tsx).
+
+- **Conexión Ágil de Redes Sociales (Instagram y Messenger) con Zernio**:
+  - Cifrado AES-256-GCM para secretos de webhooks en `instagram_credentials` y `messenger_credentials` con migración [`crm/drizzle/0028_lazy_sir_ram.sql`](file:///Users/laclavees12345/code/iqissmexico/main/crm/drizzle/0028_lazy_sir_ram.sql).
+  - Autodescubrimiento de cuentas y registro automático de webhooks en [`crm/src/server/zernio/`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/zernio/).
+  - Componente de conexión de 1 clic [`crm/src/components/settings/zernio-connect.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/settings/zernio-connect.tsx) integrado en los clientes de Instagram y Messenger.
+
+- **UX y Accesibilidad en Gestión de Contactos (`crm/`)**:
+  - Incorporación del switch accesible `Switch` para «Pausar atención de IA» en alta manual de contacto ([`crm/src/components/contacts/new-contact-dialog.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/contacts/new-contact-dialog.tsx)), edición de contacto ([`crm/src/components/contacts/contacts-client.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/contacts/contacts-client.tsx)) e importación CSV ([`crm/src/components/contacts/import-contacts-dialog.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/contacts/import-contacts-dialog.tsx)).
+  - Recepción del parámetro `aiPaused` en [`crm/src/app/api/contacts/route.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/app/api/contacts/route.ts).
+
+---
+
 ## [1.18.1] - 2026-10-16
 
 ### Corregido

@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ZernioConnect } from "@/components/settings/zernio-connect";
 import { cn } from "@/lib/utils";
 
 /**
@@ -432,64 +433,48 @@ export function MessengerClient() {
             ))}
           </ul>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            {source === "zernio" ? (
-              <div className="space-y-1.5">
-                <Label htmlFor="fb-account">accountId de Zernio</Label>
-                <Input
-                  id="fb-account"
-                  value={accountRef}
-                  onChange={(e) => setAccountRef(e.target.value)}
-                  placeholder="665f1c2e8b3a4d0012345678"
-                  autoComplete="off"
-                />
+          {source === "zernio" ? (
+            <ZernioConnect
+              endpoint="/api/settings/messenger"
+              extraBody={{ source: "zernio" }}
+              what="tu página de Facebook"
+              idPrefix="fb"
+              onSaved={() => void refetch()}
+            />
+          ) : (
+            <>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="fb-page-id">ID de la página</Label>
+                  <Input
+                    id="fb-page-id"
+                    value={pageId}
+                    onChange={(e) => setPageId(e.target.value)}
+                    placeholder="1234567890"
+                    autoComplete="off"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="fb-token">Token de la página</Label>
+                  <Input
+                    id="fb-token"
+                    type="password"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    placeholder="EAAG…"
+                    autoComplete="off"
+                  />
+                </div>
               </div>
-            ) : (
-              <div className="space-y-1.5">
-                <Label htmlFor="fb-page-id">ID de la página</Label>
-                <Input
-                  id="fb-page-id"
-                  value={pageId}
-                  onChange={(e) => setPageId(e.target.value)}
-                  placeholder="1234567890"
-                  autoComplete="off"
-                />
-              </div>
-            )}
-            <div className="space-y-1.5">
-              <Label htmlFor="fb-token">
-                {source === "zernio" ? "API key de Zernio" : "Token de la página"}
-              </Label>
-              <Input
-                id="fb-token"
-                type="password"
-                value={token}
-                onChange={(e) => setToken(e.target.value)}
-                placeholder={source === "zernio" ? "sk_…" : "EAAG…"}
-                autoComplete="off"
-              />
-            </div>
-            {source === "zernio" && (
-              <div className="space-y-1.5">
-                <Label htmlFor="fb-secret">Secreto del webhook (opcional)</Label>
-                <Input
-                  id="fb-secret"
-                  type="password"
-                  value={webhookSecret}
-                  onChange={(e) => setWebhookSecret(e.target.value)}
-                  placeholder="el mismo que pusiste en Zernio"
-                  autoComplete="off"
-                />
-              </div>
-            )}
-          </div>
 
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          {saved && <p className="text-sm text-success-text">{saved} ✓</p>}
+              {error && <p className="text-sm text-destructive">{error}</p>}
+              {saved && <p className="text-sm text-success-text">{saved} ✓</p>}
 
-          <Button disabled={saving || !canSave} onClick={() => void save()}>
-            {saving ? "Probando…" : "Probar y guardar"}
-          </Button>
+              <Button disabled={saving || !canSave} onClick={() => void save()}>
+                {saving ? "Probando…" : "Probar y guardar"}
+              </Button>
+            </>
+          )}
         </CardContent>
       </Card>
 

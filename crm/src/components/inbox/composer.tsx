@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type DragEvent } from "react";
 import {
   Clock3,
   FileText,
@@ -12,8 +12,14 @@ import {
 } from "lucide-react";
 import type { ConversationDto, TemplateDto } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { formatBytes, formatRemaining } from "./helpers";
+import { CHANNEL_LABEL } from "@/lib/channels";
+import { formatBytes, formatRemaining, formatRemainingLong, citaDe } from "./helpers";
+import { QuoteBlock } from "./quote-block";
 import { TemplateSender } from "./template-sender";
+import { EmojiPicker } from "./emoji-picker";
+import { insertAtSelection } from "@/lib/emojis";
+import { validarImagenAdjunta } from "@/lib/imagen-adjunta";
+import type { MessageDto } from "@/lib/types";
 
 /** 008 — Panel secundario del clip: formulario de ubicación o contacto. */
 type AttachPanel = "location" | "contact" | null;
@@ -35,10 +41,14 @@ export function Composer({
   conversation,
   onSend,
   onSent,
+  replyTo = null,
+  onReplyChange,
 }: {
   conversation: ConversationDto;
-  onSend: (text: string) => Promise<string | null>;
+  onSend: (text: string, replyTo?: MessageDto | null) => Promise<string | null>;
   onSent: () => void;
+  replyTo?: MessageDto | null;
+  onReplyChange?: (m: MessageDto | null) => void;
 }) {
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
@@ -53,6 +63,31 @@ export function Composer({
   const [contactPhone, setContactPhone] = useState("");
   const taRef = useRef<HTMLTextAreaElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const mediaSending = useRef(false);
+  const dragDepth = useRef(0);
+  const [dragging, setDragging] = useState(false);
+
+  // 039: al elegir «Responder» se escribe ya, sin buscar el campo.
+  useEffect(() => {
+    if (replyTo) taRef.current?.focus();
+  }, [replyTo]);
+
+  const replyField = replyTo ? { replyToMessageId: replyTo.id } : {};
+
+  // 043 — Soltar un archivo fuera del chat abriría el archivo en la pestaña
+  useEffect(() => {
+    const esArchivo = (e: globalThis.DragEvent) =>
+      Array.from(e.dataTransfer?.types ?? []).includes("Files");
+    const frenar = (e: globalThis.DragEvent) => {
+      if (esArchivo(e)) e.preventDefault();
+    };
+    window.addEventListener("dragover", frenar);
+    window.addEventListener("drop", frenar);
+    return () => {
+      window.removeEventListener("dragover", frenar);
+      window.removeEventListener("drop", frenar);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -90,6 +125,48 @@ export function Composer({
     setError(null);
   }
 
+  function attachImage(files: File[], origen: "paste" | "drop") {
+    if (sending || mediaSending.current) return;
+    if (conversation.channel !== "whatsapp") {
+      setError(`Pegar y arrastrar imágenes está disponible en WhatsApp; ${CHANNEL_LABEL[conversation.channel]} no admite adjuntos.`);
+      return;
+    }
+    if (!conversation.windowOpen) {
+      setError("La ventana está cerrada: no se puede adjuntar una imagen. Solo sale una plantilla.");
+      return;
+    }
+    const result = validarImagenAdjunta(files, origen);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    pickFile(result.file);
+    taRef.current?.focus();
+  }
+
+  function isFileDrag(e: DragEvent<HTMLDivElement>) {
+    return Array.from(e.dataTransfer.types).includes("Files");
+  }
+
+  function modalAbierto(e: DragEvent<HTMLDivElement>) {
+    return e.currentTarget.querySelector('[role="dialog"][aria-modal="true"]') !== null;
+  }
+
+  function insertEmoji(emoji: string) {
+    const el = taRef.current;
+    const start = el?.selectionStart ?? text.length;
+    const end = el?.selectionEnd ?? text.length;
+    const next = insertAtSelection(text, start, end, emoji);
+    setText(next.text);
+    setError(null);
+    requestAnimationFrame(() => {
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(next.caret, next.caret);
+      autogrow();
+    });
+  }
+
   async function apiSend(path: string, init: RequestInit): Promise<string | null> {
     const res = await fetch(path, init);
     if (res.ok) return null;
@@ -103,17 +180,20 @@ export function Composer({
     if (file) {
       // El adjunto sí espera: sube el archivo y no tiene sentido encolar otro
       // mientras tanto.
-      if (sending) return;
+      if (sending || mediaSending.current) return;
       setSending(true);
+      mediaSending.current = true;
       const form = new FormData();
       form.set("file", file);
       const caption = text.trim();
       if (caption) form.set("caption", caption);
+      if (replyTo) form.set("replyToMessageId", replyTo.id);
       const err = await apiSend(
         `/api/conversations/${conversation.id}/messages/media`,
         { method: "POST", body: form }
       );
       setSending(false);
+      mediaSending.current = false;
       if (err) {
         setError(err);
         return;
@@ -121,6 +201,7 @@ export function Composer({
       pickFile(null);
       setText("");
       if (taRef.current) taRef.current.style.height = "auto";
+      onReplyChange?.(null);
       onSent();
       return;
     }
@@ -131,14 +212,17 @@ export function Composer({
     // durante ese rato el renglón siguiente se escribía encima del anterior y
     // salía todo como un solo mensaje. El campo se limpia ya; la burbuja
     // "enviando" del hilo es la que informa el estado real.
+    const replyingSnapshot = replyTo;
+    onReplyChange?.(null);
     setText("");
     if (taRef.current) taRef.current.style.height = "auto";
-    const err = await onSend(value);
+    const err = await onSend(value, replyingSnapshot);
     if (err) {
       setError(err);
       // Lo que no salió vuelve al campo. Si ya empezaste a escribir otra cosa
       // se antepone en vez de pisarte: nada se pierde en silencio.
       setText((actual) => (actual ? `${value}\n${actual}` : value));
+      if (replyingSnapshot) onReplyChange?.(replyingSnapshot);
       taRef.current?.focus();
       setTimeout(autogrow, 0);
     }
@@ -158,6 +242,7 @@ export function Composer({
       body: JSON.stringify({
         type: "location",
         location: { ...coords, ...(placeName.trim() ? { name: placeName.trim() } : {}) },
+        ...replyField,
       }),
     });
     setSending(false);
@@ -168,6 +253,7 @@ export function Composer({
     setPanel(null);
     setCoordsRaw("");
     setPlaceName("");
+    onReplyChange?.(null);
     onSent();
   }
 
@@ -184,6 +270,7 @@ export function Composer({
       body: JSON.stringify({
         type: "contacts",
         contacts: [{ name: contactName.trim(), phone: contactPhone.trim() }],
+        ...replyField,
       }),
     });
     setSending(false);
@@ -194,10 +281,37 @@ export function Composer({
     setPanel(null);
     setContactName("");
     setContactPhone("");
+    onReplyChange?.(null);
     onSent();
   }
 
-  if (!conversation.windowOpen) {
+  // 024 — Instagram y Messenger no tienen plantillas. Pasadas 24 horas una
+  // persona todavía puede contestar (hasta 7 días, sigue abajo con su aviso);
+  // pasado ese plazo no hay nada que ofrecer salvo esperar al cliente.
+  const human = conversation.humanWindow;
+  const canal = CHANNEL_LABEL[conversation.channel];
+  if (!conversation.windowOpen && human && !human.open) {
+    return (
+      <div className="border-t bg-background px-[18px] py-3.5">
+        <div
+          data-window="closed"
+          className="flex items-start gap-2 rounded-md border border-warning-soft bg-warning-tint p-3 text-sm text-warning-text"
+        >
+          <Clock3 className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.7} />
+          <div>
+            <p className="font-medium">La ventana de atención de {canal} está cerrada.</p>
+            <p className="opacity-80">
+              {canal} deja contestar hasta 7 días después del último mensaje
+              del cliente, y no tiene plantillas para reabrir la conversación.
+              Podrás escribirle cuando vuelva a mandar un mensaje.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!conversation.windowOpen && !human) {
     return (
       <div className="border-t bg-background px-[18px] py-3.5">
         <div className="mb-3 flex items-start gap-2 rounded-md border border-warning-soft bg-warning-tint p-3 text-sm text-warning-text">
@@ -221,9 +335,62 @@ export function Composer({
   }
 
   const canSubmit = file !== null || text.trim().length > 0;
+  const acceptsDrop = conversation.channel === "whatsapp" && conversation.windowOpen && !sending;
+  const soloPersona = !conversation.windowOpen && Boolean(human?.open);
 
   return (
-    <div className="border-t bg-background px-[18px] pb-3.5 pt-3">
+    <div
+      role="region"
+      aria-label="Chat: adjuntar imagen"
+      className="relative border-t bg-background px-[18px] pb-3.5 pt-3"
+      onDragEnter={(e) => {
+        if (!isFileDrag(e)) return;
+        e.preventDefault();
+        dragDepth.current++;
+        if (acceptsDrop && !modalAbierto(e)) setDragging(true);
+      }}
+      onDragOver={(e) => {
+        if (!isFileDrag(e)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = acceptsDrop ? "copy" : "none";
+      }}
+      onDragLeave={(e) => {
+        if (!isFileDrag(e)) return;
+        dragDepth.current = Math.max(0, dragDepth.current - 1);
+        if (dragDepth.current === 0) setDragging(false);
+      }}
+      onDrop={(e) => {
+        if (!isFileDrag(e)) return;
+        e.preventDefault();
+        dragDepth.current = 0;
+        setDragging(false);
+        if (modalAbierto(e)) return;
+        attachImage(Array.from(e.dataTransfer.files), "drop");
+      }}
+    >
+      {soloPersona && (
+        <div
+          data-window="human"
+          className="mb-2.5 flex items-start gap-2 rounded-md border border-blue-500/20 bg-blue-500/10 p-2.5 text-xs text-blue-700 dark:text-blue-300"
+        >
+          <Clock3 className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.7} />
+          <p>
+            <span className="font-semibold">Solo puede contestar una persona.</span>{" "}
+            Pasaron más de 24 horas desde el último mensaje del cliente: {canal}{" "}
+            te deja responder a ti hasta 7 días, al agente ya no.
+          </p>
+        </div>
+      )}
+      {dragging && acceptsDrop && (
+        <div
+          role="status"
+          className="pointer-events-none absolute inset-2 z-20 flex items-center justify-center rounded-xl border-2 border-dashed border-brand bg-brand-tint p-4"
+        >
+          <p className="rounded-md bg-background px-4 py-3 text-center text-sm font-semibold text-brand shadow-sm">
+            Suelta la imagen para adjuntarla
+          </p>
+        </div>
+      )}
       {templates.length > 0 && !file && panel === null && (
         <div className="mb-2.5 flex flex-wrap gap-1.5">
           {templates.slice(0, 4).map((t) => (
@@ -241,6 +408,27 @@ export function Composer({
               {t.name.replace(/_/g, " ")}
             </button>
           ))}
+        </div>
+      )}
+
+      {replyTo && (
+        <div
+          data-replying-to={replyTo.id}
+          className="mb-2.5 flex items-center gap-2 rounded-md border bg-subtle p-2"
+        >
+          <QuoteBlock
+            cita={citaDe(replyTo)}
+            contactName={conversation.contact.name}
+            className="flex-1"
+          />
+          <button
+            onClick={() => onReplyChange?.(null)}
+            aria-label="Cancelar respuesta"
+            title="Cancelar respuesta"
+            className="shrink-0 rounded p-1 text-text-3 hover:bg-secondary hover:text-foreground"
+          >
+            <X className="h-4 w-4" strokeWidth={1.7} />
+          </button>
         </div>
       )}
 
@@ -347,50 +535,77 @@ export function Composer({
       )}
 
       {/* La caja de escritura en píldora, como la del mockup de la landing */}
-      <div className="flex items-end gap-2 rounded-[23px] border border-border-strong bg-background py-1.5 pl-2 pr-1.5 shadow-sm transition-[border-color,box-shadow] focus-within:border-brand focus-within:ring-[3px] focus-within:ring-brand-soft">
+      <div className="relative flex items-end gap-2 rounded-[23px] border border-border-strong bg-background py-1.5 pl-2 pr-1.5 shadow-sm transition-[border-color,box-shadow] focus-within:border-brand focus-within:ring-[3px] focus-within:ring-brand-soft">
         <input
           ref={fileRef}
           type="file"
           className="hidden"
           onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
         />
-        <div className="flex shrink-0 items-center gap-0.5">
-          <button
-            onClick={() => fileRef.current?.click()}
-            aria-label="Adjuntar archivo"
-            title="Adjuntar imagen, video, audio o documento"
-            className="rounded p-1.5 text-text-3 transition-colors hover:bg-secondary hover:text-foreground"
-          >
-            <Paperclip className="h-[18px] w-[18px]" strokeWidth={1.7} />
-          </button>
-          <button
-            onClick={() => setPanel(panel === "location" ? null : "location")}
-            aria-label="Enviar ubicación"
-            title="Enviar ubicación"
-            className={cn(
-              "rounded p-1.5 text-text-3 transition-colors hover:bg-secondary hover:text-foreground",
-              panel === "location" && "bg-secondary text-brand"
+        {/* 028: solo lo que el canal puede mandar; en redes sociales, la caja sola */}
+        {(conversation.composer?.media !== false || conversation.composer?.structured) && (
+          <div className="flex shrink-0 items-center gap-0.5">
+            {conversation.composer?.media !== false && (
+              <button
+                onClick={() => fileRef.current?.click()}
+                aria-label="Adjuntar archivo"
+                title="Adjuntar imagen, video, audio o documento"
+                className="rounded p-1.5 text-text-3 transition-colors hover:bg-secondary hover:text-foreground"
+              >
+                <Paperclip className="h-[18px] w-[18px]" strokeWidth={1.7} />
+              </button>
             )}
-          >
-            <MapPin className="h-[18px] w-[18px]" strokeWidth={1.7} />
-          </button>
-          <button
-            onClick={() => setPanel(panel === "contact" ? null : "contact")}
-            aria-label="Compartir contacto"
-            title="Compartir contacto"
-            className={cn(
-              "rounded p-1.5 text-text-3 transition-colors hover:bg-secondary hover:text-foreground",
-              panel === "contact" && "bg-secondary text-brand"
+            {conversation.composer?.structured && (
+              <>
+                <button
+                  onClick={() => setPanel(panel === "location" ? null : "location")}
+                  aria-label="Enviar ubicación"
+                  title="Enviar ubicación"
+                  className={cn(
+                    "rounded p-1.5 text-text-3 transition-colors hover:bg-secondary hover:text-foreground",
+                    panel === "location" && "bg-secondary text-brand"
+                  )}
+                >
+                  <MapPin className="h-[18px] w-[18px]" strokeWidth={1.7} />
+                </button>
+                <button
+                  onClick={() => setPanel(panel === "contact" ? null : "contact")}
+                  aria-label="Compartir contacto"
+                  title="Compartir contacto"
+                  className={cn(
+                    "rounded p-1.5 text-text-3 transition-colors hover:bg-secondary hover:text-foreground",
+                    panel === "contact" && "bg-secondary text-brand"
+                  )}
+                >
+                  <UserRound className="h-[18px] w-[18px]" strokeWidth={1.7} />
+                </button>
+              </>
             )}
-          >
-            <UserRound className="h-[18px] w-[18px]" strokeWidth={1.7} />
-          </button>
-        </div>
+            <EmojiPicker
+              disabled={sending}
+              onSelect={insertEmoji}
+              onOpen={() => setPanel(null)}
+            />
+          </div>
+        )}
         <textarea
           ref={taRef}
           placeholder={file ? "Pie del adjunto (opcional)…" : "Escribe una respuesta…"}
           value={text}
           rows={1}
+          onPaste={(e) => {
+            const images = Array.from(e.clipboardData.items).filter(
+              (item) => item.kind === "file" && item.type.startsWith("image/")
+            );
+            if (images.length === 0) return; // texto: el pegado de siempre
+            e.preventDefault();
+            const files = images.map((item) => item.getAsFile());
+            if (files.some((f) => !f)) {
+              setError("No se pudo leer la imagen del portapapeles. Cópiala de nuevo.");
+              return;
+            }
+            attachImage(files as File[], "paste");
+          }}
           onChange={(e) => {
             setText(e.target.value);
             autogrow();
@@ -399,6 +614,8 @@ export function Composer({
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
               void submit();
+            } else if (e.key === "Escape" && replyTo) {
+              onReplyChange?.(null);
             }
           }}
           className="max-h-[120px] w-full resize-none self-center bg-transparent py-1 text-sm leading-relaxed outline-none placeholder:text-text-3"
@@ -417,8 +634,10 @@ export function Composer({
       </div>
       <div className="mt-1.5 flex items-center justify-between">
         {error ? <p className="text-xs text-destructive">{error}</p> : <span />}
-        <p className="font-mono text-[10.5px] tracking-[0.04em] text-text-3">
-          Ventana abierta · quedan {formatRemaining(conversation.windowRemainingMs)}
+        <p className="font-mono text-[10.5px] tracking-[0.04em] text-muted-foreground">
+          {soloPersona
+            ? `Ventana humana · quedan ${formatRemainingLong(human!.remainingMs)}`
+            : `Ventana abierta · quedan ${formatRemaining(conversation.windowRemainingMs)}`}
         </p>
       </div>
     </div>

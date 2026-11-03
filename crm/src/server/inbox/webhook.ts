@@ -78,6 +78,27 @@ export type WebhookReferral = {
 };
 
 /**
+ * #78 — Respuesta a un botón de respuesta rápida de una PLANTILLA
+ * (`type: "button"`): `text` es el rótulo que vio el cliente y `payload` el
+ * que se definió al crear la plantilla (en la práctica, el mismo rótulo).
+ */
+export type WebhookButtonReply = {
+  text?: string;
+  payload?: string;
+};
+
+/**
+ * #78 — Respuesta a un mensaje INTERACTIVO (`type: "interactive"`): un botón
+ * (`button_reply`) o una fila de lista (`list_reply`). Meta pone en `type`
+ * cuál de los dos viene.
+ */
+export type WebhookInteractiveReply = {
+  type?: string;
+  button_reply?: { id?: string; title?: string };
+  list_reply?: { id?: string; title?: string; description?: string };
+};
+
+/**
  * 017 — Mapea la estructura de referral de Meta (Messenger e Instagram)
  * al formato unificado WebhookReferral que el CRM almacena en ad_attribution.
  */
@@ -159,6 +180,12 @@ export type WebhookMessage = {
   sticker?: WebhookMediaPayload;
   location?: WebhookLocation;
   contacts?: unknown[];
+  /** #78: respuesta a un botón de plantilla. */
+  button?: WebhookButtonReply;
+  /** #78: respuesta a un botón o a una lista de un mensaje interactivo. */
+  interactive?: WebhookInteractiveReply;
+  /** El mensaje al que responde (botones, citas): `id` es su wa_message_id. */
+  context?: { from?: string; id?: string };
   /** 016: origen del anuncio, cuando la conversación nació de uno. */
   referral?: WebhookReferral;
 };

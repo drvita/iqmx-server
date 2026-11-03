@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Check, ChevronRight, Sparkles, UserRound } from "lucide-react";
+import { Check, ChevronRight, Sparkles, Trash2, UserRound } from "lucide-react";
 import type {
   AnuncioDto,
   ConversationDto,
@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { FichaPanel } from "@/components/ficha-panel";
+import { DeleteConversationDialog } from "./delete-conversation-dialog";
 import { LineBadge } from "./line-badge";
 
 const HANDOFF_LABELS: Record<string, string> = {
@@ -27,12 +28,14 @@ const HANDOFF_LABELS: Record<string, string> = {
   error: "Error del proveedor de IA",
   ventana: "Ventana de 24h cerrada",
   manual_reply: "Respondiste desde el teléfono — IA en pausa",
+  cuota: "Límite mensual de IA alcanzado — IA en pausa",
 };
 
 export function ContactPanel({
   conversation,
   refreshKey = 0,
   onPatchConversation,
+  onDeleteConversation,
   onClose,
 }: {
   conversation: ConversationDto;
@@ -42,8 +45,11 @@ export function ContactPanel({
     aiEnabled?: boolean;
     reactivate?: boolean;
   }) => Promise<void>;
+  /** 026 — Ausente = quien mira no puede eliminar: no se le ofrece. */
+  onDeleteConversation?: (alsoContact: boolean) => Promise<string | null>;
   onClose: () => void;
 }) {
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [notes, setNotes] = useState("");
   const [ficha, setFicha] = useState<FichaDto>({});
   const [notesLoaded, setNotesLoaded] = useState(false);
@@ -370,7 +376,29 @@ export function ContactPanel({
             {savingNotes ? "Guardando…" : "Guardar notas"}
           </Button>
         </section>
+
+        {/* 026 — Al fondo y discreto: eliminar conversación */}
+        {onDeleteConversation && (
+          <section className="p-4">
+            <button
+              type="button"
+              onClick={() => setConfirmingDelete(true)}
+              className="flex items-center gap-1.5 rounded text-[13px] text-muted-foreground transition-colors hover:text-destructive focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Trash2 className="h-3.5 w-3.5" strokeWidth={1.7} />
+              Eliminar conversación…
+            </button>
+          </section>
+        )}
       </div>
+
+      {confirmingDelete && onDeleteConversation && (
+        <DeleteConversationDialog
+          contactName={conversation.contact.name}
+          onCancel={() => setConfirmingDelete(false)}
+          onConfirm={onDeleteConversation}
+        />
+      )}
     </div>
   );
 }

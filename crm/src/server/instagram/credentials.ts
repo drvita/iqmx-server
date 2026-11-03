@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { decryptSecret, encryptSecret } from "@/lib/crypto";
+import { columnasDelSecreto, secretoDeLaFila } from "@/server/zernio/secreto-guardado";
 
 /**
  * 014 — Credenciales del canal de Instagram.
@@ -35,7 +36,7 @@ function toCredentials(row: Row): InstagramCredentials {
     igUserId: row.igUserId,
     accountRef: row.accountRef,
     username: row.username,
-    webhookSecret: row.webhookSecret,
+    webhookSecret: secretoDeLaFila(row),
     status: row.status,
     aiEnabled: row.aiEnabled,
     assistantId: row.assistantId,
@@ -106,7 +107,7 @@ export async function saveInstagramCredentials(input: {
     tokenCipher: enc.cipher,
     tokenIv: enc.iv,
     tokenTag: enc.tag,
-    webhookSecret: input.webhookSecret,
+    ...columnasDelSecreto(input.webhookSecret),
     status: "connected" as const,
     ...(input.aiEnabled !== undefined ? { aiEnabled: input.aiEnabled } : {}),
     ...(input.assistantId !== undefined ? { assistantId: input.assistantId } : {}),

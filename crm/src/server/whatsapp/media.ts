@@ -8,6 +8,7 @@ import {
   getCredentialsByOrg,
   type Credentials,
 } from "@/server/whatsapp/credentials";
+import { isForbiddenUploadMime } from "@/server/whatsapp/media-headers";
 
 /**
  * 008 — Única frontera de media con la Graph API (constitución II: todo el
@@ -76,6 +77,12 @@ export function validateOutgoing(mime: string, sizeBytes: number) {
   if (!/^[\w.-]+\/[\w.+-]+$/.test(mime)) {
     throw new MediaValidationError("unsupported_type", "Tipo de archivo no reconocido");
   }
+  if (isForbiddenUploadMime(mime)) {
+    throw new MediaValidationError(
+      "unsupported_type",
+      "Los archivos HTML y SVG no se pueden enviar como adjunto: un navegador los abriría como página. Conviértelo a PDF o a imagen"
+    );
+  }
   const kind = kindFromMime(mime);
   const limit = MEDIA_LIMITS[kind];
   if (sizeBytes > limit.maxBytes) {
@@ -100,22 +107,27 @@ export function mediaFilePath(organizationId: string, assetId: string): string {
   return path.join(getEnv().MEDIA_DIR, organizationId, assetId);
 }
 
+import { guardarMedio, leerMedio, borrarMedio } from "@/lib/storage/medios";
+
 export async function saveMediaFile(
   organizationId: string,
   assetId: string,
   data: Buffer | Uint8Array
 ): Promise<string> {
-  const file = mediaFilePath(organizationId, assetId);
-  await mkdir(path.dirname(file), { recursive: true });
-  await writeFile(file, data);
-  return path.join(organizationId, assetId); // ruta relativa persistida en BD
+  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  const res = await guardarMedio(organizationId, assetId, buf);
+  return res.ruta; // ruta relativa persistida en BD
 }
 
 export async function readMediaFile(
   organizationId: string,
   assetId: string
 ): Promise<Buffer> {
-  return readFile(mediaFilePath(organizationId, assetId));
+  const buf = await leerMedio(organizationId, assetId);
+  if (!buf) {
+    throw new Error(`Archivo no encontrado: ${organizationId}/${assetId}`);
+  }
+  return buf;
 }
 
 /**
@@ -125,7 +137,7 @@ export async function deleteMediaFile(
   organizationId: string,
   assetId: string
 ): Promise<void> {
-  await rm(mediaFilePath(organizationId, assetId), { force: true });
+  await borrarMedio(organizationId, assetId);
 }
 
 /* ---------- Descarga desde Graph (entrantes y echoes) ---------- */

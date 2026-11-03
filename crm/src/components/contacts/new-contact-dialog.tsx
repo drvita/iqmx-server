@@ -1,10 +1,11 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useState } from "react";
 import type { SourceValue, StageDto } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 
 const SOURCES: { value: SourceValue; label: string }[] = [
   { value: "referido", label: "Referido" },
@@ -33,6 +34,7 @@ export function NewContactDialog({
   const [phone, setPhone] = useState("");
   const [source, setSource] = useState<SourceValue>("referido");
   const [notes, setNotes] = useState("");
+  const [aiPaused, setAiPaused] = useState(false);
   const [stages, setStages] = useState<StageDto[]>([]);
   const [stageId, setStageId] = useState("");
   const [saving, setSaving] = useState(false);
@@ -65,6 +67,7 @@ export function NewContactDialog({
         source,
         notes: notes.trim() || undefined,
         stageId: stageId || undefined,
+        aiPaused,
       }),
     }).catch(() => null);
     setSaving(false);
@@ -188,6 +191,22 @@ export function NewContactDialog({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Me lo pasó Juan; tiene taller de motos…"
+            />
+          </div>
+
+          <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/20">
+            <div className="space-y-0.5">
+              <label htmlFor="nc-aipaused" className="text-xs font-semibold text-foreground cursor-pointer">
+                Pausar atención de IA
+              </label>
+              <p className="text-[11px] text-muted-foreground">
+                El agente virtual no le responderá. Los mensajes irán a la bandeja para atención humana.
+              </p>
+            </div>
+            <Switch
+              label="Pausar atención de IA"
+              checked={aiPaused}
+              onCheckedChange={setAiPaused}
             />
           </div>
         </div>

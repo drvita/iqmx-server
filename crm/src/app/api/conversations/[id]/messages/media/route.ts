@@ -15,6 +15,7 @@ const SEND_ERROR_STATUS: Record<SendError["code"], number> = {
   meta_error: 422,
   meta_unavailable: 503,
   upload_failed: 502,
+  reply_unavailable: 422,
 };
 
 /**
@@ -41,6 +42,12 @@ export const POST = withAuth(async (session, req: Request, ctx: Params) => {
       ? captionRaw.trim().slice(0, 1024)
       : undefined;
 
+  const replyToRaw = form.get("replyToMessageId");
+  const replyToMessageId =
+    typeof replyToRaw === "string" && replyToRaw.trim()
+      ? replyToRaw.trim().slice(0, 64)
+      : undefined;
+
   const data = Buffer.from(await file.arrayBuffer());
 
   try {
@@ -53,6 +60,7 @@ export const POST = withAuth(async (session, req: Request, ctx: Params) => {
         fileName: file.name || undefined,
       },
       caption,
+      replyToMessageId,
     });
     return Response.json({ messageId: result.messageId }, { status: 201 });
   } catch (err) {

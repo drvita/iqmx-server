@@ -21,6 +21,7 @@ import {
   MapPin,
 } from "lucide-react";
 import { COMMON_TIMEZONES } from "@/lib/time/context";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -38,10 +39,21 @@ type AvailableModel = {
   isFree: boolean;
 };
 
+type QuotaInfo = {
+  exceeded: boolean;
+  usedTokensIn: number;
+  usedTokensOut: number;
+  maxTokensIn: number;
+  maxTokensOut: number;
+  hasCustomKey: boolean;
+  month: string;
+};
+
 const DEFAULT_FREE_MODEL = "minimax/minimax-m2.7:free";
 
 export function AiClient() {
   const [hasCustomApiKey, setHasCustomApiKey] = useState(false);
+  const [quota, setQuota] = useState<QuotaInfo | null>(null);
   const [apiKey, setApiKey] = useState("");
   const [aiModel, setAiModel] = useState(DEFAULT_FREE_MODEL);
   const [aiJudgeModel, setAiJudgeModel] = useState(DEFAULT_FREE_MODEL);
@@ -77,6 +89,7 @@ export function AiClient() {
       .then((d) => {
         if (d?.ok && d.settings) {
           setHasCustomApiKey(Boolean(d.settings.hasCustomApiKey));
+          if (d.settings.quota) setQuota(d.settings.quota);
           if (d.settings.aiModel) setAiModel(d.settings.aiModel);
           if (d.settings.aiJudgeModel) setAiJudgeModel(d.settings.aiJudgeModel);
           if (d.settings.aiSttModel) setAiSttModel(d.settings.aiSttModel);
@@ -256,6 +269,100 @@ export function AiClient() {
           en tus líneas de WhatsApp. Cada organización utiliza sus propias credenciales cifradas con AES-256-GCM.
         </p>
       </div>
+
+      {/* Control de Cuota y Consumo de Tokens */}
+      {quota && (
+        <Card className={quota.exceeded ? "border-destructive/40 bg-destructive/5" : "border-border"}>
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Cpu className="h-4 w-4 text-primary" /> Consumo y Cuota Mensual de IA ({quota.month})
+                </CardTitle>
+                <CardDescription>
+                  {quota.hasCustomKey
+                    ? "Tu organización tiene configurada su propia clave de API, por lo que opera sin límites impuestos por la plataforma."
+                    : "Límites mensuales de tokens incluidos en tu membresía para asistentes conversacionales y enriquecimiento."}
+                </CardDescription>
+              </div>
+              <span
+                className={`text-xs px-2.5 py-1 rounded-full font-semibold border ${
+                  quota.hasCustomKey
+                    ? "bg-blue-50 text-blue-700 border-blue-200"
+                    : quota.exceeded
+                    ? "bg-red-50 text-red-700 border-red-200"
+                    : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                }`}
+              >
+                {quota.hasCustomKey ? "Ilimitado (Key propia)" : quota.exceeded ? "Límite alcanzado" : "Activo"}
+              </span>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {!quota.hasCustomKey ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs">
+                    <span className="font-medium text-muted-foreground">Tokens de Entrada (Lectura)</span>
+                    <span className="font-mono font-medium">
+                      {quota.usedTokensIn.toLocaleString()} / {quota.maxTokensIn.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={`h-full transition-all ${
+                        quota.usedTokensIn >= quota.maxTokensIn
+                          ? "bg-destructive"
+                          : quota.usedTokensIn >= quota.maxTokensIn * 0.8
+                          ? "bg-amber-500"
+                          : "bg-primary"
+                      }`}
+                      style={{
+                        width: `${Math.min(100, Math.round((quota.usedTokensIn / (quota.maxTokensIn || 1)) * 100))}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-xs">
+                    <span className="font-medium text-muted-foreground">Tokens de Salida (Escritura)</span>
+                    <span className="font-mono font-medium">
+                      {quota.usedTokensOut.toLocaleString()} / {quota.maxTokensOut.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                    <div
+                      className={`h-full transition-all ${
+                        quota.usedTokensOut >= quota.maxTokensOut
+                          ? "bg-destructive"
+                          : quota.usedTokensOut >= quota.maxTokensOut * 0.8
+                          ? "bg-amber-500"
+                          : "bg-primary"
+                      }`}
+                      style={{
+                        width: `${Math.min(100, Math.round((quota.usedTokensOut / (quota.maxTokensOut || 1)) * 100))}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {quota.exceeded && !quota.hasCustomKey && (
+              <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-semibold">Límite mensual del plan alcanzado</p>
+                  <p className="mt-0.5">
+                    El asistente virtual se encuentra pausado y las nuevas conversaciones se transfieren automáticamente a tu equipo humano. Puedes actualizar tu plan o ingresar tu propia clave privada de OpenRouter abajo para continuar sin interrupciones.
+                  </p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="border-border">
         <CardHeader>
@@ -622,6 +729,27 @@ export function AiClient() {
               <p className="text-xs text-text-3">
                 Si revocas esta clave, cualquier microservicio o bot externo que esté enviando mensajes dejará de autenticar hasta que configures una nueva clave.
               </p>
+
+              {/* Explicación de Modo Híbrido y Endpoints del Bot */}
+              <div className="rounded-lg border bg-muted/20 p-3.5 text-xs space-y-2 mt-3">
+                <p className="font-semibold text-foreground flex items-center gap-1.5">
+                  <Globe className="h-3.5 w-3.5 text-primary" /> Modo Híbrido y Capacidades de Integración
+                </p>
+                <p className="text-muted-foreground">
+                  El CRM opera con tus asistentes internos configurados en <Link href="/agent" className="text-primary font-medium underline">Agente</Link>, pero también permite conectar un cerebro externo (Nea, LangGraph, Flowise, n8n):
+                </p>
+                <ul className="list-disc pl-4 space-y-1 text-muted-foreground font-mono text-[11px]">
+                  <li>
+                    <strong className="font-sans text-foreground">GET /api/bot/context</strong>: Entrega la identidad del contacto, ventana de 24h, etapa actual del lead y el bloque <strong className="font-sans text-foreground">adOrigen</strong> (titular, campaña y Click-to-WhatsApp de Meta).
+                  </li>
+                  <li>
+                    <strong className="font-sans text-foreground">POST /api/bot/messages</strong>: Envía mensajes de texto, audios o plantillas oficiales respetando las guardas del canal.
+                  </li>
+                  <li>
+                    <strong className="font-sans text-foreground">POST /api/bot/stage</strong>: Permite al bot avanzar el lead en el pipeline de ventas de forma determinista.
+                  </li>
+                </ul>
+              </div>
             </div>
           ) : (
             <div className="space-y-3">

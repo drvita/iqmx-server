@@ -9,7 +9,10 @@ import {
   channelDisabledResponse,
   isChannelEnabledForOrg,
 } from "@/server/channels/enabled";
-
+import { ensureWebhookForOrg } from "@/server/zernio/conexiones";
+import { accountHealth, zernioAccountName } from "@/server/zernio/cuentas";
+import { resolveZernioAccount } from "@/server/zernio/guardar";
+import { canConfigure } from "@/lib/auth/roles";
 import { and, desc, eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { scoped } from "@/lib/db/tenant";
@@ -71,6 +74,9 @@ const putSchema = z.object({
  */
 export const PUT = withAuth(async (session, req: Request) => {
   if (!(await isChannelEnabledForOrg("instagram", session.organizationId))) return channelDisabledResponse();
+  if (!canConfigure(session.role)) {
+    return apiError(403, "forbidden", "Solo administradores o propietarios pueden conectar Instagram");
+  }
   const body = await parseBody(req, putSchema);
   if (!body.ok) return body.response;
   const data = { ...body.data, source: body.data.source ?? "meta" };
@@ -96,19 +102,45 @@ export const PUT = withAuth(async (session, req: Request) => {
     return Response.json({ ok: true, username: existing.username });
   }
 
+  const webhookSecret =
+    data.webhookSecret ??
+    (existing?.source === data.source ? existing.webhookSecret : null) ??
+    null;
+
+  if (data.source === "zernio") {
+    const cuenta = await resolveZernioAccount(data.token, data.accountRef, "instagram");
+    if (!cuenta.ok) return cuenta.response;
+    const username = cuenta.account.username?.replace(/^@/, "") || data.username || null;
+
+    await saveInstagramCredentials({
+      organizationId: session.organizationId,
+      source: "zernio",
+      igUserId: cuenta.account.platformUserId || data.igUserId || cuenta.account._id,
+      accountRef: cuenta.account._id,
+      username,
+      token: data.token,
+      webhookSecret,
+      aiEnabled: data.aiEnabled !== undefined ? data.aiEnabled : existing?.aiEnabled ?? true,
+      assistantId: data.assistantId !== undefined ? data.assistantId : existing?.assistantId ?? null,
+    });
+    const webhook = await ensureWebhookForOrg(session.organizationId, {
+      secret: data.webhookSecret,
+    });
+    return Response.json({
+      ok: true,
+      username,
+      accountRef: cuenta.account._id,
+      accountName: zernioAccountName(cuenta.account),
+      health: accountHealth(cuenta.account, "instagram"),
+      webhook,
+    });
+  }
+
   if (data.source === "meta" && !data.igUserId) {
     return apiError(
       422,
       "invalid_body",
       "En modo Meta hace falta el ID de usuario de Instagram (igUserId)"
-    );
-  }
-
-  if (data.source === "zernio" && !data.accountRef) {
-    return apiError(
-      422,
-      "invalid_body",
-      "En modo Zernio hace falta el accountId de la cuenta conectada"
     );
   }
 
@@ -119,12 +151,12 @@ export const PUT = withAuth(async (session, req: Request) => {
 
   await saveInstagramCredentials({
     organizationId: session.organizationId,
-    source: data.source,
+    source: "meta",
     igUserId: data.igUserId ?? check.username ?? "ig_connected",
-    accountRef: data.accountRef ?? null,
+    accountRef: null,
     username: check.username ?? data.username ?? null,
     token: data.token,
-    webhookSecret: data.webhookSecret ?? null,
+    webhookSecret,
     aiEnabled: data.aiEnabled !== undefined ? data.aiEnabled : existing?.aiEnabled ?? true,
     assistantId: data.assistantId !== undefined ? data.assistantId : existing?.assistantId ?? null,
   });

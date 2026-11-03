@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { graphRequest, MetaApiError, normalizeRecipient } from "@/lib/meta/client";
@@ -10,7 +10,8 @@ import {
   markReconnectRequired,
   type Credentials,
 } from "@/server/whatsapp/credentials";
-import { isWindowOpen } from "@/server/inbox/window";
+import { isWindowOpen, replyWindow } from "@/server/inbox/window";
+import { plainSocialText } from "@/lib/social-text";
 import { IG_PREFIX } from "@/server/inbox/identity";
 import {
   getInstagramCredentialsByOrg,
@@ -29,9 +30,11 @@ import {
   capabilitiesFor,
   textFits,
   windowClosedMessage,
+  aiWindowClosedMessage,
 } from "@/server/channels/capabilities";
 import { isChannelEnabledForOrg } from "@/server/channels/enabled";
 import { serializeMessage } from "@/server/inbox/ingest";
+import { conCita, type CitaEncontrada } from "@/server/inbox/quotes";
 import {
   saveMediaFile,
   uploadGraphMedia,
@@ -47,7 +50,8 @@ export class SendError extends Error {
     | "window_closed"
     | "meta_error"
     | "meta_unavailable"
-    | "upload_failed";
+    | "upload_failed"
+    | "reply_unavailable";
   /** 008: presente cuando el fallo ocurrió TRAS persistir el mensaje (failed). */
   messageId?: string;
 
@@ -72,7 +76,30 @@ type SendTarget = {
   instagram?: InstagramCredentials;
   /** 017: presente solo en conversaciones de Messenger. */
   messenger?: MessengerCredentials;
+  /**
+   * 024: el envío sale con la etiqueta de agente humano. Lo decide el
+   * pre-vuelo (`assertReplyWindow`), no cada canal por su cuenta.
+   */
+  humanAgentTag?: boolean;
 };
+
+/**
+ * 024 — La puerta de la ventana para los canales con extensión humana
+ * (Instagram y Messenger). Devuelve si el envío lleva la etiqueta.
+ */
+function assertReplyWindow(
+  conversation: SendTarget["conversation"],
+  aiGenerated: boolean
+): boolean {
+  const w = replyWindow(conversation.channel, conversation.lastInboundAt);
+  if (!w.operatorOpen) {
+    throw new SendError("window_closed", windowClosedMessage(conversation.channel));
+  }
+  if (aiGenerated && !w.standardOpen) {
+    throw new SendError("window_closed", aiWindowClosedMessage(conversation.channel));
+  }
+  return w.humanAgentTag;
+}
 
 /**
  * Pre-flight común de todo envío por la conversación (008): existencia +
@@ -81,7 +108,9 @@ type SendTarget = {
  */
 async function prepareSend(
   conversationId: string,
-  organizationId: string
+  organizationId: string,
+  /** 024: quién escribe decide si puede usar la extensión humana. */
+  aiGenerated: boolean = false
 ): Promise<SendTarget> {
   const db = getDb();
   const rows = await db
@@ -136,7 +165,9 @@ async function prepareSend(
     const igRecipient = row.contact.waIdentity.startsWith(IG_PREFIX)
       ? row.contact.waIdentity.slice(IG_PREFIX.length)
       : row.contact.waIdentity;
+    const humanAgentTag = assertReplyWindow(row.conversation, aiGenerated);
     return {
+      humanAgentTag,
       conversation: row.conversation,
       credentials: null,
       destinatario: { to: igRecipient },
@@ -170,7 +201,9 @@ async function prepareSend(
     const fbRecipient = row.contact.waIdentity.startsWith(FB_PREFIX)
       ? row.contact.waIdentity.slice(FB_PREFIX.length)
       : row.contact.waIdentity;
+    const humanAgentTag = assertReplyWindow(row.conversation, aiGenerated);
     return {
+      humanAgentTag,
       conversation: row.conversation,
       credentials: null,
       destinatario: { to: fbRecipient },
@@ -236,6 +269,54 @@ async function prepareSend(
   return { conversation: row.conversation, credentials, destinatario, recipient };
 }
 
+/**
+ * 039 — El mensaje al que se responde citando, validado ANTES de enviar: de
+ * esta conversación, con id en la plataforma y en un canal que cita. Si no,
+ * no se envía: mandarlo sin la cita en silencio haría creer al operador que
+ * el cliente verá a qué responde.
+ */
+async function resolverMensajeCitado(
+  target: SendTarget,
+  replyToMessageId: string | undefined
+): Promise<CitaEncontrada | null> {
+  if (!replyToMessageId) return null;
+  const caps = capabilitiesFor(target.conversation.channel);
+  if (!caps.quoteReplies) {
+    throw new SendError(
+      "reply_unavailable",
+      `${caps.label} no permite responder citando un mensaje`
+    );
+  }
+  const rows = await getDb()
+    .select({ message: schema.message, media: schema.mediaAsset })
+    .from(schema.message)
+    .leftJoin(
+      schema.mediaAsset,
+      eq(schema.message.mediaAssetId, schema.mediaAsset.id)
+    )
+    .where(
+      and(
+        eq(schema.message.organizationId, target.conversation.organizationId),
+        eq(schema.message.conversationId, target.conversation.id),
+        eq(schema.message.id, replyToMessageId)
+      )
+    );
+  const row = rows[0];
+  if (!row) {
+    throw new SendError(
+      "reply_unavailable",
+      "El mensaje que quieres citar no es de esta conversación"
+    );
+  }
+  if (!row.message.waMessageId) {
+    throw new SendError(
+      "reply_unavailable",
+      "Ese mensaje no llegó a WhatsApp, así que no se puede citar"
+    );
+  }
+  return row;
+}
+
 async function persistOutbound(input: {
   organizationId: string;
   conversationId: string;
@@ -255,6 +336,8 @@ async function persistOutbound(input: {
   origin: "ai" | "operator";
   mediaAssetId?: string | null;
   media?: typeof schema.mediaAsset.$inferSelect | null;
+  /** 039: el mensaje citado, ya validado por `resolverMensajeCitado`. */
+  cita?: CitaEncontrada | null;
 }): Promise<string> {
   const db = getDb();
   const inserted = await db
@@ -272,6 +355,7 @@ async function persistOutbound(input: {
       aiGenerated: input.aiGenerated ?? false,
       origin: input.origin,
       mediaAssetId: input.mediaAssetId ?? null,
+      replyToWaMessageId: input.cita?.message.waMessageId ?? null,
     })
     .returning();
   const message = inserted[0]!;
@@ -285,7 +369,7 @@ async function persistOutbound(input: {
     type: "message.new",
     data: {
       conversationId: input.conversationId,
-      message: serializeMessage(message, input.media ?? null),
+      message: serializeMessage(message, input.media ?? null, input.cita ?? null),
     },
   });
 
@@ -298,27 +382,51 @@ export async function sendText(input: {
   organizationId: string;
   text: string;
   aiGenerated?: boolean;
+  /** 039: id local del mensaje al que se responde citando. */
+  replyToMessageId?: string;
 }): Promise<SendResult> {
-  const target = await prepareSend(input.conversationId, input.organizationId);
+  const target = await prepareSend(
+    input.conversationId,
+    input.organizationId,
+    input.aiGenerated ?? false
+  );
   const { credentials, recipient } = target;
+  const canal = target.conversation.channel;
+
+  // 024: la IA escribe con formato de WhatsApp (y a veces Markdown). En un
+  // canal que no lo dibuja se le quitan las marcas ANTES de medir, enviar y
+  // guardar: lo que queda en el hilo es lo que el cliente leyó. Lo que escribe
+  // una persona no se toca.
+  const text =
+    input.aiGenerated && capabilitiesFor(canal).textFormat === "plain"
+      ? plainSocialText(input.text)
+      : input.text;
+
+  const cita = await resolverMensajeCitado(target, input.replyToMessageId);
 
   const waMessageId = target.instagram
-    ? await callInstagramSend(target, input.text)
+    ? await callInstagramSend(target, text)
     : target.messenger
-      ? await callMessengerSend(target, input.text)
-      : await callGraphSend(credentials!, {
-          messaging_product: "whatsapp",
-          ...target.destinatario,
-          type: "text",
-          text: { body: input.text },
-        });
+      ? await callMessengerSend(target, text)
+      : await callGraphSend(
+          credentials!,
+          conCita(
+            {
+              messaging_product: "whatsapp",
+              ...target.destinatario,
+              type: "text",
+              text: { body: text },
+            },
+            cita?.message.waMessageId
+          )
+        );
 
   const messageId = await persistOutbound({
     organizationId: input.organizationId,
     conversationId: input.conversationId,
     waMessageId,
     type: "text",
-    text: input.text,
+    text,
     // Un canal sin acuses de entrega confirma al aceptar; uno con acuses
     // avanza despues por webhook. Sin esta distincion el mensaje se queda
     // con el reloj puesto para siempre.
@@ -327,6 +435,7 @@ export async function sendText(input: {
       : "sent",
     aiGenerated: input.aiGenerated,
     origin: input.aiGenerated ? "ai" : "operator",
+    cita,
   });
 
   return { messageId };
@@ -343,6 +452,8 @@ export async function sendMediaMessage(input: {
   organizationId: string;
   file: { data: Buffer; mimeType: string; fileName?: string };
   caption?: string;
+  /** 039: id local del mensaje al que se responde citando. */
+  replyToMessageId?: string;
 }): Promise<SendResult> {
   // Validación previa (FR-007): tipo y tamaño antes de tocar disco o red.
   const kind = validateOutgoing(input.file.mimeType, input.file.data.byteLength);
@@ -356,6 +467,7 @@ export async function sendMediaMessage(input: {
       `Todavía no se pueden enviar adjuntos por ${sendCaps.label}; manda el texto`
     );
   }
+  const cita = await resolverMensajeCitado(target, input.replyToMessageId);
 
   const db = getDb();
   const assetId = newId("mediaAsset");
@@ -392,12 +504,18 @@ export async function sendMediaMessage(input: {
     if (kind === "document" && input.file.fileName) {
       mediaPayload.filename = input.file.fileName;
     }
-    const waMessageId = await callGraphSend(credentials!, {
-      messaging_product: "whatsapp",
-      ...target.destinatario,
-      type: kind,
-      [kind]: mediaPayload,
-    });
+    const waMessageId = await callGraphSend(
+      credentials!,
+      conCita(
+        {
+          messaging_product: "whatsapp",
+          ...target.destinatario,
+          type: kind,
+          [kind]: mediaPayload,
+        },
+        cita?.message.waMessageId
+      )
+    );
 
     const messageId = await persistOutbound({
       organizationId: input.organizationId,
@@ -409,6 +527,7 @@ export async function sendMediaMessage(input: {
       origin: "operator",
       mediaAssetId: assetId,
       media: asset,
+      cita,
     });
     return { messageId };
   } catch (err) {
@@ -440,6 +559,7 @@ export async function sendMediaMessage(input: {
       origin: "operator",
       mediaAssetId: assetId,
       media: asset,
+      cita,
     });
     throw sendErr;
   }
@@ -459,6 +579,8 @@ export async function sendStructured(
   input: {
     conversationId: string;
     organizationId: string;
+    /** 039: id local del mensaje al que se responde citando. */
+    replyToMessageId?: string;
   } & (
     | { kind: "location"; location: LocationInput }
     | { kind: "contacts"; contacts: ContactInput[] }
@@ -477,6 +599,7 @@ export async function sendStructured(
       "Este canal no admite ubicaciones ni contactos; manda el texto"
     );
   }
+  const cita = await resolverMensajeCitado(target, input.replyToMessageId);
 
   const payload =
     input.kind === "location"
@@ -489,11 +612,17 @@ export async function sendStructured(
           })),
         };
 
-  const waMessageId = await callGraphSend(credentials, {
-    messaging_product: "whatsapp",
-    ...target.destinatario,
-    ...payload,
-  });
+  const waMessageId = await callGraphSend(
+    credentials,
+    conCita(
+      {
+        messaging_product: "whatsapp",
+        ...target.destinatario,
+        ...payload,
+      },
+      cita?.message.waMessageId
+    )
+  );
 
   const db = getDb();
   const assetRows = await db
@@ -518,6 +647,7 @@ export async function sendStructured(
     origin: "operator",
     mediaAssetId: asset.id,
     media: asset,
+    cita,
   });
   return { messageId };
 }
@@ -573,9 +703,8 @@ async function callInstagramSend(
     );
   }
 
-  // Instagram no tiene plantillas: fuera de la ventana de 24 h la única vía
-  // es la etiqueta de agente humano (hasta 7 días).
-  const humanAgentTag = !isWindowOpen(target.conversation.lastInboundAt);
+  // 024: quién puede usarla lo decidió ya el pre-vuelo (assertReplyWindow).
+  const humanAgentTag = target.humanAgentTag ?? false;
 
   try {
     const res = await sendInstagramText({
@@ -625,9 +754,8 @@ async function callMessengerSend(
     );
   }
 
-  // Messenger no tiene plantillas: fuera de la ventana de 24 h la única vía
-  // es la etiqueta de agente humano (hasta 7 días).
-  const humanAgentTag = !isWindowOpen(target.conversation.lastInboundAt);
+  // 024: quién puede usarla lo decidió ya el pre-vuelo (assertReplyWindow).
+  const humanAgentTag = target.humanAgentTag ?? false;
 
   try {
     const res = await sendMessengerText({

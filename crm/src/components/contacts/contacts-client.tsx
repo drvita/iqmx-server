@@ -6,9 +6,11 @@ import { useRouter } from "next/navigation";
 import {
   Archive,
   ArchiveRestore,
+  BotOff,
   MessageSquareText,
   Search,
   Send,
+  Upload,
   UserPlus,
 } from "lucide-react";
 import type { ContactDto } from "@/lib/types";
@@ -18,9 +20,11 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { SOURCE_LABELS } from "@/server/contact-source";
 import { priorityRank } from "@/server/leads/priority";
 import { PriorityBadge } from "@/components/pipeline/priority-picker";
+import { ImportContactsDialog } from "./import-contacts-dialog";
 import { NewContactDialog } from "./new-contact-dialog";
 import { StartConversation } from "./start-conversation";
 
@@ -33,6 +37,7 @@ export function ContactsClient() {
   const [showArchived, setShowArchived] = useState(false);
   const [editing, setEditing] = useState<ContactDto | null>(null);
   const [creando, setCreando] = useState(false);
+  const [importando, setImportando] = useState(false);
   const [escribiendo, setEscribiendo] = useState<ContactDto | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -92,6 +97,14 @@ export function ContactsClient() {
           <Button size="sm" onClick={() => setCreando(true)}>
             <UserPlus className="mr-1.5 h-4 w-4" strokeWidth={1.8} />
             Nuevo contacto
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setImportando(true)}
+          >
+            <Upload className="mr-1.5 h-4 w-4" strokeWidth={1.8} />
+            Importar
           </Button>
         </div>
         <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:gap-3">
@@ -171,6 +184,17 @@ export function ContactsClient() {
                     <span className="truncate text-sm font-medium">
                       {c.name}
                     </span>
+                    {/* 027 — el agente no le responde */}
+                    {c.aiPaused && (
+                      <Badge
+                        variant="secondary"
+                        className="bg-amber-500/10 text-amber-700 dark:text-amber-400"
+                        title="El agente no le responde a este contacto"
+                      >
+                        <BotOff className="mr-1 h-3 w-3" />
+                        Sin agente
+                      </Badge>
+                    )}
                     {c.priority && <PriorityBadge value={c.priority} />}
                     {c.stageName && (
                       <Badge variant="outline">{c.stageName}</Badge>
@@ -289,6 +313,16 @@ export function ContactsClient() {
           }}
         />
       )}
+
+      {importando && (
+        <ImportContactsDialog
+          onClose={() => setImportando(false)}
+          onImported={() => {
+            setImportando(false);
+            void refetch();
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -300,10 +334,11 @@ function EditDialog({
 }: {
   contact: ContactDto;
   onClose: () => void;
-  onSave: (patch: { name: string; notes: string }) => Promise<void>;
+  onSave: (patch: { name: string; notes: string; aiPaused?: boolean }) => Promise<void>;
 }) {
   const [name, setName] = useState(contact.name);
   const [notes, setNotes] = useState(contact.notes ?? "");
+  const [aiPaused, setAiPaused] = useState(contact.aiPaused ?? false);
 
   return (
     <div
@@ -337,6 +372,21 @@ function EditDialog({
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
+          <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/20">
+            <div className="space-y-0.5">
+              <label htmlFor="edit-aipaused" className="text-xs font-semibold text-foreground cursor-pointer">
+                Pausar atención de IA
+              </label>
+              <p className="text-[11px] text-muted-foreground">
+                Sus mensajes llegarán a la bandeja y los atiende un operador humano.
+              </p>
+            </div>
+            <Switch
+              label="Pausar atención de IA"
+              checked={aiPaused}
+              onCheckedChange={setAiPaused}
+            />
+          </div>
         </div>
         <div className="mt-4 flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>
@@ -344,7 +394,13 @@ function EditDialog({
           </Button>
           <Button
             disabled={!name.trim()}
-            onClick={() => void onSave({ name: name.trim(), notes })}
+            onClick={() =>
+              void onSave({
+                name: name.trim(),
+                notes,
+                ...(aiPaused !== (contact.aiPaused ?? false) ? { aiPaused } : {}),
+              })
+            }
           >
             Guardar
           </Button>

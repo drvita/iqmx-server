@@ -27,7 +27,13 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  HERRAMIENTAS,
+  ROLES,
+  type ClaveHerramienta,
+} from "@/lib/agent-roles";
 
 export type Assistant = {
   id: string;
@@ -41,6 +47,8 @@ export type Assistant = {
   escalationRules: string | null;
   greeting: string | null;
   timezone: string | null;
+  role?: string;
+  tools?: ClaveHerramienta[];
 };
 
 type KbEntry = {
@@ -879,6 +887,84 @@ Analizar las conversaciones cerradas para calificar el sentimiento y clasificar 
                 setForm({ ...form, escalationRules: e.target.value })
               }
             />
+          </div>
+        )}
+
+        {form.type === "conversational" && (
+          <div className="space-y-3 rounded-lg border p-4">
+            <div className="flex flex-wrap items-start justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold text-foreground">
+                  Rol: {ROLES.calificador.etiqueta}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {ROLES.calificador.descripcion}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                type="button"
+                onClick={async () => {
+                  const ok = window.confirm(
+                    `Cargar el rol «${ROLES.calificador.etiqueta}» reemplaza las instrucciones y las reglas de escalado, y enciende todas sus herramientas. ¿Continuar?`
+                  );
+                  if (!ok) return;
+                  await fetch("/api/agent/profile/preset", {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({
+                      id: assistant.id,
+                      role: "calificador",
+                    }),
+                  }).catch(() => null);
+                  setForm({
+                    ...form,
+                    instructions: ROLES.calificador.instrucciones,
+                    escalationRules: ROLES.calificador.reglasDeEscalado,
+                    tools: [...ROLES.calificador.herramientas],
+                  });
+                  setJustSaved(true);
+                  setTimeout(() => setJustSaved(false), 2000);
+                }}
+              >
+                Cargar rol {ROLES.calificador.etiqueta}
+              </Button>
+            </div>
+            <div className="space-y-2 pt-2 border-t">
+              <p className="text-xs font-medium text-foreground">
+                Herramientas del asistente
+              </p>
+              <ul className="grid gap-3 sm:grid-cols-2">
+                {HERRAMIENTAS.map((h) => {
+                  const currentTools = form.tools ?? [...ROLES.calificador.herramientas];
+                  const isChecked = h.fija ? true : currentTools.includes(h.clave);
+                  return (
+                    <li
+                      key={h.clave}
+                      className="flex items-start justify-between gap-3 rounded-md border p-3"
+                    >
+                      <div className="space-y-0.5">
+                        <p className="text-xs font-medium text-foreground">{h.etiqueta}</p>
+                        <p className="text-[11px] text-muted-foreground">{h.descripcion}</p>
+                      </div>
+                      <Switch
+                        size="sm"
+                        checked={isChecked}
+                        disabled={h.fija === true}
+                        label={h.etiqueta}
+                        onCheckedChange={(on) => {
+                          const next = on
+                            ? [...currentTools, h.clave]
+                            : currentTools.filter((t) => t !== h.clave);
+                          setForm({ ...form, tools: next });
+                        }}
+                      />
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
           </div>
         )}
 

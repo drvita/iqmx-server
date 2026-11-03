@@ -64,7 +64,8 @@ describe("017 · Messenger en el catálogo de canales", () => {
     expect(caps.outboundMedia).toBe(false);
     expect(caps.deliveryReceipts).toBe(true);
     // Fuera de ventana no se le pide nada al operador: sale etiquetado solo.
-    expect(windowClosedMessage("messenger")).toBe("");
+    // 024: la extensión humana tiene tope (7 días) y su propio mensaje.
+    expect(windowClosedMessage("messenger")).toContain("7 días");
   });
 
   it("el límite de texto es de 2000 y se cuenta en BYTES", () => {

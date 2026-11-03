@@ -1,4 +1,5 @@
 import type { schema } from "@/lib/db";
+import { herramientasEfectivas } from "@/lib/agent-roles";
 
 type AgentProfile = typeof schema.agentProfile.$inferSelect;
 type KbEntry = typeof schema.kbEntry.$inferSelect;
@@ -17,6 +18,13 @@ export function renderKb(entries: KbEntry[]): string {
     .filter(Boolean)
     .join("\n\n");
 }
+
+/**
+ * 029 — Recordatorio de formato inyectado al final de la conversación cuando
+ * el modelo contesta con texto conversacional o markdown envolvente.
+ */
+export const TURN_FORMAT_REMINDER =
+  'Responde ahora con UN objeto JSON de acción (por ejemplo {"action":"reply","text":"..."}), aunque tus mensajes anteriores aparezcan como texto plano.';
 
 /**
  * System prompt del agente (v1: inyecta el KB completo — el límite se
@@ -38,17 +46,22 @@ export function buildAgentSystemPrompt(input: {
   agenda?: boolean;
 }): string {
   const { profile } = input;
+  const tools = herramientasEfectivas(profile.tools);
+  const allowAgenda = input.agenda && (tools.includes("agendar") || tools.includes("reprogramar"));
+  const allowEtapa = tools.includes("etapa");
+  const allowFicha = tools.includes("ficha");
+
   const stageNames = input.stages.map((s) => s.name).join(" | ");
   const currentStageLine = input.currentStage
     ? `Etapa actual del lead: ${input.currentStage}`
     : null;
-  const agendaLines = input.agenda
+  const agendaLines = allowAgenda
     ? [
         '- {"action":"offer_slots","reply":"..."} — ofrecer horarios para agendar (reply es solo la frase de entrada; los horarios los pone el sistema).',
         '- {"action":"book_slot","startUtc":"<uno de los horarios que el sistema ofreció, en ISO UTC>","reply":"..."} — agendar el horario que el cliente eligió.',
       ]
     : [];
-  const agendaRules = input.agenda
+  const agendaRules = allowAgenda
     ? [
         "- NUNCA escribas tú los horarios ni los inventes: usa offer_slots y el sistema pega los reales.",
         "- book_slot solo acepta un horario que el sistema ofreció antes en ESTA conversación. Si el cliente pide otro, vuelve a ofrecer con offer_slots.",
@@ -69,24 +82,26 @@ Toda respuesta humana hacia el cliente debe ir SIEMPRE en español neutro, con m
       : null,
     profile.greeting ? `Saludo sugerido para conversaciones nuevas: ${profile.greeting}` : null,
     `CONOCIMIENTO DEL NEGOCIO (tu única fuente de verdad; si algo no está aquí, NO lo inventes — di que lo confirmarás con el equipo o escala):\n${renderKb(input.kb)}`,
-    `Etapas del pipeline disponibles: ${stageNames}`,
-    currentStageLine,
+    allowEtapa ? `Etapas del pipeline disponibles: ${stageNames}` : null,
+    allowEtapa ? currentStageLine : null,
     [
       "FORMATO OBLIGATORIO DE RESPUESTA:",
       "En cada turno respondes ÚNICAMENTE un objeto JSON válido con UNA acción:",
-      '- {"action":"none"} — no responder nada.',
+      // 029 — Sin condición, el modelo callaba ante «Hola prueba 1».
+      '- {"action":"none"} — no enviar nada. SOLO cuando el último mensaje del cliente cierra la conversación sin pedir nada («ok», «gracias», un emoji) y lo que preguntó ya tiene respuesta.',
       '- {"action":"reply","text":"..."} — responder al cliente.',
-      '- {"action":"update_lead","note":"...","reply":"..."} — guardar una nota del lead (reply opcional).',
-      '- {"action":"move_stage","stage":"<nombre exacto de etapa>","reply":"..."} — mover el lead (reply opcional).',
+      allowFicha ? '- {"action":"update_lead","note":"...","reply":"..."} — guardar una nota del lead (si el cliente espera respuesta, incluye reply).' : null,
+      allowEtapa ? '- {"action":"move_stage","stage":"<nombre exacto de etapa>","reply":"..."} — mover el lead (si el cliente espera respuesta, incluye reply).' : null,
       '- {"action":"handoff","reason":"...","farewell":"..."} — escalar a un humano (farewell opcional para despedirte).',
       ...agendaLines,
       "Reglas duras:",
+      "- Todo mensaje del cliente que no sea un cierre recibe respuesta: un saludo, un mensaje corto, raro o confuso, o un «hola, prueba» se contestan (saluda y ofrece ayuda). Nunca supongas que es una prueba o un error.",
       "- Si el cliente pide hablar con una persona/humano/asesor → handoff.",
       "- Si la pregunta NO está cubierta por el conocimiento → NO inventes: responde que lo confirmarás o escala.",
-      "- Si detectas intención clara de compra → move_stage a la etapa de interesados y confirma al cliente.",
+      allowEtapa ? "- Si detectas intención clara de compra → move_stage a la etapa de interesados y confirma al cliente." : null,
       ...agendaRules,
       "- Salida técnica estricta: ÚNICAMENTE el objeto JSON en crudo. NUNCA texto libre, explicaciones ni markdown envolvente.",
-    ].join("\n"),
+    ].filter(Boolean).join("\n"),
   ]
     .filter(Boolean)
     .join("\n\n");

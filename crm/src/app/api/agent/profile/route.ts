@@ -5,6 +5,7 @@ import { getDb, schema } from "@/lib/db";
 import { newId } from "@/lib/db/ids";
 import { scoped } from "@/lib/db/tenant";
 import { isAiConfigured } from "@/lib/env";
+import { CLAVES_HERRAMIENTA, herramientasEfectivas, rolDe, type ClaveHerramienta } from "@/lib/agent-roles";
 
 export const dynamic = "force-dynamic";
 
@@ -69,6 +70,8 @@ export const GET = withAuth(async (session, req: Request) => {
       escalationRules: p.escalationRules,
       greeting: p.greeting,
       timezone: p.timezone,
+      role: rolDe(p.role).clave,
+      tools: herramientasEfectivas(p.tools),
     })),
     // Compatibilidad con la vista actual que lee `profile`
     profile: selected
@@ -84,6 +87,8 @@ export const GET = withAuth(async (session, req: Request) => {
           escalationRules: selected.escalationRules,
           greeting: selected.greeting,
           timezone: selected.timezone,
+          role: rolDe(selected.role).clave,
+          tools: herramientasEfectivas(selected.tools),
         }
       : null,
     aiConfigured,
@@ -129,6 +134,8 @@ const postSchema = z.object({
     .max(64, "La zona horaria no puede superar los 64 caracteres")
     .nullable()
     .optional(),
+  role: z.string().optional().default("calificador"),
+  tools: z.array(z.string()).optional(),
 });
 
 /**
@@ -157,6 +164,10 @@ export const POST = withAuth(async (session, req: Request) => {
       );
   }
 
+  const cleanTools = body.data.tools
+    ? herramientasEfectivas(body.data.tools)
+    : null;
+
   const inserted = await db
     .insert(schema.agentProfile)
     .values({
@@ -172,6 +183,8 @@ export const POST = withAuth(async (session, req: Request) => {
       escalationRules: body.data.escalationRules ?? null,
       greeting: body.data.greeting ?? null,
       timezone: body.data.timezone ?? null,
+      role: body.data.role ?? "calificador",
+      tools: cleanTools,
     })
     .returning();
 
@@ -219,6 +232,8 @@ const putSchema = z.object({
     .max(64, "La zona horaria no puede superar los 64 caracteres")
     .nullable()
     .optional(),
+  role: z.string().optional(),
+  tools: z.array(z.string()).nullable().optional(),
 });
 
 /**
@@ -256,11 +271,20 @@ export const PUT = withAuth(async (session, req: Request) => {
       );
   }
 
-  const { id: _, ...updateFields } = body.data;
+  const { id: _, tools: rawTools, ...updateFields } = body.data;
+
+  const updateData: Record<string, unknown> = {
+    ...updateFields,
+    updatedAt: new Date(),
+  };
+
+  if (rawTools !== undefined) {
+    updateData.tools = rawTools === null ? null : herramientasEfectivas(rawTools);
+  }
 
   const updated = await db
     .update(schema.agentProfile)
-    .set({ ...updateFields, updatedAt: new Date() })
+    .set(updateData)
     .where(whereClause)
     .returning();
 

@@ -14,6 +14,8 @@ import { MessageThread } from "./message-thread";
 import { Composer } from "./composer";
 import { ContactPanel } from "./contact-panel";
 import { LineBadge } from "./line-badge";
+import { citaDe } from "./helpers";
+import type { QuotedMessageDto } from "@/lib/types";
 
 /**
  * Texto que ya salió del compositor pero cuyo POST todavía viaja. Existe solo
@@ -24,6 +26,7 @@ type PendingOut = {
   id: string;
   conversationId: string;
   text: string;
+  replyTo?: QuotedMessageDto | null;
   createdAt: string;
 };
 
@@ -36,7 +39,14 @@ const PANEL_MEDIA_QUERY = "(min-width: 1280px)";
 const isWideEnoughForPanel = () =>
   typeof window !== "undefined" && window.matchMedia(PANEL_MEDIA_QUERY).matches;
 
-export function InboxClient({ channels }: { channels: readonly Channel[] }) {
+export function InboxClient({
+  channels,
+  canDelete = false,
+}: {
+  channels: readonly Channel[];
+  /** 026 — Eliminar es irreversible: solo quien administra ve la opción. */
+  canDelete?: boolean;
+}) {
   const [conversations, setConversations] = useState<ConversationDto[] | null>(
     null
   );
@@ -47,6 +57,7 @@ export function InboxClient({ channels }: { channels: readonly Channel[] }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageDto[]>([]);
   const [pending, setPending] = useState<PendingOut[]>([]);
+  const [replyTo, setReplyTo] = useState<MessageDto | null>(null);
   // Arranca cerrado: en pantallas angostas el panel de detalles es un cajón
   // ENCIMA del hilo, así que abrirlo por defecto taparía la conversación. El
   // efecto de abajo lo abre solo si de veras hay tres columnas de ancho.
@@ -115,6 +126,17 @@ export function InboxClient({ channels }: { channels: readonly Channel[] }) {
     [refetchMessages]
   );
 
+  /** 026 — Saca una conversación eliminada de todo lo que esta pestaña recuerda. */
+  const quitarConversacion = useCallback((id: string) => {
+    setConversations((prev) => prev?.filter((c) => c.id !== id) ?? prev);
+    setPending((prev) => prev.filter((p) => p.conversationId !== id));
+    if (selectedIdRef.current === id) {
+      setSelectedId(null);
+      setMessages([]);
+      setReplyTo(null);
+    }
+  }, []);
+
   // Enlace directo desde Contactos/Pipeline: /inbox?contact=<id>
   const searchParams = useSearchParams();
   const contactParam = searchParams.get("contact");
@@ -159,6 +181,13 @@ export function InboxClient({ channels }: { channels: readonly Channel[] }) {
       void refetchConversations();
       // El agente movió de etapa o cambió el handoff: refresca el panel en vivo.
       setDetailRev((v) => v + 1);
+    },
+    onConversationDeleted: ({ conversationId }) => {
+      // 026: la eliminó alguien del equipo (o esta misma pestaña). Se quita
+      // ya, sin esperar al refetch, para que nadie le escriba a un hilo que
+      // no existe.
+      quitarConversacion(conversationId);
+      void refetchConversations();
     },
     onReconnect: () => {
       // Catch-up tras reconexión (contrato sse.md): refetch completo.
@@ -205,6 +234,7 @@ export function InboxClient({ channels }: { channels: readonly Channel[] }) {
         aiGenerated: false,
         origin: "operator",
         media: null,
+        replyTo: p.replyTo ?? null,
         createdAt: p.createdAt,
       })),
     ];
@@ -217,7 +247,7 @@ export function InboxClient({ channels }: { channels: readonly Channel[] }) {
    * jamás se pierde en silencio.
    */
   const sendText = useCallback(
-    async (text: string): Promise<string | null> => {
+    async (text: string, cita: MessageDto | null = null): Promise<string | null> => {
       const conversationId = selectedIdRef.current;
       if (!conversationId) return "Sin conversación seleccionada";
 
@@ -228,6 +258,7 @@ export function InboxClient({ channels }: { channels: readonly Channel[] }) {
           id: tmpId,
           conversationId,
           text,
+          replyTo: cita ? citaDe(cita) : null,
           createdAt: new Date().toISOString(),
         },
       ]);
@@ -237,7 +268,9 @@ export function InboxClient({ channels }: { channels: readonly Channel[] }) {
         const res = await fetch(`/api/conversations/${conversationId}/messages`, {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ text }),
+          body: JSON.stringify(
+            cita ? { text, replyToMessageId: cita.id } : { text }
+          ),
         }).catch(() => null);
         if (!res) {
           drop();
@@ -276,6 +309,30 @@ export function InboxClient({ channels }: { channels: readonly Channel[] }) {
       void refetchConversations();
     },
     [refetchConversations]
+  );
+
+  /** 026 — Devuelve el mensaje de error, o null si la conversación ya no existe. */
+  const deleteConversation = useCallback(
+    async (alsoContact: boolean): Promise<string | null> => {
+      const id = selectedIdRef.current;
+      if (!id) return "Sin conversación seleccionada";
+      const res = await fetch(
+        `/api/conversations/${id}${alsoContact ? "?contacto=1" : ""}`,
+        { method: "DELETE" }
+      ).catch(() => null);
+      if (!res) return "Sin conexión con el servidor";
+      // 404 = otra persona la eliminó primero
+      if (!res.ok && res.status !== 404) {
+        const data = (await res.json().catch(() => null)) as {
+          error?: { message?: string };
+        } | null;
+        return data?.error?.message ?? "No se pudo eliminar la conversación";
+      }
+      quitarConversacion(id);
+      void refetchConversations();
+      return null;
+    },
+    [quitarConversacion, refetchConversations]
   );
 
   return (
@@ -370,10 +427,23 @@ export function InboxClient({ channels }: { channels: readonly Channel[] }) {
                 </button>
               )}
             </header>
-            <MessageThread messages={thread} />
+            <MessageThread
+              messages={thread}
+              contactName={selected.contact.name}
+              onReply={selected.channel === "whatsapp" && selected.windowOpen ? setReplyTo : undefined}
+              conversations={conversations ?? []}
+              onForwarded={() => {
+                if (selectedIdRef.current)
+                  void refetchMessages(selectedIdRef.current);
+                void refetchConversations();
+              }}
+            />
             <Composer
+              key={selected.id}
               conversation={selected}
               onSend={sendText}
+              replyTo={replyTo}
+              onReplyChange={setReplyTo}
               onSent={() => {
                 if (selectedIdRef.current)
                   void refetchMessages(selectedIdRef.current);
@@ -418,6 +488,7 @@ export function InboxClient({ channels }: { channels: readonly Channel[] }) {
               conversation={selected}
               refreshKey={detailRev}
               onPatchConversation={patchConversation}
+              onDeleteConversation={canDelete ? deleteConversation : undefined}
               onClose={() => togglePanel(false)}
             />
           </div>

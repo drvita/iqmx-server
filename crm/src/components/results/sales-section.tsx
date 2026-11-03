@@ -73,6 +73,55 @@ export function SalesSection({
             />
           </div>
 
+          {/* Bloque ROI: Ventas Asistidas por IA vs Humanos */}
+          {data.kpis.roiAi && (data.kpis.won.current > 0 || data.kpis.roiAi.wonAiAssistedCount > 0) && (
+            <div className="rounded-lg border bg-surface-1 p-4 space-y-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <div>
+                  <h4 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                    Impacto del Asistente IA en Ventas Cerradas
+                  </h4>
+                  <p className="text-xs text-text-3">
+                    Desglose de tratos ganados que contaron con respuestas o calificación de IA vs. los atendidos exclusivamente por personas.
+                  </p>
+                </div>
+                {data.kpis.wonCents.current > 0 && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                    {Math.round((data.kpis.roiAi.wonAiAssistedCents / data.kpis.wonCents.current) * 100)}% ventas asistidas por IA
+                  </span>
+                )}
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-md border border-primary/20 bg-primary/5 p-3 space-y-1">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">Asistidas por Inteligencia Artificial</span>
+                    <span>{plural(data.kpis.roiAi.wonAiAssistedCount, "trato ganado", "tratos ganados")}</span>
+                  </div>
+                  <p className="text-lg font-bold text-foreground font-mono">
+                    {money(data.kpis.roiAi.wonAiAssistedCents)}
+                  </p>
+                  <p className="text-[11px] text-text-3">
+                    Prospectos atendidos, calificados o agendados con asistencia del agente virtual.
+                  </p>
+                </div>
+
+                <div className="rounded-md border p-3 space-y-1 bg-surface-2">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">Atención 100% Humana</span>
+                    <span>{plural(data.kpis.roiAi.wonHumanOnlyCount, "trato ganado", "tratos ganados")}</span>
+                  </div>
+                  <p className="text-lg font-bold text-foreground font-mono">
+                    {money(data.kpis.roiAi.wonHumanOnlyCents)}
+                  </p>
+                  <p className="text-[11px] text-text-3">
+                    Tratos cerrados directamente por vendedores u operadores sin intervención de la IA.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="grid gap-6 lg:grid-cols-2">
             <TimeBars
               title="Prospectos nuevos"

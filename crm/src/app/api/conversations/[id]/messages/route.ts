@@ -2,6 +2,7 @@ import { z } from "zod";
 import { apiError, parseBody, withAuth } from "@/lib/api";
 import { getConversation, listMessages } from "@/server/inbox/queries";
 import { serializeMessage } from "@/server/inbox/ingest";
+import { resolverCitas } from "@/server/inbox/quotes";
 import { SendError, sendStructured, sendText } from "@/server/inbox/send";
 import { getAttributionForConversation } from "@/server/attribution/store";
 import type { MessageDto } from "@/lib/types";
@@ -28,8 +29,20 @@ export const GET = withAuth(async (session, req: Request, ctx: Params) => {
     !since ? getAttributionForConversation(session.organizationId, id) : null,
   ]);
 
+  // 039: las citas del hilo se resuelven en un solo query.
+  const citas = await resolverCitas(
+    session.organizationId,
+    messages.map((r) => r.message)
+  );
+
   const serialized: MessageDto[] = messages.map((r) =>
-    serializeMessage(r.message, r.media)
+    serializeMessage(
+      r.message,
+      r.media,
+      r.message.replyToWaMessageId
+        ? citas.get(r.message.replyToWaMessageId) ?? null
+        : null
+    )
   );
 
   if (attribution) {
@@ -75,12 +88,16 @@ export const GET = withAuth(async (session, req: Request, ctx: Params) => {
   });
 });
 
+// 039: id LOCAL del mensaje al que se responde citando (opcional).
+const replyToMessageId = z.string().trim().min(1).max(64).optional();
+
 // 008: además de texto, el body acepta ubicación y contactos (discriminado
 // por `type`; sin `type` sigue siendo texto — compat con clientes previos).
 const sendSchema = z.union([
   z.object({
     type: z.literal("text").optional(),
     text: z.string().trim().min(1).max(4096),
+    replyToMessageId,
   }),
   z.object({
     type: z.literal("location"),
@@ -90,6 +107,7 @@ const sendSchema = z.union([
       name: z.string().trim().max(1000).optional(),
       address: z.string().trim().max(1000).optional(),
     }),
+    replyToMessageId,
   }),
   z.object({
     type: z.literal("contacts"),
@@ -102,6 +120,7 @@ const sendSchema = z.union([
       )
       .min(1)
       .max(5),
+    replyToMessageId,
   }),
 ]);
 
@@ -113,6 +132,7 @@ const SEND_ERROR_STATUS: Record<SendError["code"], number> = {
   meta_error: 422,
   meta_unavailable: 503,
   upload_failed: 502,
+  reply_unavailable: 422,
 };
 
 export const POST = withAuth(async (session, req: Request, ctx: Params) => {
@@ -128,6 +148,7 @@ export const POST = withAuth(async (session, req: Request, ctx: Params) => {
             conversationId: id,
             organizationId: session.organizationId,
             text: data.text,
+            replyToMessageId: data.replyToMessageId,
           })
         : data.type === "location"
           ? await sendStructured({
@@ -135,12 +156,14 @@ export const POST = withAuth(async (session, req: Request, ctx: Params) => {
               organizationId: session.organizationId,
               kind: "location",
               location: data.location,
+              replyToMessageId: data.replyToMessageId,
             })
           : await sendStructured({
               conversationId: id,
               organizationId: session.organizationId,
               kind: "contacts",
               contacts: data.contacts,
+              replyToMessageId: data.replyToMessageId,
             });
     return Response.json({ messageId: result.messageId });
   } catch (err) {

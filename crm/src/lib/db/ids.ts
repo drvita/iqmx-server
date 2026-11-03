@@ -39,6 +39,7 @@ const prefixes = {
   // laboratorio multi-tenant
   labScenario: "scen",
   labSuiteConfig: "lcfg",
+  aiUsage: "aiu",
 } as const;
 
 export type IdKind = keyof typeof prefixes;

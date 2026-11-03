@@ -24,6 +24,16 @@ export type ConversationDto = {
   unreadCount: number;
   windowOpen: boolean;
   windowRemainingMs: number;
+  /**
+   * 024 — Ventana de atención humana (Instagram y Messenger). null en WhatsApp.
+   * `open`: pasaron 24 h pero no 7 días; solo una persona puede contestar.
+   */
+  humanWindow?: { open: boolean; remainingMs: number } | null;
+  /**
+   * 028 — Lo que el compositor puede ofrecer en este canal: adjuntos, y
+   * ubicación o contacto. El servidor rechaza lo demás igual.
+   */
+  composer?: { media: boolean; structured: boolean };
   preview: string | null;
   /** 018: de qué anuncio llegó esta conversación (para badge y filtro de bandeja). */
   anuncio?: {
@@ -105,7 +115,23 @@ export type MessageDto = {
   origin: "ai" | "operator" | "manual" | "template" | "meta_ad";
   media: MessageMediaDto | null;
   ad?: AdReferralDto | null;
+  /** 039 — Tiene id en la plataforma: se le puede responder citando. */
+  quotable?: boolean;
+  /** 039 — El mensaje que cita, o null si no cita ninguno. */
+  replyTo?: QuotedMessageDto | null;
   createdAt: string;
+};
+
+/**
+ * 039 — Lo que se enseña de un mensaje citado. Con `id: null` el original no
+ * está en el CRM (anterior a la instalación o de un tipo que no se guarda).
+ */
+export type QuotedMessageDto = {
+  id: string | null;
+  direction: "in" | "out" | null;
+  type: string | null;
+  text: string | null;
+  mediaKind: string | null;
 };
 
 export type TemplateButton =
@@ -149,6 +175,8 @@ export type ContactDto = {
   /** null en contactos que llegaron solo con BSUID (003). */
   phone: string | null;
   notes: string | null;
+  /** 027 — El agente no le responde a este contacto (se refleja en sus chats). */
+  aiPaused?: boolean;
   /** Etapa del embudo del lead asociado; null si el contacto no tiene lead. */
   stageName: string | null;
   archivedAt: string | null;

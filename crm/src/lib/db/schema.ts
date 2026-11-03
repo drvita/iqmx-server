@@ -173,6 +173,11 @@ export const contact = pgTable(
     source: text("source", {
       enum: ["anuncio", "organico", "referido", "conocido", "otro"],
     }),
+    /**
+     * 027 — El agente no le contesta: los mensajes de este contacto los
+     * atiende el dueño a mano. La conversación lo hereda al crearse.
+     */
+    aiPaused: boolean("ai_paused").notNull().default(false),
     archivedAt: timestamp("archived_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -376,6 +381,7 @@ export const conversation = pgTable(
         "ventana",
         "hostilidad",
         "manual_reply",
+        "cuota",
       ],
     }),
     lastInboundAt: timestamp("last_inbound_at"),
@@ -431,6 +437,11 @@ export const message = pgTable(
     mediaAssetId: text("media_asset_id").references(() => mediaAsset.id, {
       onDelete: "set null",
     }),
+    /**
+     * 039 — `wamid` del mensaje al que responde (cita). Sin FK: el citado
+     * puede no estar en el CRM; se resuelve al leer (`inbox/quotes.ts`).
+     */
+    replyToWaMessageId: text("reply_to_wa_message_id"),
     waTimestamp: timestamp("wa_timestamp"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },
@@ -565,8 +576,12 @@ export const instagramCredentials = pgTable(
     tokenCipher: text("token_cipher").notNull(),
     tokenIv: text("token_iv").notNull(),
     tokenTag: text("token_tag").notNull(),
-    /** Secreto HMAC de las entregas (Zernio); null en modo Meta. */
+    /** 030: Obsoleta; se mantiene para leer de respaldo mientras no se haya migrado. */
     webhookSecret: text("webhook_secret"),
+    /** 030 — Secreto HMAC cifrado en reposo (AES-256-GCM, como el token). */
+    webhookSecretCipher: text("webhook_secret_cipher"),
+    webhookSecretIv: text("webhook_secret_iv"),
+    webhookSecretTag: text("webhook_secret_tag"),
     status: text("status", { enum: ["connected", "reconnect_required"] })
       .notNull()
       .default("connected"),
@@ -615,8 +630,12 @@ export const messengerCredentials = pgTable(
     tokenCipher: text("token_cipher").notNull(),
     tokenIv: text("token_iv").notNull(),
     tokenTag: text("token_tag").notNull(),
-    /** Secreto HMAC de las entregas (Zernio); null en modo Meta. */
+    /** 030: Obsoleta; se mantiene para leer de respaldo mientras no se haya migrado. */
     webhookSecret: text("webhook_secret"),
+    /** 030 — Secreto HMAC cifrado en reposo (AES-256-GCM, como el token). */
+    webhookSecretCipher: text("webhook_secret_cipher"),
+    webhookSecretIv: text("webhook_secret_iv"),
+    webhookSecretTag: text("webhook_secret_tag"),
     status: text("status", { enum: ["connected", "reconnect_required"] })
       .notNull()
       .default("connected"),
@@ -658,6 +677,13 @@ export const agentProfile = pgTable(
     greeting: text("greeting"),
     /** Zona horaria IANA propia del asistente. NULL = hereda la de la organización. */
     timezone: text("timezone"),
+    /** 034 — El rol del agente (`src/lib/agent-roles.ts`). */
+    role: text("role").notNull().default("calificador"),
+    /**
+     * 034 — Las herramientas encendidas, por clave del catálogo. `null` =
+     * todas: lo que tiene una instalación que actualiza.
+     */
+    tools: jsonb("tools").$type<string[] | null>(),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
@@ -951,6 +977,31 @@ export const googleCredentials = pgTable(
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (t) => [uniqueIndex("google_credentials_org_uq").on(t.organizationId)]
+);
+
+/**
+ * 037 — Credenciales de almacenamiento en la nube (AWS S3 / R2 / MinIO) por organización.
+ * Opcional: si enabled=true se usa este bucket con fallback automático a disco local.
+ */
+export const storageCredentials = pgTable(
+  "storage_credentials",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    enabled: boolean("enabled").notNull().default(false),
+    endpoint: text("endpoint").notNull(),
+    bucketName: text("bucket_name").notNull(),
+    region: text("region").notNull().default("auto"),
+    accessKeyId: text("access_key_id").notNull(),
+    secretKeyCipher: text("secret_key_cipher").notNull(),
+    secretKeyIv: text("secret_key_iv").notNull(),
+    secretKeyTag: text("secret_key_tag").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("storage_credentials_org_uq").on(t.organizationId)]
 );
 
 export const agentTestCase = pgTable(
@@ -1275,4 +1326,28 @@ export const organizationSettings = pgTable(
 
 export type OrganizationSettings = typeof organizationSettings.$inferSelect;
 export type NewOrganizationSettings = typeof organizationSettings.$inferInsert;
+
+/** Registro y control mensual de consumo de tokens IA por organización. */
+export const aiUsageMonthly = pgTable(
+  "ai_usage_monthly",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    month: text("month").notNull(), // formato YYYY-MM
+    tokensIn: integer("tokens_in").notNull().default(0),
+    tokensOut: integer("tokens_out").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("ai_usage_monthly_org_month_uq").on(t.organizationId, t.month),
+    index("ai_usage_monthly_org_idx").on(t.organizationId),
+  ]
+);
+
+export type AiUsageMonthly = typeof aiUsageMonthly.$inferSelect;
+export type NewAiUsageMonthly = typeof aiUsageMonthly.$inferInsert;
+
 

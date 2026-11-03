@@ -44,7 +44,7 @@ export async function salesBlock(
   const cerrados = clasificarCierres(desenlaces, businessCurrency);
   const cerradosPrev = clasificarCierres(desenlacesPrev, businessCurrency);
 
-  const [nuevos, nuevosPrev, timeToWinDays, serie, embudo, tiempos, completeFrom, vivo] =
+  const [nuevos, nuevosPrev, timeToWinDays, serie, embudo, tiempos, completeFrom, vivo, roiAi] =
     await Promise.all([
       contarNuevos(organizationId, start, end),
       contarNuevos(organizationId, previousStart, previousEnd),
@@ -54,6 +54,7 @@ export async function salesBlock(
       tiemposPorEtapa(organizationId, start, end),
       primerEventoReal(organizationId),
       pipelineVivo(organizationId, businessCurrency),
+      calcularRoiAi(organizationId, cerrados.won, businessCurrency),
     ]);
 
   const wonCount = cerrados.won.length;
@@ -76,6 +77,7 @@ export async function salesBlock(
       wonCents: comparable(cerrados.wonCents, cerradosPrev.wonCents),
       winRate: rate(wonCount, wonCount + lostCount),
       avgTicketCents,
+      roiAi,
     },
     pipeline: vivo,
     series: serie,
@@ -508,6 +510,100 @@ export function motivosDePerdida(desenlaces: Desenlace[]): LossReasonRowDto[] {
  * SQL; la suma va como `bigint` porque muchos montos de `integer` se salen de
  * `integer`.
  */
+/**
+ * Desglose de tratos ganados asistidos por IA versus cerrados puramente por intervención humana.
+ */
+async function calcularRoiAi(
+  organizationId: string,
+  wonLeadIds: string[],
+  businessCurrency: string
+): Promise<{
+  wonAiAssistedCount: number;
+  wonAiAssistedCents: number;
+  wonHumanOnlyCount: number;
+  wonHumanOnlyCents: number;
+}> {
+  if (wonLeadIds.length === 0) {
+    return {
+      wonAiAssistedCount: 0,
+      wonAiAssistedCents: 0,
+      wonHumanOnlyCount: 0,
+      wonHumanOnlyCents: 0,
+    };
+  }
+
+  const db = getDb();
+
+  // Consultar tratos ganados con información de su contacto y mensajes IA generados
+  const leads = await db
+    .select({
+      id: schema.lead.id,
+      amountCents: schema.lead.amountCents,
+      currency: schema.lead.currency,
+      contactId: schema.lead.contactId,
+    })
+    .from(schema.lead)
+    .where(
+      scoped(
+        schema.lead.organizationId,
+        organizationId,
+        inArray(schema.lead.id, wonLeadIds)
+      )
+    );
+
+  const contactIds = leads.map((l) => l.contactId);
+  const contactsWithAi = new Set<string>();
+
+  if (contactIds.length > 0) {
+    const aiConversations = await db
+      .select({ contactId: schema.conversation.contactId })
+      .from(schema.message)
+      .innerJoin(
+        schema.conversation,
+        eq(schema.message.conversationId, schema.conversation.id)
+      )
+      .where(
+        scoped(
+          schema.message.organizationId,
+          organizationId,
+          inArray(schema.conversation.contactId, contactIds),
+          eq(schema.message.aiGenerated, true)
+        )
+      );
+
+    for (const m of aiConversations) {
+      if (m.contactId) contactsWithAi.add(m.contactId);
+    }
+  }
+
+  let wonAiAssistedCount = 0;
+  let wonAiAssistedCents = 0;
+  let wonHumanOnlyCount = 0;
+  let wonHumanOnlyCents = 0;
+
+  for (const l of leads) {
+    const isAi = contactsWithAi.has(l.contactId);
+    const amount = sumable({ amountCents: l.amountCents, currency: l.currency }, businessCurrency)
+      ? (l.amountCents ?? 0)
+      : 0;
+
+    if (isAi) {
+      wonAiAssistedCount++;
+      wonAiAssistedCents += amount;
+    } else {
+      wonHumanOnlyCount++;
+      wonHumanOnlyCents += amount;
+    }
+  }
+
+  return {
+    wonAiAssistedCount,
+    wonAiAssistedCents,
+    wonHumanOnlyCount,
+    wonHumanOnlyCents,
+  };
+}
+
 async function pipelineVivo(
   organizationId: string,
   businessCurrency: string

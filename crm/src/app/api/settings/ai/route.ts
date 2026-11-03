@@ -36,6 +36,8 @@ export async function GET() {
   }
 
   const settings = await getOrganizationSettings(session.organizationId);
+  const { checkAiQuota } = await import("@/server/ai/quota");
+  const quota = await checkAiQuota(session.organizationId);
 
   return Response.json({
     ok: true,
@@ -51,6 +53,7 @@ export async function GET() {
       timezone: settings.timezone,
       aiEnabled: settings.aiEnabled,
       labEnabled: settings.labEnabled,
+      quota,
     },
   });
 }

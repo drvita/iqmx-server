@@ -181,16 +181,19 @@ export async function verifyZernioToken(token: string): Promise<void> {
  * interpretar — incluido `isAuthError`, que distingue una llave muerta de un
  * hipo transitorio y costó un incidente aprender.
  */
-async function zernioFetch(
+export async function zernioFetch(
   path: string,
   opts: {
-    method?: "GET" | "POST";
+    method?: "GET" | "POST" | "PUT";
     token: string;
     body?: unknown;
     headers?: Record<string, string>;
+    timeoutMs?: number;
   }
 ): Promise<unknown> {
   let res: Response;
+  const controller = opts.timeoutMs ? new AbortController() : null;
+  const timer = opts.timeoutMs && controller ? setTimeout(() => controller.abort(), opts.timeoutMs) : null;
   try {
     res = await fetch(`${ZERNIO_BASE}${path}`, {
       method: opts.method ?? "GET",
@@ -200,12 +203,15 @@ async function zernioFetch(
         ...(opts.headers ?? {}),
       },
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      signal: controller?.signal,
     });
   } catch (cause) {
     throw new MetaApiError("No se pudo contactar la API de Zernio", {
       status: 0,
       details: cause,
     });
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 
   const text = await res.text();

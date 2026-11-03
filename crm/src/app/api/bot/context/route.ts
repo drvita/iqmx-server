@@ -4,6 +4,8 @@ import { apiError } from "@/lib/api";
 import { requireBotKeyAndResolveOrg } from "@/server/bot/auth";
 import { serializeFicha } from "@/server/bot/ficha";
 import { isWindowOpen, windowRemainingMs } from "@/server/inbox/window";
+import { siguientesDelLead } from "@/server/bot/stage";
+import { anuncioDelContacto } from "@/server/attribution/store";
 
 export const dynamic = "force-dynamic";
 
@@ -105,6 +107,13 @@ export async function GET(req: Request) {
     )
     .limit(1);
 
+  const lead = leadRows[0];
+  const nextStages = lead
+    ? await siguientesDelLead(organizationId, lead.lead.stageId)
+    : [];
+
+  const adOrigen = await anuncioDelContacto(organizationId, contact.id);
+
   return Response.json({
     contact: {
       id: contact.id,
@@ -126,8 +135,18 @@ export async function GET(req: Request) {
       windowOpen: isWindowOpen(conversation.lastInboundAt),
       windowRemainingMs: windowRemainingMs(conversation.lastInboundAt),
     },
-    lead: leadRows[0]
-      ? { id: leadRows[0].lead.id, stageName: leadRows[0].stage.name }
+    lead: lead
+      ? { id: lead.lead.id, stageName: lead.stage.name, nextStages }
+      : null,
+    adOrigen: adOrigen
+      ? {
+          headline: adOrigen.headline,
+          body: adOrigen.body,
+          sourceType: adOrigen.sourceType,
+          sourceUrl: adOrigen.sourceUrl,
+          hasCtwaClid: adOrigen.hasCtwaClid,
+          capturedAt: adOrigen.capturedAt,
+        }
       : null,
   });
 }

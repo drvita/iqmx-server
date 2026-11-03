@@ -14,7 +14,12 @@ export type ChatMessage = {
 };
 
 export type ChatJsonResult<T> =
-  | { ok: true; data: T; raw: string }
+  | {
+      ok: true;
+      data: T;
+      raw: string;
+      usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+    }
   | {
       ok: false;
       error: "not_configured" | "provider_error" | "invalid_output";
@@ -100,13 +105,14 @@ export async function chatJson<T>(
             },
           ];
     try {
-      const raw = await callProvider(
+      const responseObj = await callProvider(
         model,
         attemptMessages,
         opts?.timeoutMs,
         token,
         baseUrl
       );
+      const raw = responseObj.content;
       lastRaw = raw;
       const extracted = extractJson(raw);
       if (extracted === null) {
@@ -120,7 +126,7 @@ export async function chatJson<T>(
           .join("; ")} (raw=${truncate(raw)})`;
         continue;
       }
-      return { ok: true, data: parsed.data, raw };
+      return { ok: true, data: parsed.data, raw, usage: responseObj.usage };
     } catch (err) {
       lastDetail = err instanceof Error ? err.message : String(err);
       if (attempt < MAX_ATTEMPTS) {
@@ -146,7 +152,7 @@ async function callProvider(
   token?: string | null,
   baseUrl?: string | null,
   jsonMode = true
-): Promise<string> {
+): Promise<{ content: string; usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } }> {
   const env = getEnv();
   const effectiveBaseUrl = baseUrl || env.OPENROUTER_BASE_URL;
   const effectiveToken = token || env.OPENROUTER_API_TOKEN;
@@ -177,12 +183,13 @@ async function callProvider(
     }
     const json = (await res.json()) as {
       choices?: { message?: { content?: string } }[];
+      usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
     };
     const content = json.choices?.[0]?.message?.content;
     if (typeof content !== "string" || content.length === 0) {
       throw new Error("respuesta del proveedor sin contenido");
     }
-    return content;
+    return { content, usage: json.usage };
   } finally {
     clearTimeout(timer);
   }
