@@ -33,7 +33,7 @@ export type ConversationDto = {
    * 028 — Lo que el compositor puede ofrecer en este canal: adjuntos, y
    * ubicación o contacto. El servidor rechaza lo demás igual.
    */
-  composer?: { media: boolean; structured: boolean };
+  composer?: { media: boolean; structured: boolean; quoteReply?: boolean };
   preview: string | null;
   /** 018: de qué anuncio llegó esta conversación (para badge y filtro de bandeja). */
   anuncio?: {

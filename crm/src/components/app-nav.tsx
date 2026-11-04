@@ -21,6 +21,7 @@ import type { Branding } from "@/lib/branding";
 import type { ThemePreference } from "@/lib/theme";
 import { cn, initials } from "@/lib/utils";
 import { signOut } from "@/lib/auth/client";
+import { limpiarBorradores } from "@/lib/borradores";
 import { useEvents } from "@/components/use-events";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { BrandLogo, BrandTile } from "@/components/brand-mark";
@@ -148,6 +149,7 @@ export function AppNav({
   async function handleConfirmLogout() {
     setIsLoggingOut(true);
     try {
+      limpiarBorradores();
       await signOut();
       router.push("/login");
       router.refresh();

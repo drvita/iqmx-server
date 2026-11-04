@@ -12,6 +12,7 @@
 
 # --- Dependencias / build (cuando el starter ya tenga app encima) ---
 node_modules/
+.pnpm-store/
 .next/
 out/
 dist/

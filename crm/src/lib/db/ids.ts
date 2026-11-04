@@ -40,6 +40,10 @@ const prefixes = {
   labScenario: "scen",
   labSuiteConfig: "lcfg",
   aiUsage: "aiu",
+  // 049 — respuestas rápidas con «/»
+  quickReply: "qr",
+  // 050 — notas internas en el hilo
+  conversationNote: "cn",
 } as const;
 
 export type IdKind = keyof typeof prefixes;

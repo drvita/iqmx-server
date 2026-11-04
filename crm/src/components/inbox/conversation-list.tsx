@@ -12,6 +12,7 @@ import { ContactAvatar } from "@/components/avatar";
 import { Button } from "@/components/ui/button";
 import { emptyInboxDescription, formatTime, previewText } from "./helpers";
 import { LineBadge, getLineColor } from "./line-badge";
+import { EVENTO_BORRADOR, leerBorrador } from "@/lib/borradores";
 
 /* Puntos de etapa con la paleta de la landing: azul, ámbar, verde WhatsApp. */
 const STAGE_DOT: Record<string, string> = {
@@ -89,6 +90,13 @@ export function ConversationList({
   const [inbox, setInbox] = useState<Channel | "all">("all");
   const [lineFilter, setLineFilter] = useState<string | "all">("all");
   const inputRef = useRef<HTMLInputElement>(null);
+  // 051 — La lista se repinta cuando un borrador aparece, cambia o se va.
+  const [, setBorradores] = useState(0);
+  useEffect(() => {
+    const avisar = () => setBorradores((v) => v + 1);
+    window.addEventListener(EVENTO_BORRADOR, avisar);
+    return () => window.removeEventListener(EVENTO_BORRADOR, avisar);
+  }, []);
 
   /**
    * Rescate de lo tecleado ANTES de que hidratara el JS. La caja se pinta en
@@ -420,7 +428,18 @@ export function ConversationList({
                             unread ? "font-medium text-text-2" : "text-text-3"
                           )}
                         >
-                          {previewText(c.preview)}
+                          {(() => {
+                            // 051 — Como WhatsApp: lo que quedó a medias se ve.
+                            const borrador = leerBorrador("responder", c.id);
+                            return borrador ? (
+                              <>
+                                <span className="font-semibold text-brand-ink">Borrador:</span>{" "}
+                                {borrador.replace(/\s+/g, " ")}
+                              </>
+                            ) : (
+                              previewText(c.preview)
+                            );
+                          })()}
                         </span>
                         {unread && (
                           <span className="flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-brand px-1.5 text-[10.5px] font-semibold text-brand-fg">

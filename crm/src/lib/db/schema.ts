@@ -1350,4 +1350,65 @@ export const aiUsageMonthly = pgTable(
 export type AiUsageMonthly = typeof aiUsageMonthly.$inferSelect;
 export type NewAiUsageMonthly = typeof aiUsageMonthly.$inferInsert;
 
+/**
+ * 049 — Respuestas rápidas de la organización.
+ *
+ * El equipo las inserta con «/atajo» en el compositor de la Bandeja. No
+ * envían solas: rellenan la caja para que la persona la revise y complete.
+ * Si se borra la organización, caen en cascada.
+ */
+export const quickReply = pgTable(
+  "quick_reply",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    /** Normalizado: minúsculas, sin acentos, `[a-z0-9_-]{1,32}`. */
+    atajo: text("atajo").notNull(),
+    /** Hasta 4 096 caracteres (el tope de WhatsApp). Admite `{nombre}`. */
+    texto: text("texto").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex("quick_reply_org_atajo_uq").on(t.organizationId, t.atajo)]
+);
+
+export type QuickReply = typeof quickReply.$inferSelect;
+export type NewQuickReply = typeof quickReply.$inferInsert;
+
+/**
+ * 050 — Notas internas en el hilo de una conversación.
+ *
+ * Solo las ve el equipo, en vivo por SSE. Nunca se envían al cliente ni se
+ * despachan al cerebro. Tienen su propia tabla (no entran a `message`), por
+ * lo que el outbox, el despacho, las métricas y la detección de «sin
+ * responder» ni se enteran de ellas.
+ */
+export const conversationNote = pgTable(
+  "conversation_note",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversation.id, { onDelete: "cascade" }),
+    /** Si se borra la cuenta, la nota queda («Alguien del equipo»). */
+    authorUserId: text("author_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    texto: text("texto").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("conversation_note_conv_idx").on(t.organizationId, t.conversationId, t.createdAt),
+  ]
+);
+
+export type ConversationNote = typeof conversationNote.$inferSelect;
+export type NewConversationNote = typeof conversationNote.$inferInsert;
+
+
 

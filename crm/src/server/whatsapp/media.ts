@@ -73,7 +73,10 @@ export class MediaValidationError extends Error {
  * que WhatsApp no acepta como su tipo nativo (p. ej. image/bmp) van como
  * documento — igual que hace la app de WhatsApp.
  */
-export function validateOutgoing(mime: string, sizeBytes: number) {
+export function validateOutgoing(mimeConParametros: string, sizeBytes: number) {
+  // 044: `audio/ogg; codecs=opus` (la nota de voz, o lo que graba Firefox)
+  // trae parámetros; el tipo es lo de antes del `;`.
+  const mime = mimeConParametros.split(";")[0]!.trim();
   if (!/^[\w.-]+\/[\w.+-]+$/.test(mime)) {
     throw new MediaValidationError("unsupported_type", "Tipo de archivo no reconocido");
   }
@@ -250,6 +253,25 @@ export async function ensureAssetAvailable(
       .set({ fetchStatus: "failed", fetchError: message, updatedAt: new Date() })
       .where(eq(schema.mediaAsset.id, assetId));
     console.warn(`[media] descarga del asset ${assetId} falló: ${message}`);
+    return null;
+  }
+}
+
+export async function leerAdjunto(
+  organizationId: string,
+  asset: typeof schema.mediaAsset.$inferSelect
+): Promise<{ asset: typeof schema.mediaAsset.$inferSelect; data: Buffer } | null> {
+  try {
+    return { asset, data: await readMediaFile(organizationId, asset.id) };
+  } catch {
+    // El archivo no está: se intenta recuperar de Meta.
+  }
+  const recuperado = await ensureAssetAvailable(organizationId, asset.id);
+  if (!recuperado || recuperado.fetchStatus !== "available") return null;
+  try {
+    const data = await readMediaFile(organizationId, asset.id);
+    return { asset: recuperado, data };
+  } catch {
     return null;
   }
 }

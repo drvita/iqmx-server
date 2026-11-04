@@ -1,5 +1,6 @@
 # Dependencias de Node
 node_modules/
+.pnpm-store/
 .next/
 out/
 build/
@@ -29,5 +30,4 @@ Thumbs.db
 *.tsbuildinfo
 
 # Chatbot
-chatbot/storage/*
-chatbot/storage/demo.sqlite
+crm/.pnpm-store

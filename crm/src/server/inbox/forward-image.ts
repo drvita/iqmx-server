@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { scoped } from "@/lib/db/tenant";
 import { IMAGEN_ADJUNTA } from "@/lib/imagen-adjunta";
-import { ensureAssetAvailable, readMediaFile } from "@/server/whatsapp/media";
+import { ensureAssetAvailable, leerAdjunto, readMediaFile } from "@/server/whatsapp/media";
 import { SendError, sendMediaMessage } from "./send";
 
 /** 042 — Un reenvío que no puede salir; el código va tal cual a la API. */
@@ -73,19 +73,7 @@ export async function forwardImage(input: {
   if (asset.kind !== "image" || !asset.mimeType || !IMAGEN_ADJUNTA.mimes.test(asset.mimeType)) {
     throw new ForwardImageError(422, "invalid", "Este mensaje no trae una imagen que se pueda reenviar");
   }
-  // Una imagen entrante que todavía no se bajó de Meta se baja ahora.
-  if (asset.fetchStatus !== "available") {
-    const ready = await ensureAssetAvailable(input.organizationId, asset.id);
-    if (!ready) {
-      throw new ForwardImageError(410, "gone", "La imagen ya no está disponible para reenviar");
-    }
-  }
-  let data: Buffer;
-  try {
-    data = await readMediaFile(input.organizationId, asset.id);
-  } catch {
-    throw new ForwardImageError(410, "gone", "El archivo de la imagen ya no está disponible");
-  }
+  const data = await leerParaReenviar(input.organizationId, asset, "La imagen");
 
   return sendMediaMessage({
     organizationId: input.organizationId,
@@ -94,4 +82,27 @@ export async function forwardImage(input: {
     // Sin `caption` se conserva el del original; con «» se manda sin pie.
     caption: (input.caption ?? asset.caption ?? "") || undefined,
   });
+}
+
+/**
+ * 042 · 059 — El archivo de un adjunto que se va a reenviar. Uno entrante que
+ * todavía no se bajó de Meta se baja ahora, como lo pide la bandeja al
+ * pintarlo; si se perdió del volumen, `readMediaFile` lo vuelve a bajar.
+ */
+export async function leerParaReenviar(
+  organizationId: string,
+  asset: typeof schema.mediaAsset.$inferSelect,
+  queEs: string
+): Promise<Buffer> {
+  if (asset.fetchStatus !== "available") {
+    const ready = await ensureAssetAvailable(organizationId, asset.id);
+    if (!ready) {
+      throw new ForwardImageError(410, "gone", `${queEs} ya no está disponible para reenviar`);
+    }
+  }
+  const leido = await leerAdjunto(organizationId, asset);
+  if (!leido) {
+    throw new ForwardImageError(410, "gone", "El archivo ya no está disponible para reenviar");
+  }
+  return leido.data;
 }

@@ -7,6 +7,75 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 > **Zona horaria de referencia:** Ciudad de México (CST / UTC-6).
 
+## [1.20.0] - 2026-11-03
+
+### Añadido
+
+- **Respuestas Rápidas con Menú Desplegable `/` (Spec 049) (`crm/`)**:
+  - **Base de Datos y Persistencia**:
+    - Nueva tabla `quick_reply` en esquema multi-tenant con campos `shortcut`, `title`, `content` y ordenación `position` ([`crm/src/lib/db/schema.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/db/schema.ts)).
+    - Migración DDL aplicada en schema `crm`: [`crm/drizzle/0031_lonely_nextwave.sql`](file:///Users/laclavees12345/code/iqissmexico/main/crm/drizzle/0031_lonely_nextwave.sql).
+  - **Servicios y Lógica Pura**:
+    - Validador y utilidades puras en [`crm/src/lib/respuestas-rapidas.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/respuestas-rapidas.ts).
+    - Servicio de dominio multi-inquilino en [`crm/src/server/quick-replies.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/quick-replies.ts) con semilla predeterminada para nuevas organizaciones.
+    - Endpoints REST `/api/quick-replies` para listado, creación, edición y eliminación.
+  - **Interfaz de Usuario y Redacción**:
+    - Menú flotante interactivo [`QuickReplyMenu`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/quick-reply-menu.tsx) activable en el compositor de mensajes al teclear `/`, con navegación por teclado (flechas y Enter) y filtrado en tiempo real.
+    - Pantalla de administración completa en [`/settings/quick-replies`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/settings/quick-replies-client.tsx) con soporte para variables dinámicas (`{{nombre}}`, `{{empresa}}`, `{{asesor}}`).
+
+- **Notas Internas de Equipo en el Hilo de Conversación (Spec 050) (`crm/`)**:
+  - **Aislamiento Estricto y Persistencia**:
+    - Nueva tabla `conversation_note` con `organization_id`, `conversation_id`, `user_id` y `content` ([`crm/src/lib/db/schema.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/db/schema.ts)). Las notas nunca se envían al contacto ni se exponen a proveedores externos de IA.
+    - Servicio de dominio en [`crm/src/server/notas.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/notas.ts) y rutas REST `/api/conversations/[id]/notes`.
+    - Eventos SSE en tiempo real (`note.new` y `note.deleted`) para sincronización multi-agente en [`crm/src/server/events/bus.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/events/bus.ts).
+  - **Experiencia en Bandeja**:
+    - Pestañas «Responder | Nota interna» en el compositor de mensajes ([`crm/src/components/inbox/composer.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/composer.tsx)) con borde y botón ámbar distintivo para prevenir envíos accidentales.
+    - Renderizado intercalado cronológicamente con tarjetas ámbar estilo post-it en [`crm/src/components/inbox/message-thread.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/message-thread.tsx) identificando al autor de la nota y opción de borrado.
+
+- **Borradores Automáticos por Conversación (Spec 051) (`crm/`)**:
+  - Persistencia local inmediata de mensajes no enviados en `localStorage` con expiración automática de 7 días ([`crm/src/lib/borradores.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/borradores.ts)).
+  - Distintivo visual en color ámbar `Borrador: ...` en la lista de conversaciones ([`crm/src/components/inbox/conversation-list.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/conversation-list.tsx)).
+  - Limpieza automática de borradores al cerrar sesión de usuario para proteger la confidencialidad en dispositivos compartidos ([`crm/src/components/app-nav.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/app-nav.tsx)).
+
+- **Notas de Voz Nativas y Reproductor de Audio Avanzado (Spec 044) (`crm/`)**:
+  - Grabadora de voz en el navegador ([`VoiceRecorder`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/voice-recorder.tsx)) con temporizador en vivo, botón de descarte y transcodificación de WebM a OGG/Opus compatible con WhatsApp ([`crm/src/lib/audio/webm-ogg.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/audio/webm-ogg.ts)).
+  - Endpoint y servicio de envío de audio en [`crm/src/server/whatsapp/nota-de-voz.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/whatsapp/nota-de-voz.ts).
+  - Reproductor [`AudioPlayer`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/audio-player.tsx) con visualización de forma de onda SVG interactiva, selector de velocidades (1x, 1.5x, 2x) y compatibilidad total con el bloque de transcripción automática de IA existente.
+  - Notificación reactiva SSE `message.media` al finalizar la descarga en segundo plano de adjuntos entrantes.
+
+- **Reenvío Universal y Gestos Táctiles (Spec 059) (`crm/`)**:
+  - Diálogo modal accesible [`ForwardDialog`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/forward-dialog.tsx) para reenviar texto, imágenes, documentos y audios hacia cualquier conversación activa con guardas de ventana de 24 h.
+  - Servicio de backend en [`crm/src/server/inbox/forward-message.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/inbox/forward-message.ts) con reenvío de archivos binarios entre carpetas del tenant sin re-descargas innecesarias.
+  - Gesto táctil *swipe-to-quote* (deslizar a la derecha) en burbujas de mensaje para citar y responder rápidamente en dispositivos móviles.
+
+- **Eventos Históricos en el Hilo de Conversación (Spec 054) (`crm/`)**:
+  - Servicio agregador cronológico en [`crm/src/server/inbox/eventos.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/inbox/eventos.ts) y endpoint `/api/conversations/[id]/eventos`.
+  - Píldoras centrales no intrusivas en [`crm/src/components/inbox/message-thread.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/inbox/message-thread.tsx) que muestran cambios de etapa en el embudo, pausas de IA, activaciones de piloto automático y transferencias a humanos (incluyendo el motivo por cuota de tokens).
+
+- **Filtros Unificados de Bandeja y Advertencia de Ventana de 24 Horas (Spec 052) (`crm/`)**:
+  - Módulo puro en [`crm/src/lib/filtros-bandeja.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/filtros-bandeja.ts) con soporte para filtros por canal, asignación, estado, y conversaciones «Por vencer».
+  - Indicador dinámico de cuenta regresiva `Vence en X h` con semáforo ámbar/rojo en las conversaciones próximas a agotar su ventana de respuesta oficial de Meta.
+  - Preservación íntegra del selector de líneas telefónicas WhatsApp para inquilinos con múltiples números conectados.
+
+- **Paleta de Comandos Global Ctrl+K y Atajos de Teclado (Spec 055) (`crm/`)**:
+  - Centro de control modal accesible [`AtajosGlobales`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/atajos-globales.tsx) invocable con `Ctrl+K` o `Cmd+K` para saltar rápidamente entre Bandeja, Embudo, Contactos, Laboratorio, Citas y Ajustes.
+  - Atajos de navegación rápida (`J` / `K` para siguiente/anterior chat, `E` para archivar/resolver, `N` para alternar modo nota interna, y `?` para ver la lista de combinaciones de teclas).
+
+- **Avisos Sonoros, Contador Dinámico en Pestaña y Banda Sin Conexión (Specs 045, 056) (`crm/`)**:
+  - Notificaciones sonoras sutiles generadas con Web Audio API (sin descargas de archivos de audio externos) ante mensajes entrantes.
+  - Actualización automática del título de la pestaña del navegador con el conteo de mensajes pendientes: `(n) CRM`.
+  - Componente [`BandaSinConexion`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/components/banda-sin-conexion.tsx) que alerta sutilmente en la parte superior si la conexión SSE se interrumpe, reconectando con reintentos exponenciales.
+
+- **Fondo de Chat Estilo WhatsApp y Optimización de Listas (Specs 063, 064) (`crm/`)**:
+  - Textura de fondo SVG sutil estilo WhatsApp en [`crm/public/fondo-chat/`](file:///Users/laclavees12345/code/iqissmexico/main/crm/public/fondo-chat/) y clase `.thread-bg` adaptada automáticamente para tema claro y tema oscuro.
+  - Índices y utilidades en [`crm/src/lib/lista-compartida.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/lib/lista-compartida.ts) y optimización de consultas en [`crm/src/server/inbox/queries.ts`](file:///Users/laclavees12345/code/iqissmexico/main/crm/src/server/inbox/queries.ts).
+
+### Modificado
+
+- **Homologación de Versión del Paquete CRM**:
+  - Actualización de versión a `2.7.0` en [`crm/package.json`](file:///Users/laclavees12345/code/iqissmexico/main/crm/package.json) alineada con el núcleo base de Vocero CRM v2.7.0.
+  - Verificación de compilación limpia de TypeScript (`npm run typecheck`: 0 errores) y paso exitoso de suite de pruebas unitarias (13 suites, 100 tests superados).
+
 ## [1.19.0] - 2026-11-02
 
 ### Añadido

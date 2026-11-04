@@ -127,7 +127,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: sh -c "node scripts/migrate.mjs && pnpm dev"
+    command: sh -c "pnpm install --no-frozen-lockfile && node scripts/migrate.mjs && pnpm dev"
+    environment:
+      - CI=false
     env_file:
       - ./crm/.env
     volumes:

@@ -5,17 +5,25 @@ import { useSearchParams } from "next/navigation";
 import { ChevronLeft, PanelRight } from "lucide-react";
 import { cn, formatPhone } from "@/lib/utils";
 import { ContactAvatar } from "@/components/avatar";
-import type { ConversationDto, ConversationLineDto, MessageDto } from "@/lib/types";
+import type { NotaDto } from "@/lib/notas";
+import type {
+  ConversationDto,
+  ConversationLineDto,
+  MessageDto,
+  QuotedMessageDto,
+} from "@/lib/types";
 import { CHANNEL_LABEL, type Channel } from "@/lib/channels";
 import { ChannelBadge } from "@/components/channel-badge";
 import { useEvents } from "@/components/use-events";
 import { ConversationList } from "./conversation-list";
 import { MessageThread } from "./message-thread";
 import { Composer } from "./composer";
-import { ContactPanel } from "./contact-panel";
-import { LineBadge } from "./line-badge";
+import {
+  EVENTO_ABRIR_CONVERSACION,
+  setConversacionAbierta,
+} from "@/components/avisos-de-mensajes";
 import { citaDe } from "./helpers";
-import type { QuotedMessageDto } from "@/lib/types";
+import { ContactPanel } from "./contact-panel";
 
 /**
  * Texto que ya salió del compositor pero cuyo POST todavía viaja. Existe solo
@@ -26,7 +34,8 @@ type PendingOut = {
   id: string;
   conversationId: string;
   text: string;
-  replyTo?: QuotedMessageDto | null;
+  /** 039: la cita viaja también en la burbuja provisional. */
+  replyTo: QuotedMessageDto | null;
   createdAt: string;
 };
 
@@ -47,16 +56,17 @@ export function InboxClient({
   /** 026 — Eliminar es irreversible: solo quien administra ve la opción. */
   canDelete?: boolean;
 }) {
+  const multiChannel = channels.length > 1;
   const [conversations, setConversations] = useState<ConversationDto[] | null>(
     null
   );
-  const multiChannel =
-    channels.length > 1 ||
-    (conversations?.some((c) => c.channel !== "whatsapp") ?? false);
   const [lines, setLines] = useState<ConversationLineDto[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [messages, setMessages] = useState<MessageDto[]>([]);
+  // 050 — Las notas internas de la conversación abierta.
+  const [notas, setNotas] = useState<NotaDto[]>([]);
   const [pending, setPending] = useState<PendingOut[]>([]);
+  // 039: el mensaje al que se está respondiendo citando.
   const [replyTo, setReplyTo] = useState<MessageDto | null>(null);
   // Arranca cerrado: en pantallas angostas el panel de detalles es un cajón
   // ENCIMA del hilo, así que abrirlo por defecto taparía la conversación. El
@@ -80,6 +90,11 @@ export function InboxClient({
   }, []);
   const selectedIdRef = useRef<string | null>(null);
   selectedIdRef.current = selectedId;
+  // 045 — El aviso sonoro no suena por la conversación que ya estás mirando.
+  useEffect(() => {
+    setConversacionAbierta(selectedId);
+    return () => setConversacionAbierta(null);
+  }, [selectedId]);
   const lastFetchRef = useRef<string | null>(null);
   const tmpSeq = useRef(0);
   // Los envíos salen en fila: el compositor ya no espera, pero WhatsApp debe
@@ -108,6 +123,13 @@ export function InboxClient({
     if (selectedIdRef.current === conversationId) setMessages(data.messages);
   }, []);
 
+  const refetchNotas = useCallback(async (conversationId: string) => {
+    const res = await fetch(`/api/conversations/${conversationId}/notes`).catch(() => null);
+    if (!res?.ok) return;
+    const data = (await res.json()) as { notas: NotaDto[] };
+    if (selectedIdRef.current === conversationId) setNotas(data.notas);
+  }, []);
+
   useEffect(() => {
     void refetchConversations();
   }, [refetchConversations]);
@@ -116,14 +138,17 @@ export function InboxClient({
     (id: string) => {
       setSelectedId(id);
       setMessages([]);
+      setNotas([]);
+      setReplyTo(null);
       void refetchMessages(id);
+      void refetchNotas(id);
       void fetch(`/api/conversations/${id}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ markRead: true }),
       });
     },
-    [refetchMessages]
+    [refetchMessages, refetchNotas]
   );
 
   /** 026 — Saca una conversación eliminada de todo lo que esta pestaña recuerda. */
@@ -133,6 +158,7 @@ export function InboxClient({
     if (selectedIdRef.current === id) {
       setSelectedId(null);
       setMessages([]);
+      setNotas([]);
       setReplyTo(null);
     }
   }, []);
@@ -140,6 +166,21 @@ export function InboxClient({
   // Enlace directo desde Contactos/Pipeline: /inbox?contact=<id>
   const searchParams = useSearchParams();
   const contactParam = searchParams.get("contact");
+  // 056 — Al tocar un aviso del sistema: /inbox?conversation=<id>. Se aplica
+  // una vez por aviso; si no, cada refresco de la lista volvería a saltar ahí.
+  const conversationParam = searchParams.get("conversation");
+  const [pedida, setPedida] = useState<string | null>(null);
+  useEffect(() => setPedida(conversationParam), [conversationParam]);
+  useEffect(() => {
+    const alPedir = (e: Event) => setPedida((e as CustomEvent<string>).detail);
+    window.addEventListener(EVENTO_ABRIR_CONVERSACION, alPedir);
+    return () => window.removeEventListener(EVENTO_ABRIR_CONVERSACION, alPedir);
+  }, []);
+  useEffect(() => {
+    if (!pedida || !conversations?.some((c) => c.id === pedida)) return;
+    setPedida(null);
+    if (selectedIdRef.current !== pedida) select(pedida);
+  }, [pedida, conversations, select]);
   useEffect(() => {
     if (!contactParam || selectedIdRef.current) return;
     const match = conversations?.find((c) => c.contact.id === contactParam);
@@ -147,6 +188,15 @@ export function InboxClient({
   }, [contactParam, conversations, select]);
 
   useEvents({
+    // 050 — Se relee la lista: `puedeBorrar` depende de quién mira.
+    onNoteNew: ({ conversationId }) => {
+      if (selectedIdRef.current === conversationId) void refetchNotas(conversationId);
+    },
+    onNoteDeleted: ({ conversationId, noteId }) => {
+      if (selectedIdRef.current === conversationId) {
+        setNotas((prev) => prev.filter((n) => n.id !== noteId));
+      }
+    },
     onMessageNew: ({ conversationId, message }) => {
       if (selectedIdRef.current === conversationId) {
         const m = message as MessageDto;
@@ -162,6 +212,14 @@ export function InboxClient({
       void refetchConversations();
       // Un entrante nuevo puede crear/mover el lead: refresca el panel.
       setDetailRev((v) => v + 1);
+    },
+    onMessageMedia: ({ conversationId, messageId, media }) => {
+      if (selectedIdRef.current !== conversationId) return;
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === messageId ? { ...m, media: media as MessageDto["media"] } : m
+        )
+      );
     },
     onMessageStatus: ({ conversationId, messageId, status, error }) => {
       if (selectedIdRef.current !== conversationId) return;
@@ -234,7 +292,8 @@ export function InboxClient({
         aiGenerated: false,
         origin: "operator",
         media: null,
-        replyTo: p.replyTo ?? null,
+        quotable: false,
+        replyTo: p.replyTo,
         createdAt: p.createdAt,
       })),
     ];
@@ -321,7 +380,7 @@ export function InboxClient({
         { method: "DELETE" }
       ).catch(() => null);
       if (!res) return "Sin conexión con el servidor";
-      // 404 = otra persona la eliminó primero
+      // 404 = otra persona la eliminó primero: para quien lo pidió, ya está.
       if (!res.ok && res.status !== 404) {
         const data = (await res.json().catch(() => null)) as {
           error?: { message?: string };
@@ -368,7 +427,7 @@ export function InboxClient({
               <button
                 onClick={() => setSelectedId(null)}
                 aria-label="Volver a las conversaciones"
-                className="shrink-0 rounded-md p-1.5 text-text-2 hover:bg-accent hover:text-foreground md:hidden"
+                className="shrink-0 rounded-md p-1.5 text-text-2 hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring md:hidden"
               >
                 <ChevronLeft className="h-5 w-5" strokeWidth={1.8} />
               </button>
@@ -379,77 +438,104 @@ export function InboxClient({
                   size="md"
                 />
                 <div className="min-w-0">
-                  <div className="flex min-w-0 items-center gap-2">
-                    <p className="flex min-w-0 items-center gap-1.5 text-[15px] font-bold leading-tight tracking-tight">
-                      {(multiChannel || selected.channel !== "whatsapp") && (
-                        <ChannelBadge channel={selected.channel} />
-                      )}
-                      <span className="truncate">{selected.contact.name}</span>
-                    </p>
-                    {selected.channel === "whatsapp" && selected.lineName ? (
-                      <LineBadge
-                        name={selected.lineName}
-                        seed={selected.phoneNumberId ?? selected.lineName}
-                        size="xs"
-                        showIcon
-                      />
-                    ) : selected.accountName ? (
-                      <span className="inline-flex items-center gap-1 rounded-full border border-border-strong bg-background px-2 py-0.5 text-[11px] font-medium text-text-3">
-                        {selected.accountName}
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[11px] tracking-[0.02em]">
-                    <span className="font-semibold text-text-2">
-                      {CHANNEL_LABEL[selected.channel]}
-                    </span>
-                    {selected.contact.phone && (
-                      <span className="text-text-3">
-                        {formatPhone(selected.contact.phone)}
-                      </span>
+                  <p className="flex min-w-0 items-center gap-1.5 text-[15px] font-bold leading-tight tracking-tight">
+                    {multiChannel && <ChannelBadge channel={selected.channel} />}
+                    <span className="truncate">{selected.contact.name}</span>
+                  </p>
+                  <p
+                    className={cn(
+                      "mt-0.5 font-mono text-[10.5px] tracking-[0.04em]",
+                      selected.windowOpen
+                        ? "font-medium text-success-text"
+                        : selected.humanWindow?.open
+                          ? "font-medium text-info-text"
+                          : "text-text-3"
                     )}
-                    {selected.windowOpen && (
-                      <span className="flex items-center gap-1 text-[10.5px] font-medium text-success-text">
-                        <span className="h-1.5 w-1.5 rounded-full bg-success" />
-                        ventana abierta
-                      </span>
-                    )}
-                  </div>
+                  >
+                    {selected.windowOpen
+                      ? "ventana abierta"
+                      : selected.humanWindow?.open
+                        ? // 024: pasadas 24 h en Instagram o Messenger solo
+                          // contesta una persona. No se llama «atención
+                          // humana»: eso ya es el traspaso, con la IA en pausa.
+                          "ventana humana"
+                        : selected.contact.phone
+                        ? formatPhone(selected.contact.phone)
+                        : // Instagram no tiene teléfono: decir "Sin teléfono"
+                          // sería contestar una pregunta que nadie hizo.
+                          CHANNEL_LABEL[selected.channel]}
+                  </p>
                 </div>
               </div>
               {!panelOpen && (
                 <button
                   onClick={() => togglePanel(true)}
                   aria-label="Mostrar detalles"
-                  className="shrink-0 rounded-full border border-border-strong p-1.5 text-text-3 transition-colors hover:border-text-3 hover:text-foreground"
+                  className="shrink-0 rounded-full border border-border-strong p-1.5 text-text-3 transition-colors hover:border-text-3 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <PanelRight className="h-4 w-4" strokeWidth={1.7} />
                 </button>
               )}
             </header>
-            <MessageThread
-              messages={thread}
-              contactName={selected.contact.name}
-              onReply={selected.channel === "whatsapp" && selected.windowOpen ? setReplyTo : undefined}
-              conversations={conversations ?? []}
-              onForwarded={() => {
-                if (selectedIdRef.current)
-                  void refetchMessages(selectedIdRef.current);
-                void refetchConversations();
-              }}
-            />
             <Composer
+              // 028: uno por conversación. Sin la llave, el borrador, el adjunto
+              // elegido y el panel abierto pasaban a la siguiente conversación.
+              // 043: el hilo va dentro (la zona donde se suelta una imagen es
+              // la conversación entera), así que la llave también lo reinicia
+              // a él: el aviso «Imagen reenviada a…» no pasa a otra.
               key={selected.id}
               conversation={selected}
               onSend={sendText}
-              replyTo={replyTo}
+              replyTo={replyTo?.conversationId === selected.id ? replyTo : null}
               onReplyChange={setReplyTo}
               onSent={() => {
                 if (selectedIdRef.current)
                   void refetchMessages(selectedIdRef.current);
                 void refetchConversations();
               }}
-            />
+              onNota={async (texto) => {
+                const id = selected.id;
+                const res = await fetch(`/api/conversations/${id}/notes`, {
+                  method: "POST",
+                  headers: { "content-type": "application/json" },
+                  body: JSON.stringify({ texto }),
+                }).catch(() => null);
+                if (!res?.ok) {
+                  const d = (await res?.json().catch(() => null)) as { error?: { message?: string } } | null;
+                  return d?.error?.message ?? "No se pudo guardar la nota. Revisa la conexión.";
+                }
+                const { nota } = (await res.json()) as { nota: NotaDto };
+                if (selectedIdRef.current === id) {
+                  setNotas((prev) => (prev.some((n) => n.id === nota.id) ? prev : [...prev, nota]));
+                }
+                return null;
+              }}
+            >
+              <MessageThread
+                messages={thread}
+                notas={notas}
+                onBorrarNota={async (n) => {
+                  if (!window.confirm("¿Borrar esta nota interna?")) return;
+                  const res = await fetch(`/api/conversations/${n.conversationId}/notes/${n.id}`, {
+                    method: "DELETE",
+                  }).catch(() => null);
+                  if (res?.ok) setNotas((prev) => prev.filter((x) => x.id !== n.id));
+                }}
+                contactName={selected.contact.name}
+                // 039: citar solo donde el canal lo permite y se puede escribir
+                // texto libre (con la ventana cerrada solo salen plantillas).
+                onReply={
+                  Boolean(selected.composer?.quoteReply) && selected.windowOpen
+                    ? setReplyTo
+                    : undefined
+                }
+                conversations={conversations ?? []}
+                onForwarded={() => {
+                  if (selectedIdRef.current) void refetchMessages(selectedIdRef.current);
+                  void refetchConversations();
+                }}
+              />
+            </Composer>
           </>
         ) : (
           <div className="thread-bg flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
@@ -476,7 +562,7 @@ export function InboxClient({
           "shrink-0 overflow-hidden border-l transition-[width] duration-200",
           // Debajo de xl no hay ancho para una tercera columna: el panel se
           // vuelve un cajón que entra desde la derecha, encima del hilo.
-          "max-xl:fixed max-xl:inset-y-0 max-xl:right-0 max-xl:z-40 max-xl:w-auto max-xl:bg-background max-xl:transition-transform",
+          "max-xl:fixed max-xl:inset-y-0 max-xl:right-0 max-xl:z-40 max-xl:w-auto max-xl:bg-popover max-xl:transition-transform",
           panelOpen && selected
             ? "w-[320px] max-xl:translate-x-0 max-xl:shadow-pop"
             : "w-0 border-l-0 max-xl:translate-x-full"

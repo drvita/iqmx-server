@@ -307,19 +307,25 @@
      mockup de la landing. Si el navegador no sabe color-mix, queda el plano. */
   .thread-bg {
     background-color: var(--chat-bg);
-    background-image: radial-gradient(
-      circle at 82% 0%,
-      color-mix(in srgb, var(--accent) 7%, transparent),
-      transparent 55%
-    );
+    background-image: var(--chat-dibujos, url("/fondo-chat/claro.svg")),
+      radial-gradient(
+        circle at 82% 0%,
+        color-mix(in srgb, var(--accent) 7%, transparent),
+        transparent 55%
+      );
+    background-size: 440px 440px, auto;
+    background-repeat: repeat, no-repeat;
   }
   /* En oscuro el 7% no se percibe y el hilo vacío se ve como un hueco. */
   :root[data-theme="dark"] .thread-bg {
-    background-image: radial-gradient(
-      circle at 82% 0%,
-      color-mix(in srgb, var(--accent) 16%, transparent),
-      transparent 60%
-    );
+    background-image: var(--chat-dibujos, url("/fondo-chat/oscuro.svg")),
+      radial-gradient(
+        circle at 82% 0%,
+        color-mix(in srgb, var(--accent) 16%, transparent),
+        transparent 60%
+      );
+    background-size: 440px 440px, auto;
+    background-repeat: repeat, no-repeat;
   }
 
   /* 215 — Rejilla del calendario de Citas: una línea por hora. El alto de la

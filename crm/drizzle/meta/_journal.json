@@ -218,6 +218,13 @@
       "when": 1793678890275,
       "tag": "0030_smooth_flatman",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1793761805238,
+      "tag": "0031_lonely_nextwave",
+      "breakpoints": true
     }
   ]
 }

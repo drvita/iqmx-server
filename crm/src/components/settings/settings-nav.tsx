@@ -12,6 +12,7 @@ const TABS: Tab[] = [
   { href: "/settings/branding", label: "Marca" },
   { href: "/settings/storage", label: "Almacenamiento" },
   { href: "/settings/templates", label: "Plantillas" },
+  { href: "/settings/quick-replies", label: "Respuestas rápidas" },
   { href: "/settings/team", label: "Equipo" },
 ];
 
