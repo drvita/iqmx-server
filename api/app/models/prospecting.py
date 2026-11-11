@@ -87,7 +87,7 @@ class ProspectingBusiness(Base):
     # Estado del embudo
     # 'discovered' -> 'ready_for_llm' -> 'qualified' | 'disqualified' -> 'contacted'
     status = Column(String(40), nullable=False, default="discovered", index=True)
-    disqualification_reason = Column(String(255), nullable=True)
+    disqualification_reason = Column(Text, nullable=True)
 
     # Scores bimodales: DENUE (0-50), Digital (0-50) y computado total_score (0-100)
     denue_score = Column(Integer, nullable=False, default=0, index=True)

@@ -54,6 +54,8 @@ def run_nightly_batch(limit: int = 10, campaign_id: Optional[int] = None, dry_ru
         asyncio.set_event_loop(loop)
 
         for idx, b in enumerate(candidates, 1):
+            b_id = b.id
+            b_name = b.name
             print(f"\n========================================================")
             print(f"[{idx}/{len(candidates)}] Negocio: {b.name}")
             print(f"Score DENUE: {b.denue_score}/50 pts | Contacto actual: Tel={b.phone or 'N/A'}, Web={b.website_url or 'N/A'}")
@@ -185,11 +187,19 @@ def run_nightly_batch(limit: int = 10, campaign_id: Optional[int] = None, dry_ru
                     print(f"     Motivo descarte: {b.disqualification_reason}")
 
             except Exception as llm_err:
-                logger.error(f"Error evaluando con LLM #{b.id} ({b.name}): {llm_err}")
+                db.rollback()
+                logger.error(f"Error evaluando con LLM #{b_id} ({b_name}): {llm_err}")
                 print(f"     [ERROR] Falló evaluación LLM: {llm_err}")
-                b.status = "disqualified"
-                b.disqualification_reason = f"Error en evaluación: {str(llm_err)[:100]}"
-                db.commit()
+                try:
+                    # Recuperar el objeto tras el rollback para registrar el descarte
+                    b_failed = db.query(ProspectingBusiness).filter(ProspectingBusiness.id == b_id).first()
+                    if b_failed:
+                        b_failed.status = "disqualified"
+                        b_failed.disqualification_reason = f"Error en evaluación: {str(llm_err)[:250]}"
+                        db.commit()
+                except Exception as save_err:
+                    db.rollback()
+                    logger.error(f"No se pudo guardar el estado descartado de #{b_id}: {save_err}")
 
             # Paso C: Espacio de 1 segundo antes de pasar al siguiente
             if idx < len(candidates):

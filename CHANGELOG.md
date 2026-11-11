@@ -18,7 +18,9 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
       - `f1a2b3c4d5e6`: Creación de tablas de prospección y campañas.
       - `a1b2c3d4e5f6`: Scores bimodales (`denue_score` 0-50, `digital_score` 0-50), `contact_channel` y evaluación LLM.
       - `b2c3d4e5f6a7`: Campos de rastreo de email (`email_sent_at`, `email_message_id`, `email_delivery_status`, `email_delivered_at`, `email_opened_at`, `email_clicked_at`).
+      - `c3d4e5f6a7b8`: Ampliación del campo `disqualification_reason` a `TEXT` para admitir explicaciones analíticas extensas del LLM sin truncamiento de datos.
     - Algoritmo de scoring híbrido en SQLAlchemy con `@hybrid_property total_score` para ordenación nativa por completitud de datos DENUE y señales digitales.
+    - Manejo resiliente de transacciones en [`api/scripts/prospecting_tasks.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/scripts/prospecting_tasks.py) con `db.rollback()` explícito por iteración para evitar bloqueos por `PendingRollbackError`.
   - **Integraciones y Servicios de Fondo**:
     - Cliente oficial de la API de DENUE (INEGI) en [`api/app/services/prospecting/denue_client.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/services/prospecting/denue_client.py) con paginación y normalización municipal.
     - Scraper ético ligero y enriquecedor web en [`api/app/services/prospecting/enrichment_scraper.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/services/prospecting/enrichment_scraper.py) con detección de enlaces de WhatsApp, sistemas de reservas y búsqueda en DuckDuckGo.
