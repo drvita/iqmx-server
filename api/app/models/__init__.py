@@ -14,6 +14,12 @@ from app.models.product import Product
 from app.models.membership_plan import MembershipPlan
 from app.models.customer_subscription import CustomerSubscription
 from app.models.payment import Payment
+from app.models.prospecting import (
+    ProspectingCampaign,
+    ProspectingRun,
+    ProspectingBusiness,
+    ProspectingSource,
+)
 
 # Exponer todos los modelos para registro centralizado en Base.metadata
 __all__ = [
@@ -32,5 +38,9 @@ __all__ = [
     "Product",
     "MembershipPlan",
     "CustomerSubscription",
-    "Payment"
+    "Payment",
+    "ProspectingCampaign",
+    "ProspectingRun",
+    "ProspectingBusiness",
+    "ProspectingSource",
 ]

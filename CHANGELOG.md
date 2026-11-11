@@ -7,6 +7,39 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 > **Zona horaria de referencia:** Ciudad de México (CST / UTC-6).
 
+## [1.21.0] - 2026-11-10
+
+### Añadido
+
+- **Motor de Prospección Comercial Inteligente (Fases 1, 2 y 3) (`api/` & `web/`)**:
+  - **Modelos y Persistencia Relacional**:
+    - Nuevas entidades [`ProspectingCampaign`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/models/prospecting.py), [`ProspectingBusiness`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/models/prospecting.py) y [`ProspectingSource`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/models/prospecting.py) en PostgreSQL.
+    - Migraciones Alembic aplicadas:
+      - `f1a2b3c4d5e6`: Creación de tablas de prospección y campañas.
+      - `a1b2c3d4e5f6`: Scores bimodales (`denue_score` 0-50, `digital_score` 0-50), `contact_channel` y evaluación LLM.
+      - `b2c3d4e5f6a7`: Campos de rastreo de email (`email_sent_at`, `email_message_id`, `email_delivery_status`, `email_delivered_at`, `email_opened_at`, `email_clicked_at`).
+    - Algoritmo de scoring híbrido en SQLAlchemy con `@hybrid_property total_score` para ordenación nativa por completitud de datos DENUE y señales digitales.
+  - **Integraciones y Servicios de Fondo**:
+    - Cliente oficial de la API de DENUE (INEGI) en [`api/app/services/prospecting/denue_client.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/services/prospecting/denue_client.py) con paginación y normalización municipal.
+    - Scraper ético ligero y enriquecedor web en [`api/app/services/prospecting/enrichment_scraper.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/services/prospecting/enrichment_scraper.py) con detección de enlaces de WhatsApp, sistemas de reservas y búsqueda en DuckDuckGo.
+    - Evaluador LLM con LangChain + OpenRouter en [`api/app/services/prospecting/llm_evaluator.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/services/prospecting/llm_evaluator.py) generando briefings internos para el equipo comercial (diagnóstico, estrategia de venta recomendada y servicios aplicables).
+    - Tarea CLI unificada en [`api/manage.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/manage.py) y [`api/scripts/prospecting_tasks.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/scripts/prospecting_tasks.py) (`python manage.py prospecting:run-batch --limit 10`) con throttling de 1.0s para ejecución programada en Coolify.
+  - **Plantilla Oficial y Despacho en Mailtrap**:
+    - Creación de la plantilla comercial `Prospección Comercial: Soluciones Digitales para Negocios` (UUID `0d146921-fad6-4e2b-98cb-debdde390655`) vía API de Mailtrap, alineada a la identidad visual de IQISSMexico.
+    - Endpoint [`POST /api/admin/prospecting/businesses/{id}/send-email`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/api/admin_prospecting.py) con generación dinámica de `demo_url` hacia el WhatsApp del CRM (`WA_CRM_NUMBER`) y mensaje inicial pre-formateado.
+    - Salvaguarda contra envíos duplicados (`409 Conflict` si ya fue enviado, con opción de bypass `?force=true`).
+  - **Gateway de Webhooks de Mailtrap**:
+    - Nuevo endpoint [`POST /api/webhooks/mailtrap`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/api/webhooks/mailtrap.py) con verificación de firma HMAC-SHA256 (`Mailtrap-Signature`).
+    - Actualización automática de estados de entrega en tiempo real: `delivery` (entregado), `open` (abierto), `click` (interacción con enlaces) y `bounce` (rebotes).
+    - Registro de cada evento en la bitácora de auditoría `prospecting_sources`.
+  - **Panel Administrativo (Frontend)**:
+    - Vista interactiva en [`web/src/app/(admin)/admin/prospecting/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/(admin)/admin/prospecting/page.tsx).
+    - Tabla de prospección [`BusinessesRankingTable.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/components/admin/prospecting/BusinessesRankingTable.tsx) con ordenación por Score Total y nombres reales de municipios.
+    - Drawer lateral [`BusinessScrapedDrawer.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/components/admin/prospecting/BusinessScrapedDrawer.tsx) con cierre al hacer clic en el backdrop o tecla Escape.
+    - Botón de WhatsApp para apertura de chat directo con plantilla inicial y botón inteligente de envío de Email con estados visuales (`Correo Enviado`, `Correo Entregado`, `Correo Abierto`, `Enlace Clickeado`).
+
+---
+
 ## [1.20.0] - 2026-11-03
 
 ### Añadido

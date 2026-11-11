@@ -40,5 +40,13 @@ Bienvenido al repositorio central de **IQISSMexico**. Sigue estas directrices en
 - **`/productos`:** Catálogo oficial completo con todas las soluciones y modalidades (SaaS vs A la medida).
 - **`/landingpage/crm`:** Landing especializada para CRM General (Ventas y Atención al Cliente con IA).
 - **`/landingpage/crm/consultorio`:** Landing especializada para Salud y Consultorios Médicos.
-- **`/admin/...`:** Panel administrativo para gestionar catálogo de productos, planes y clientes.
+- **`/admin/...`:** Panel administrativo para gestionar catálogo de productos, planes, clientes y prospección (`/admin/prospecting`).
 - **`/portal/...`:** Portal de autogestión para clientes.
+
+## 6. Motor de Prospección Comercial (`api/` y `web/`)
+- **Proceso en 3 Pasos:**
+  1. Descubrimiento y scoring bimodal inicial desde DENUE INEGI (`denue_score` 0-50).
+  2. Enriquecimiento ético web y evaluación LLM (LangChain + OpenRouter) vía `python manage.py prospecting:run-batch --limit 10` (`digital_score` 0-50, diagnóstico y oportunidades internas).
+  3. Despacho y contacto: WhatsApp manual con enlace pre-formateado hacia sesión del vendedor, y correo comercial transaccional vía plantilla oficial de Mailtrap (`MAILTRAP_TEMPLATE_PROSPECTING`).
+- **Rastreo de Correo:** Todo correo despachado almacena `email_sent_at` y `email_message_id`. Los eventos de entrega (`delivery`), apertura (`open`), clics (`click`) y rebotes (`bounce`) se reciben automáticamente mediante el webhook `/api/webhooks/mailtrap`.
+

@@ -65,13 +65,27 @@ class Settings(BaseSettings):
     MAILTRAP_TEMPLATE_TRIAL_EXPIRING: str = "90d1a17d-3ebe-457d-940f-0857dff7a224"
     MAILTRAP_TEMPLATE_EXPIRED: str = "03312624-4bca-4944-b63b-f3f39cc5d6b4"
     MAILTRAP_TEMPLATE_FORGOT_PASSWORD: str = "26d33f0e-d992-4187-a4ab-c0b610ebdda1"
+    MAILTRAP_TEMPLATE_PROSPECTING: str = "0d146921-fad6-4e2b-98cb-debdde390655"
+    MAILTRAP_WEBHOOK_SECRET: str | None = None
     SUPPORT_WHATSAPP_PHONE: str = "5213141560219"
+    WA_CRM_NUMBER: str = "523141560219"
 
     # URL base del Portal / Frontend para enlaces en correos y pasarelas
     PORTAL_BASE_URL: str = "http://localhost:3001"
 
     # Redis (Tokens Efímeros & Cache)
     REDIS_URL: str = "redis://redis:6379/0"
+
+    # Motor de Prospección Inteligente (DENUE INEGI)
+    DENUE_API_TOKEN: str | None = None
+    DENUE_API_BASE_URL: str = "https://www.inegi.org.mx/app/api/denue/v1/consulta/"
+
+    # Evaluador LLM de Prospección
+    LLM_PROVIDER: str = "openrouter"
+    LLM_API_KEY: str | None = None
+    LLM_BASE_URL: str = "https://openrouter.ai/api/v1"
+    LLM_MODEL: str = "openrouter/free"
+    LLM_TEMPERATURE: float = 0.1
 
     @property
     def db_url(self) -> str:

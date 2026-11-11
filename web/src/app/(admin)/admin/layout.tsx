@@ -13,11 +13,13 @@ import {
   ShieldCheckIcon,
   UserCircleIcon,
   ArrowRightOnRectangleIcon,
+  MagnifyingGlassCircleIcon,
 } from '@heroicons/react/24/outline';
 import LogoutConfirmationModal from '@/components/LogoutConfirmationModal';
 
 const NAV_ITEMS = [
   { name: 'Dashboard', href: '/admin/dashboard', icon: ChartBarIcon },
+  { name: 'Prospección', href: '/admin/prospecting', icon: MagnifyingGlassCircleIcon },
   { name: 'Clientes', href: '/admin/customers', icon: UsersIcon },
   { name: 'Productos y Planes', href: '/admin/products', icon: CubeIcon },
   { name: 'Suscripciones', href: '/admin/subscriptions', icon: CreditCardIcon },

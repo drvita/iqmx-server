@@ -99,6 +99,29 @@ def main():
         help="Simula la rotación sin alterar la base de datos."
     )
 
+    # Comando 5: prospecting:run-batch
+    cmd_batch = subparsers.add_parser(
+        "prospecting:run-batch",
+        help="Pipeline unificado: Selecciona los Top N por Score DENUE, ejecuta Scraping y Evaluación LLM secuencial (pausa 1s)."
+    )
+    cmd_batch.add_argument(
+        "--limit",
+        type=int,
+        default=10,
+        help="Cantidad de negocios a procesar (por defecto: 10)."
+    )
+    cmd_batch.add_argument(
+        "--campaign-id",
+        type=int,
+        default=None,
+        help="ID de la campaña opcional."
+    )
+    cmd_batch.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Muestra los candidatos seleccionados sin ejecutar el lote."
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -132,6 +155,10 @@ def main():
     elif args.command == "security:rotate-keys":
         from scripts.rotate_m2m_keys import run_rotate_keys
         run_rotate_keys(slug=args.slug, dry_run=args.dry_run)
+
+    elif args.command == "prospecting:run-batch":
+        from scripts.prospecting_tasks import run_nightly_batch
+        run_nightly_batch(limit=args.limit, campaign_id=args.campaign_id, dry_run=args.dry_run)
 
     else:
         print(f"Comando desconocido: {args.command}")
