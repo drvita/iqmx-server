@@ -28,6 +28,8 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
     - Creación de la plantilla comercial `Prospección Comercial: Soluciones Digitales para Negocios` (UUID `0d146921-fad6-4e2b-98cb-debdde390655`) vía API de Mailtrap, alineada a la identidad visual de IQISSMexico.
     - Endpoint [`POST /api/admin/prospecting/businesses/{id}/send-email`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/api/admin_prospecting.py) con generación dinámica de `demo_url` hacia el WhatsApp del CRM (`WA_CRM_NUMBER`) y mensaje inicial pre-formateado.
     - Salvaguarda contra envíos duplicados (`409 Conflict` si ya fue enviado, con opción de bypass `?force=true`).
+  - **Endpoints Administrativos de Campañas**:
+    - Endpoint [`POST /api/admin/prospecting/campaigns`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/api/admin_prospecting.py) para la creación y persistencia dinámica de campañas de prospección desde el panel.
   - **Gateway de Webhooks de Mailtrap**:
     - Nuevo endpoint [`POST /api/webhooks/mailtrap`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/api/webhooks/mailtrap.py) con verificación de firma HMAC-SHA256 (`Mailtrap-Signature`).
     - Actualización automática de estados de entrega en tiempo real: `delivery` (entregado), `open` (abierto), `click` (interacción con enlaces) y `bounce` (rebotes).
@@ -37,6 +39,7 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
     - Tabla de prospección [`BusinessesRankingTable.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/components/admin/prospecting/BusinessesRankingTable.tsx) con ordenación por Score Total y nombres reales de municipios.
     - Drawer lateral [`BusinessScrapedDrawer.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/components/admin/prospecting/BusinessScrapedDrawer.tsx) con cierre al hacer clic en el backdrop o tecla Escape.
     - Botón de WhatsApp para apertura de chat directo con plantilla inicial y botón inteligente de envío de Email con estados visuales (`Correo Enviado`, `Correo Entregado`, `Correo Abierto`, `Enlace Clickeado`).
+    - Depuración estética de la interfaz de usuario: remoción de etiquetas técnicas CLI (`manage.py`), conteos con paréntesis en pestañas y simplificación de mensajes informativos para el equipo de ventas.
 
 ---
 

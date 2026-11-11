@@ -75,7 +75,7 @@ export const BusinessesRankingTable: React.FC<BusinessesRankingTableProps> = ({
                 : 'border-transparent text-gray-500 hover:text-gray-700'
             }`}
           >
-            <span>Ver Todos ({total})</span>
+            <span>Ver Todos</span>
           </button>
 
           <button
@@ -168,7 +168,7 @@ export const BusinessesRankingTable: React.FC<BusinessesRankingTableProps> = ({
                     <div>
                       <p className="font-semibold text-gray-700">Aún no hay negocios evaluados en esta vista.</p>
                       <p className="text-xs text-gray-500 mt-1">
-                        Ejecuta <code className="bg-gray-100 px-1 py-0.5 rounded font-mono">python manage.py prospecting:run-batch --limit 10</code> para evaluar el lote nocturno.
+                        Los prospectos evaluados por el sistema aparecerán aquí automáticamente para iniciar contacto.
                       </p>
                     </div>
                   ) : (

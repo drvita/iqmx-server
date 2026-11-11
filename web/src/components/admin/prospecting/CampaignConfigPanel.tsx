@@ -5,7 +5,6 @@ import {
   AdjustmentsHorizontalIcon,
   MagnifyingGlassIcon,
   ArrowPathIcon,
-  CommandLineIcon,
 } from '@heroicons/react/24/outline';
 import { ProspectingCampaign } from './types';
 
@@ -45,24 +44,19 @@ export const CampaignConfigPanel: React.FC<CampaignConfigPanelProps> = ({
 
         {/* Acciones principales */}
         <div className="flex items-center gap-2 flex-wrap">
-          <div className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gray-50 border border-gray-200 text-[11px] text-gray-600 font-mono">
-            <CommandLineIcon className="h-3.5 w-3.5 text-gray-400" />
-            <span>manage.py prospecting:batch-scrape</span>
-          </div>
-
           <button
             type="button"
             onClick={() => onDiscoverDenue(formData)}
             disabled={discovering}
             className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition-colors shadow-xs cursor-pointer disabled:opacity-50"
-            title="Consulta rápida a la API del DENUE de INEGI (~4 segundos)"
+            title="Descarga ágil de establecimientos locales desde INEGI"
           >
             {discovering ? (
               <ArrowPathIcon className="h-4 w-4 animate-spin text-white" />
             ) : (
               <MagnifyingGlassIcon className="h-4 w-4 text-white" />
             )}
-            <span>{discovering ? 'Consultando INEGI…' : '1. Buscar y Actualizar DENUE'}</span>
+            <span>{discovering ? 'Consultando INEGI…' : 'Buscar y Actualizar DENUE'}</span>
           </button>
         </div>
       </div>

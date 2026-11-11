@@ -161,6 +161,48 @@ def list_campaigns(
         ))
     return results
 
+@router.post("/campaigns", response_model=CampaignResponseSchema)
+def create_campaign(
+    payload: CampaignCreateUpdateSchema,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    """Crea una nueva campaña de prospección comercial."""
+    new_campaign = ProspectingCampaign(
+        name=payload.name,
+        description=payload.description,
+        state_code=payload.state_code,
+        state_name=payload.state_name,
+        municipality_code=payload.municipality_code,
+        municipality_name=payload.municipality_name,
+        scian_codes=payload.scian_codes,
+        search_keywords=payload.search_keywords,
+        stratum_filter=payload.stratum_filter,
+        is_active=payload.is_active,
+        created_at=datetime.utcnow()
+    )
+    db.add(new_campaign)
+    db.commit()
+    db.refresh(new_campaign)
+
+    return CampaignResponseSchema(
+        id=new_campaign.id,
+        name=new_campaign.name,
+        description=new_campaign.description,
+        state_code=new_campaign.state_code,
+        state_name=new_campaign.state_name,
+        municipality_code=new_campaign.municipality_code,
+        municipality_name=new_campaign.municipality_name,
+        scian_codes=new_campaign.scian_codes,
+        search_keywords=new_campaign.search_keywords,
+        stratum_filter=new_campaign.stratum_filter,
+        is_active=new_campaign.is_active,
+        last_run_at=new_campaign.last_run_at,
+        created_at=new_campaign.created_at,
+        businesses_count=0,
+        qualified_count=0
+    )
+
 @router.post("/campaigns/{id}/discover-denue")
 async def discover_denue_fast(
     id: int,
