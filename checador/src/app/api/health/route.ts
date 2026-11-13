@@ -113,14 +113,16 @@ export async function GET() {
     infraErrors.push("Redis no disponible");
   }
 
-  const ok = snapshot.ready && dbOk && redisOk;
+  // En el healthcheck de contenedor, el servicio web está vivo si DB y Redis responden.
+  // Los modelos IA son estáticos para la PWA de los quioscos y pueden descargarse post-deploy.
+  const ok = dbOk && redisOk;
 
   return NextResponse.json(
     {
       ok,
       service: SERVICE_NAME,
       version: APP_VERSION,
-      phase: ok ? "fase-1-ready" : "degraded",
+      phase: ok ? (snapshot.ready ? "ready" : "models-pending") : "degraded",
       checks: {
         database: dbOk,
         redis: redisOk,
