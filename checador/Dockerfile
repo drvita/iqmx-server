@@ -14,8 +14,8 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_OPTIONS="--max-old-space-size=2048"
 
-# Asegurar que los binarios WASM de onnxruntime-web queden en public/ort
-RUN mkdir -p public/ort && cp -f node_modules/onnxruntime-web/dist/ort-wasm* public/ort/
+# Descargar los 3 modelos ONNX (~17 MB) y copiar binarios WASM a public/
+RUN npm run models:download
 
 # Compilar la aplicación Next.js en modo standalone
 RUN npm run build

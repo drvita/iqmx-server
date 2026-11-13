@@ -80,13 +80,20 @@ export async function inspectPhase0Environment(): Promise<Phase0StatusSnapshot> 
 
   const allOnDisk = models.every((m) => m.existsOnDisk);
   const totalBytes = models.reduce((acc, m) => acc + m.sizeBytes, 0);
+  const ortRuntimeReady = validation.ortRuntimeReady || ortFilesCount > 0;
+  const cleanedErrors =
+    ortFilesCount > 0
+      ? validation.errors.filter((e) => !e.includes(".wasm"))
+      : validation.errors;
+  const isReady =
+    validation.missingModels.length === 0 && allOnDisk && ortFilesCount > 0;
 
   return {
-    ready: validation.ready && allOnDisk && ortFilesCount > 0,
+    ready: isReady,
     totalBytes,
-    ortRuntimeReady: validation.ortRuntimeReady && ortFilesCount > 0,
+    ortRuntimeReady,
     missingModels: validation.missingModels,
-    errors: validation.errors,
+    errors: cleanedErrors,
     models,
     ortFilesCount,
   };

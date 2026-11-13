@@ -70,8 +70,27 @@ async function copyOrtWasmFiles() {
   try {
     entries = await fs.readdir(ortDistDir);
   } catch (error) {
+    // En contenedores de producción (standalone), node_modules no está presente.
+    // Verificamos si los binarios WASM/MJS ya fueron copiados a public/ort/ durante el build.
+    try {
+      const existingInPublic = await fs.readdir(ortDir);
+      const wasmFiles = existingInPublic.filter(
+        (name) =>
+          name.startsWith("ort-wasm") &&
+          (name.endsWith(".wasm") || name.endsWith(".mjs"))
+      );
+      if (wasmFiles.length > 0) {
+        console.log(
+          `[ort] Se detectaron ${wasmFiles.length} binarios WASM/MJS preinstalados en public/ort/`
+        );
+        return wasmFiles;
+      }
+    } catch {
+      // Ignorar y continuar con advertencia
+    }
+
     console.warn(
-      "[models:download] No se encontró node_modules/onnxruntime-web/dist; ejecuta `npm install` primero.",
+      "[models:download] No se encontró node_modules/onnxruntime-web/dist ni binarios en public/ort/.",
       error instanceof Error ? error.message : String(error)
     );
     return [];
