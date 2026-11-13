@@ -41,6 +41,11 @@ export default function Footer() {
                                 </Link>
                             </li>
                             <li>
+                                <Link href="/landingpage/checador" className="text-gray-400 hover:text-white">
+                                    Checador Facial
+                                </Link>
+                            </li>
+                            <li>
                                 <a href="/privacidad" className="text-gray-400 hover:text-white">
                                     Aviso de Privacidad
                                 </a>

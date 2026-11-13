@@ -4,7 +4,7 @@
 
 ---
 
-## 1. Landing Comercial `/landingpage/checador`
+## 1. Landing Comercial `/landingpage/checador` [IMPLEMENTADO - 2026-11-13]
 - **Origen:** Cierre del MVP de Checador Facial (2026-11-13).
 - **Problema:** Actualmente `CRM WhatsApp` cuenta con su landing especializada (`/landingpage/crm`), mientras que `Checador Facial` solo aparece en el catálogo general (`/productos`) y en el portal (`/portal/checador`).
 - **Alcance propuesto:**

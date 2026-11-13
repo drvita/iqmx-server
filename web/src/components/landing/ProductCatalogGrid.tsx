@@ -313,9 +313,9 @@ export const ProductCatalogGrid: React.FC<ProductCatalogGridProps> = ({
               </div>
 
               <div className="mt-8 pt-6 border-t border-gray-100">
-                {product.landing_path ? (
+                {product.landing_path || product.slug === 'checador' ? (
                   <Link
-                    href={product.landing_path}
+                    href={product.landing_path || '/landingpage/checador'}
                     className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-blue-700 transition-colors"
                   >
                     <span>Ver Solución y Planes</span>
