@@ -11,6 +11,18 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Añadido
 
+- **Landing Comercial Especializada `/landingpage/checador` (`web/`)**:
+    - Nueva landing comercial institucional en [`web/src/app/landingpage/checador/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/landingpage/checador/page.tsx) y [`layout.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/landingpage/checador/layout.tsx) orientada a tomadores de decisión, destacando beneficios clave (reconocimiento facial con prueba de vida, operación continua incluso sin internet, cumplimiento de jornada laboral y LFPDPPP, vinculación ágil por QR).
+    - Desglose transparente de precios: **Prueba Gratuita de 1 mes ($0 MXN)** y **Plan Básico ($520 MXN/mes)**, sección de preguntas frecuentes y llamadas a la acción directas hacia autogestión en `/portal/checador` y asesoría por WhatsApp.
+    - Integración de la landing en la navegación global: [`Navbar.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/components/Navbar.tsx), [`Footer.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/components/Footer.tsx), catálogo [`ProductCatalogGrid.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/components/landing/ProductCatalogGrid.tsx) y [`sitemap.ts`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/sitemap.ts).
+- **SEO, Indexado de Motores, Agentes de IA e Identidad Visual (`checador/`)**:
+    - **Identidad de Marca**: Favicon e icono SVG de alta resolución con la paleta oficial IQISS en [`checador/src/app/icon.svg`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/icon.svg) para visualización inmediata en pestañas del navegador y accesos directos.
+    - **Metadatos y Rastreo Público**:
+      - Plantilla de títulos y metadata global en [`checador/src/app/layout.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/layout.tsx) con `metadataBase`, OpenGraph, Twitter Cards y etiquetas `robots`.
+      - Archivos estándar de indexación [`checador/src/app/robots.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/robots.ts) (permite `/login`, `/privacidad`, `/kiosk`; protege rutas `/admin`, `/api` y privadas) y [`checador/src/app/sitemap.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/sitemap.ts).
+    - **Página de Login Optimizada para IA y Motores**:
+      - Conversión de [`checador/src/app/(auth)/login/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/(auth)/login/page.tsx) a Server Component con metadatos canónicos y bloque JSON-LD estructurado (`SoftwareApplication`) que describe las capacidades de la aplicación a motores y agentes de IA.
+      - Componente cliente [`LoginClient.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/components/auth/LoginClient.tsx) con enlace comercial hacia la landing page institucional y contención responsiva móvil sin desbordamiento horizontal.
 - **Módulo de Administración Interna de Checador Facial (`web/` & `api/`)**:
   - **Panel de Control Central (`/admin/checador`)**:
     - Nueva interfaz administrativa en [`web/src/app/(admin)/admin/checador/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/(admin)/admin/checador/page.tsx) con búsqueda, paginación, métricas de uso vs. límites (colaboradores, terminales, sucursales), estado operativo y vigencia de membresía.
