@@ -1,0 +1,16 @@
+# Dependencias
+node_modules/
+.next/
+out/
+build/
+
+# Entorno
+.env
+.env*.local
+*.tsbuildinfo
+next-env.d.ts
+
+# Binarios descargados/copiados localmente
+public/models/*.onnx
+public/ort/*.wasm
+public/ort/*.mjs

@@ -17,7 +17,7 @@ logger = logging.getLogger("uvicorn.error")
 
 from app.config import settings
 from app.limiter import limiter
-from app.api import events, portal_auth, portal_whatsapp, portal_webhook, public_catalog, portal_subscriptions, portal_crm, internal_products
+from app.api import events, portal_auth, portal_whatsapp, portal_webhook, public_catalog, portal_subscriptions, portal_crm, portal_checador, internal_products
 from app.api import admin_auth, admin_users, admin_customers, admin_catalog, admin_crm, admin_subscriptions, admin_security, admin_notifications, admin_prospecting
 from app.api.webhooks import (
     whatsapp_router,
@@ -74,6 +74,7 @@ app.include_router(portal_whatsapp.router)
 app.include_router(portal_webhook.router)
 app.include_router(portal_subscriptions.router)
 app.include_router(portal_crm.router)
+app.include_router(portal_checador.router)
 app.include_router(public_catalog.router)
 
 # Registrar rutas del Portal Administrativo (Admin)

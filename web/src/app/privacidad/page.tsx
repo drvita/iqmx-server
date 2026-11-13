@@ -18,6 +18,13 @@ export default function PrivacyPolicy() {
                             Privacidad describe cómo recopilamos, usamos, almacenamos y protegemos su
                             información personal.
                         </p>
+                        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+                            <strong>Avisos específicos por producto:</strong> Cada aplicación y plataforma
+                            de IQISSMexico (como CRM WhatsApp y Checador Facial) cuenta con su propio Aviso de
+                            Privacidad específico adaptado al tipo de datos que procesa. El acceso, registro o uso
+                            de cualquiera de nuestros productos implica la aceptación expresa de su respectivo Aviso
+                            de Privacidad y Términos de Servicio.
+                        </div>
                     </div>
 
                     {/* Información que Recopilamos */}

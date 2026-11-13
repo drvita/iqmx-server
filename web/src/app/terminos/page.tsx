@@ -21,6 +21,12 @@ export default function TermsOfService() {
                         <p className="text-gray-700">
                             Le recomendamos leer cuidadosamente estos Términos antes de contratar nuestros servicios.
                         </p>
+                        <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">
+                            <strong>Términos y avisos por aplicación:</strong> Cada producto de software de
+                            IQISSMexico (incluyendo CRM WhatsApp y Checador Facial) cuenta con su propio
+                            Aviso de Privacidad y condiciones particulares dentro de la misma aplicación. El uso
+                            de cualquiera de nuestros productos implica estar de acuerdo con dichos avisos y términos.
+                        </div>
                     </div>
 
                     {/* Descripción del Servicio */}

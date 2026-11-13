@@ -1,0 +1,43 @@
+{
+  "version": "buffalo_s_v1",
+  "generatedAt": "2026-11-13T14:01:39.914Z",
+  "ortFiles": [
+    "ort-wasm-simd-threaded.asyncify.mjs",
+    "ort-wasm-simd-threaded.asyncify.wasm",
+    "ort-wasm-simd-threaded.jsep.mjs",
+    "ort-wasm-simd-threaded.jsep.wasm",
+    "ort-wasm-simd-threaded.jspi.mjs",
+    "ort-wasm-simd-threaded.jspi.wasm",
+    "ort-wasm-simd-threaded.mjs",
+    "ort-wasm-simd-threaded.wasm"
+  ],
+  "models": [
+    {
+      "id": "face-detector",
+      "filename": "det_500m.onnx",
+      "stage": "Detección y 5 Landmarks (SCRFD buffalo_s)",
+      "sizeBytes": 2524817,
+      "sha256": "5e4447f50245bbd7966bd6c0fa52938c61474a04ec7def48753668a9d8b4ea3a",
+      "sourceUrl": "https://huggingface.co/deepghs/insightface/resolve/main/buffalo_s/det_500m.onnx",
+      "ready": true
+    },
+    {
+      "id": "liveness-detector",
+      "filename": "2.7_80x80_MiniFASNetV2.onnx",
+      "stage": "Anti-Spoofing / Liveness (MiniFASNetV2)",
+      "sizeBytes": 1744126,
+      "sha256": "0cbe5caec95c31de9d2ef845cb85407d76aecd1b6a2c0e343f7d35306bfbccb8",
+      "sourceUrl": "https://github.com/QingHeYang/Silent-Face-Anti-Spoofing-onnx/raw/main/onnx/2.7_80x80_MiniFASNetV2.onnx",
+      "ready": true
+    },
+    {
+      "id": "face-recognizer",
+      "filename": "w600k_mbf.onnx",
+      "stage": "Reconocimiento 512d (MobileFaceNet buffalo_s)",
+      "sizeBytes": 13616099,
+      "sha256": "9cc6e4a75f0e2bf0b1aed94578f144d15175f357bdc05e815e5c4a02b319eb4f",
+      "sourceUrl": "https://huggingface.co/deepghs/insightface/resolve/main/buffalo_s/w600k_mbf.onnx",
+      "ready": true
+    }
+  ]
+}

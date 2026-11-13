@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1794581091843,
+      "tag": "0000_hesitant_serpent_society",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794595048406,
+      "tag": "0001_elite_calypso",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794598678188,
+      "tag": "0002_young_maria_hill",
+      "breakpoints": true
+    }
+  ]
+}

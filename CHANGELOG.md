@@ -7,6 +7,45 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 > **Zona horaria de referencia:** Ciudad de México (CST / UTC-6).
 
+## [1.22.0] - 2026-11-13
+
+### Añadido
+
+- **Microservicio Checador Facial MVP (`checador/`)**:
+  - **Core Multi-Tenant, Base de Datos y Seguridad**:
+    - Esquema PostgreSQL dedicado (`checador`) con Drizzle ORM ([`checador/src/lib/db/schema.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/lib/db/schema.ts)), migraciones automáticas al arranque (`scripts/migrate.mjs`) incluyendo `pin_auditoria_hash` ([`0001_elite_calypso.sql`](file:///Users/laclavees12345/code/iqissmexico/main/checador/drizzle/0001_elite_calypso.sql)) y `must_change_password` ([`0002_young_maria_hill.sql`](file:///Users/laclavees12345/code/iqissmexico/main/checador/drizzle/0002_young_maria_hill.sql)).
+    - Endpoints M2M (`/api/provision/tenant`, `/api/provision/tenant/[id]/features`, `/api/provision/tenant/[id]/status`, `/api/provision/reset-owner-password`) con autenticación HMAC-SHA256 / Bearer.
+  - **Quiosco PWA Offline y Motor Biométrico (`onnxruntime-web` + Dexie.js)**:
+    - Ruta [`/kiosk`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/components/kiosk/KioskApp.tsx) con detección facial, prueba de vida anti-suplantación y embeddings 512d ejecutados en dispositivo, almacenamiento local en IndexedDB, sincronización automática con `/api/sync/*` y purga de bajas.
+    - Vinculación rápida por **código QR** (`/dispositivos` → `/kiosk?pin=<PIN>`) mediante [`DevicePairingQr.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/components/admin/DevicePairingQr.tsx) con lectura automática del parámetro `pin` en [`KioskApp.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/components/kiosk/KioskApp.tsx).
+    - Auditoría local protegida por PIN salteado con SHA-256 por organización ([`audit-pin.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/lib/security/audit-pin.ts)), sin PIN genérico, con cierre de sesión y purga local automática al rotar el PIN o desvincular la terminal.
+  - **Panel Administrativo, Primer Ingreso y Cumplimiento LFPDPPP**:
+    - Gestión de empleados, horarios, sucursales, dispositivos, asistentes, marca blanca y configuración ([`AdminShell.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/components/admin/AdminShell.tsx), [`DevicesClient.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/components/admin/DevicesClient.tsx), [`ConfiguracionClient.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/components/admin/ConfiguracionClient.tsx)).
+    - Modal obligatorio de contraseña definitiva al primer inicio de sesión ([`InitialPasswordModal.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/components/admin/InitialPasswordModal.tsx)) y tarjeta de cambio de contraseña propio en `/configuracion`.
+    - Ruta pública indexable [`/privacidad`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/components/legal/AboutPrivacyContent.tsx) con aviso LFPDPPP, controles técnicos de seguridad y obligaciones de la empresa contratante.
+- **Integración en Catálogo y Portal de Clientes (`api/` & `web/`)**:
+  - Planes `checador-trial` (1 mes gratis) y `checador-basic` (\$520 MXN/mes) en [`seed_catalog.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/db/seed_catalog.py) y endpoints de aprovisionamiento en [`portal_checador.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/api/portal_checador.py).
+  - Nueva vista de autogestión en [`web/src/app/(customers)/portal/checador/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/(customers)/portal/checador/page.tsx) y enlace en [`portal/layout.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/(customers)/portal/layout.tsx).
+  - Actualización de [`web/src/app/privacidad/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/privacidad/page.tsx) y [`web/src/app/terminos/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/terminos/page.tsx) para indicar avisos específicos por producto.
+- **Harness Agéntico y Memoria por Nodos (`AGENTS.md`, `.agents/`, `02-docs/`)**:
+  - Protocolo transversal en [`harness-protocol.md`](file:///Users/laclavees12345/code/iqissmexico/main/.agents/rules/harness-protocol.md) y [`iqmx-architecture-reviewer/SKILL.md`](file:///Users/laclavees12345/code/iqissmexico/main/.agents/skills/iqmx-architecture-reviewer/SKILL.md) con Triage (Sencilla vs. Compleja), `spec.md`, Builder, Revisores independientes y Evaluador (máx. 3 intentos), respaldado por grafo de memoria local `02-docs/` (ignorado en `.gitignore`) y backlogs en [`checador/docs/MEJORAS_BACKLOG.md`](file:///Users/laclavees12345/code/iqissmexico/main/checador/docs/MEJORAS_BACKLOG.md) y [`web/docs/MEJORAS_BACKLOG.md`](file:///Users/laclavees12345/code/iqissmexico/main/web/docs/MEJORAS_BACKLOG.md).
+
+### Modificado
+
+- **Gestión de Dispositivos y UX Móvil (`checador/`)**:
+  - Separación de acciones en [`devices.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/services/admin/devices.ts) y [`DevicesClient.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/components/admin/DevicesClient.tsx): **Desvincular** invalida el token actual en Redis y genera nuevo PIN/QR; **Eliminar** borra dispositivos sin historial o archiva (`activo: false`) los que ya tienen checadas.
+  - Reordenamiento responsivo en [`KioskApp.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/components/kiosk/KioskApp.tsx) para mostrar cámara arriba y botones de marcaje debajo en móviles sin scroll.
+  - Login en [`checador/src/app/(auth)/login/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/(auth)/login/page.tsx) con enlace directo a `/kiosk`, badge **Cumplimiento LFPDPPP** enlazado a `/privacidad` y eliminación del footer duplicado.
+  - Habilitación de orígenes `ngrok` en [`checador/next.config.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/next.config.ts).
+
+### Corregido
+
+- **Cálculo de Jornada y Métricas (`checador/`)**:
+  - [`attendance-compliance.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/services/reports/attendance-compliance.ts) cierra el día como `completo` cuando existen `Entrada` y `Salida` aunque se haya omitido `Fin Comida`.
+  - [`dashboard/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/(admin)/dashboard/page.tsx) y [`attendance/route.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/api/admin/reports/attendance/route.ts) contabilizan `Asistencias Hoy` por colaboradores únicos en lugar de eventos totales.
+
+---
+
 ## [1.21.0] - 2026-11-10
 
 ### Añadido

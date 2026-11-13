@@ -31,3 +31,9 @@ Thumbs.db
 
 # Chatbot
 crm/.pnpm-store
+
+# Planes y documentación de desarrollo de Checador
+checador/docs/
+
+# Memoria operativa, especificaciones y evidencias del harness agéntico
+02-docs/

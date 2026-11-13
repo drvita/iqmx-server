@@ -255,24 +255,38 @@ def update_subscription(
     db.commit()
     db.refresh(sub)
 
-    # Si cambió el estado y tiene tenant CRM asignado, sincronizar crm.organization
+    # Si cambió el estado y tiene tenant asignado, sincronizar CRM o Checador según el producto
     if status_changed and sub.external_tenant_id:
         try:
-            # Mapeo de estados hacia crm.organization ('active', 'trial', 'suspended', 'cancelled')
-            crm_status = "active"
+            mapped_status = "active"
             if sub.status in ["cancelled", "past_due"]:
-                crm_status = "suspended" if sub.status == "past_due" else "cancelled"
+                mapped_status = "suspended" if sub.status == "past_due" else "cancelled"
             elif sub.status == "paused":
-                crm_status = "suspended"
-            elif sub.status == "trial":
-                crm_status = "trial"
+                mapped_status = "suspended"
+            elif sub.status in ["trial", "trialing"]:
+                mapped_status = "trial"
 
-            update_query = text("UPDATE crm.organization SET status = :status WHERE id = :id")
-            db.execute(update_query, {"status": crm_status, "id": sub.external_tenant_id})
-            db.commit()
-            logger.info(f"Sincronizado estado CRM '{crm_status}' para organización {sub.external_tenant_id}")
+            prod_slug = sub.plan.product.slug if (sub.plan and sub.plan.product) else "crm"
+            if prod_slug == "checador":
+                checador_estado = {
+                    "active": "activo",
+                    "trial": "prueba",
+                    "suspended": "suspendido",
+                    "cancelled": "cancelado",
+                }.get(mapped_status, "activo")
+                db.execute(
+                    text("UPDATE checador.organizaciones SET estado = :estado WHERE id = :id"),
+                    {"estado": checador_estado, "id": sub.external_tenant_id},
+                )
+                db.commit()
+                logger.info(f"Sincronizado estado Checador '{checador_estado}' para organización {sub.external_tenant_id}")
+            else:
+                update_query = text("UPDATE crm.organization SET status = :status WHERE id = :id")
+                db.execute(update_query, {"status": mapped_status, "id": sub.external_tenant_id})
+                db.commit()
+                logger.info(f"Sincronizado estado CRM '{mapped_status}' para organización {sub.external_tenant_id}")
         except Exception as e:
-            logger.warning(f"No se pudo sincronizar estado CRM para org {sub.external_tenant_id}: {e}")
+            logger.warning(f"No se pudo sincronizar estado para org {sub.external_tenant_id}: {e}")
 
     logger.info(f"Admin #{admin.id} actualizó suscripción #{sub.id} (status={sub.status})")
     return serialize_subscription(sub)

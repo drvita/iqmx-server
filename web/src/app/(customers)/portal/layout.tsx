@@ -101,6 +101,13 @@ export default function PortalLayout({
       badge: 'Producto',
     },
     {
+      name: 'Checador Facial',
+      href: '/portal/checador',
+      icon: ShieldCheckIcon,
+      active: pathname.startsWith('/portal/checador'),
+      badge: 'Nuevo',
+    },
+    {
       name: 'Membresías y Facturación',
       href: '/portal/billing',
       icon: CreditCardIcon,

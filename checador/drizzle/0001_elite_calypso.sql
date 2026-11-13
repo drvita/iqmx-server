@@ -1,0 +1,1 @@
+ALTER TABLE "checador"."organizaciones" ADD COLUMN "pin_auditoria_hash" varchar(128);

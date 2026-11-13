@@ -7,12 +7,17 @@ Bienvenido al repositorio central de **IQISSMexico**. Sigue estas directrices en
 - Sigue siempre las mejores prácticas de ingeniería de software (TypeScript estricto, componentes desacoplados y modulares, código limpio).
 - Respuestas en GitHub Markdown con enlaces a archivos locales (`file:///...`).
 
-## 2. Entornos de Ejecución
+## 2. Memoria Operativa y Harness de Calidad (`02-docs/`)
+- **Grafo de memoria local:** Antes de iniciar trabajo en cualquier servicio, consulta [02-docs/INDEX.md](file:///Users/laclavees12345/code/iqissmexico/main/02-docs/INDEX.md) y abre únicamente los nodos relacionados (`web.md`, `crm.md`, `api.md`, `checador.md`, `contratos/`).
+- **Protocolo del Harness:** Sigue [harness-protocol.md](file:///Users/laclavees12345/code/iqissmexico/main/.agents/rules/harness-protocol.md) (Triage Sencilla vs. Compleja; para tareas complejas: `spec.md` → Builder → Revisores de Seguridad/UX-UI → Evaluador con máximo 3 intentos).
+
+## 3. Entornos de Ejecución
 - **Frontend (`web/`):** Aplicación Next.js institucional y comercial. Corre en el puerto local **3001** (`http://localhost:3001`). El puerto 3000 está reservado para el CRM. Comprobaciones con `npm run build`.
 - **Backend (`api/`):** API FastAPI. No ejecutar comandos de Python globalmente en el host. Utilizar Docker (`docker compose exec ...`) o el entorno virtual (`venv`).
 - **CRM (`crm/`):** Plataforma multi-inquilino (Next.js 15, Drizzle ORM, PostgreSQL) en el puerto local **3000** (`http://localhost:3000`).
   - Validación técnica obligatoria: `npm run typecheck` y `npm test` (430+ tests unitarios) antes de dar por terminada una tarea.
   - Ciclo de reinicio en desarrollo Docker: tras modificar o compilar (`npm run build`), reiniciar el contenedor con `docker compose restart crm` y verificar respuesta con `curl -s http://localhost:3000/api/health`.
+- **Checador Facial (`checador/`):** Microservicio Next.js 16 + PWA en el puerto local **3002** (`http://localhost:3002`). Para cualquier tarea en `checador/`, consultar [checador/AGENTS.md](file:///Users/laclavees12345/code/iqissmexico/main/checador/AGENTS.md), su nodo [02-docs/servicios/checador.md](file:///Users/laclavees12345/code/iqissmexico/main/02-docs/servicios/checador.md) y las mejoras pendientes en [MEJORAS_BACKLOG.md](file:///Users/laclavees12345/code/iqissmexico/main/checador/docs/MEJORAS_BACKLOG.md).
 
 ## 3. Arquitectura y Reglas del CRM Multi-Inquilino (`crm/`)
 - **Aislamiento Multi-Tenant Estricto:** Toda tabla de dominio incluye `organization_id NOT NULL`. Toda consulta debe filtrar mediante `scoped(schema.tabla.organizationId, orgId)`.

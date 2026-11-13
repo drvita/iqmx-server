@@ -29,6 +29,18 @@ def seed_catalog():
                 ),
             },
             {
+                "slug": "checador",
+                "name": "Checador Facial",
+                "description": "Control de asistencia facial con prueba de vida, reporte semanal de jornada y cumplimiento de privacidad.",
+                "service_url": "http://checador:3000",
+                "provision_endpoint": "/api/provision/tenant",
+                "landing_path": "/productos",
+                "api_secret_encrypted": encrypt_token(
+                    "checador_provision_secret_key_iqmx_default",
+                    settings.TOKEN_ENCRYPTION_KEY
+                ),
+            },
+            {
                 "slug": "automatizacion",
                 "name": "Automatización de Procesos",
                 "description": "Diseño e implementación de flujos automatizados con n8n y Airflow para eliminar tareas manuales y conectar tus sistemas.",
@@ -198,6 +210,77 @@ def seed_catalog():
                 print(f"🔄 Plan '{p_data['name']}' actualizado.")
 
         db.commit()
+
+        # ──────────────────────────────────────────────
+        # 3. Membresías de Checador Facial
+        # ──────────────────────────────────────────────
+        checador = db.query(Product).filter(Product.slug == "checador").first()
+        if checador:
+            checador.name = "Checador Facial"
+            checador.description = "Control de asistencia facial con prueba de vida, reporte semanal de jornada y cumplimiento de privacidad."
+            checador_plans = [
+                {
+                    "slug": "checador-trial",
+                    "name": "Prueba Gratuita (1 Mes)",
+                    "description": "Prueba completa por 30 días: hasta 15 colaboradores, 2 terminales quiosco, 1 sucursal y reportes semanales.",
+                    "price_mxn": 0.0,
+                    "billing_interval": "monthly",
+                    "features_payload": {
+                        "plan_codigo": "trial",
+                        "max_empleados": 15,
+                        "max_dispositivos": 2,
+                        "max_sucursales": 1,
+                        "cloud_evidences_enabled": False,
+                        "extra_roles_enabled": False,
+                        "horas_semanales_max": 48,
+                    },
+                },
+                {
+                    "slug": "checador-basic",
+                    "name": "Plan Básico",
+                    "description": "Control de asistencia facial para PyMEs: hasta 15 colaboradores, 2 quioscos y 1 sucursal.",
+                    "price_mxn": 520.0,
+                    "billing_interval": "monthly",
+                    "features_payload": {
+                        "plan_codigo": "basico",
+                        "max_empleados": 15,
+                        "max_dispositivos": 2,
+                        "max_sucursales": 1,
+                        "cloud_evidences_enabled": False,
+                        "extra_roles_enabled": False,
+                        "horas_semanales_max": 48,
+                    },
+                },
+            ]
+
+            for p_data in checador_plans:
+                existing = db.query(MembershipPlan).filter(
+                    MembershipPlan.product_id == checador.id,
+                    MembershipPlan.slug == p_data["slug"],
+                ).first()
+                if not existing:
+                    db.add(
+                        MembershipPlan(
+                            product_id=checador.id,
+                            slug=p_data["slug"],
+                            name=p_data["name"],
+                            description=p_data["description"],
+                            price_mxn=p_data["price_mxn"],
+                            billing_interval=p_data["billing_interval"],
+                            features_payload=p_data["features_payload"],
+                            is_public=True,
+                            is_active=True,
+                        )
+                    )
+                    print(f"✅ Plan Checador '{p_data['name']}' creado.")
+                else:
+                    existing.description = p_data["description"]
+                    existing.price_mxn = p_data["price_mxn"]
+                    existing.features_payload = p_data["features_payload"]
+                    print(f"🔄 Plan Checador '{p_data['name']}' actualizado.")
+
+            db.commit()
+
         print("🎉 Siembra de catálogo completada exitosamente.")
     finally:
         db.close()

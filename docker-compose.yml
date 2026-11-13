@@ -138,6 +138,32 @@ services:
       - crm-next:/app/.next
       - crm-media:/data/media
 
+  # ----------------------------------------------------------------------------
+  # CHECADOR FACIAL SAAS (Next.js 16 + PWA Offline-First)
+  # ----------------------------------------------------------------------------
+  checador:
+    <<: *base-common
+    build:
+      context: ./checador
+      dockerfile: Dockerfile
+      target: deps
+    container_name: iqmx-checador
+    ports:
+      - "${HOST_CHECADOR_PORT:-3002}:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: sh -c "npm install && node scripts/migrate.mjs && npm run dev"
+    env_file:
+      - ./checador/.env
+    volumes:
+      - ./checador:/app
+      - checador-node-modules:/app/node_modules
+      - checador-next:/app/.next
+      - checador-media:/data/media
+
 networks:
   iqmx-network:
     name: iqmx-network
@@ -160,3 +186,9 @@ volumes:
     name: iqmx-crm-next
   crm-media:
     name: iqmx-crm-media
+  checador-node-modules:
+    name: iqmx-checador-node-modules
+  checador-next:
+    name: iqmx-checador-next
+  checador-media:
+    name: iqmx-checador-media

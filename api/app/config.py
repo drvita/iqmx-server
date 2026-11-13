@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     CRM_SERVICE_URL: str = "http://crm:3000"
     CRM_PROVISION_SECRET: str = "crm_provision_secret_key_iqmx_default"
 
+    # Microservicio Checador Facial SaaS (Aprovisionamiento y Control M2M)
+    CHECADOR_SERVICE_URL: str = "http://checador:3000"
+    CHECADOR_PROVISION_SECRET: str = "checador_provision_secret_key_iqmx_default"
+
     # Notificaciones Operativas (Telegram Bot)
     TELEGRAM_BOT_TOKEN: str | None = None
 

@@ -1,9 +1,9 @@
 ---
 name: crm-developer-flow
-description: Guía y flujo de trabajo para el desarrollo, modificación, testing y despliegue de Vocero CRM Multi-Inquilino (Next.js 15, Drizzle ORM, PostgreSQL). Usar al implementar features, corregir bugs, refactorizar componentes o validar servicios en crm/.
+description: Guía y flujo de trabajo para el desarrollo, modificación, testing y despliegue de CRM WhatsApp Multi-Inquilino (Next.js 15, Drizzle ORM, PostgreSQL). Usar al implementar features, corregir bugs, refactorizar componentes o validar servicios en crm/.
 ---
 
-# Flujo de Desarrollo en Vocero CRM Multi-Inquilino
+# Flujo de Desarrollo en CRM WhatsApp Multi-Inquilino
 
 Esta skill establece el flujo estándar de desarrollo, validación y buenas prácticas para el microservicio `crm/` en **IQISSMexico**.
 
