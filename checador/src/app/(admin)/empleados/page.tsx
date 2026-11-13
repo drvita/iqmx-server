@@ -26,12 +26,12 @@ export default async function EmpleadosPage() {
   return (
     <div className="space-y-4">
       <header>
-        <h1 className="text-xl font-bold text-slate-900">
-          Empleados y Enrolamiento Biométrico
+        <h1 className="text-xl font-bold text-slate-900 md:text-2xl">
+          Colaboradores y Registro Facial
         </h1>
-        <p className="text-xs text-slate-500">
-          Los vectores faciales 512d se extraen localmente en tu navegador y se
-          validan contra duplicados en PostgreSQL (`pgvector`).
+        <p className="mt-1 text-sm text-slate-600">
+          Registra a tus colaboradores y captura hasta 3 fotos de su rostro para
+          que puedan checar su asistencia en el quiosco.
         </p>
       </header>
 

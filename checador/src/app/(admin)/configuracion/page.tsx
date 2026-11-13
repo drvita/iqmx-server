@@ -12,15 +12,18 @@ export default async function ConfiguracionPage() {
   const overview = await getOrganizationOverview(session.orgId);
   if (!overview) redirect("/login");
 
+  const isOrgAdmin = session.rol === "ORG_ADMIN";
+
   return (
     <div className="space-y-6">
       <header>
         <h1 className="text-xl font-bold text-slate-900 md:text-2xl">
-          Configuración
+          {isOrgAdmin ? "Configuración" : "Mi Cuenta"}
         </h1>
-        <p className="text-xs text-slate-500 md:text-sm">
-          Personaliza la identidad visual del quiosco y la jornada semanal de tu
-          organización.
+        <p className="mt-1 text-sm text-slate-600">
+          {isOrgAdmin
+            ? "Personaliza la imagen de tu negocio en el quiosco, la jornada semanal y tu contraseña."
+            : "Actualiza la contraseña de tu cuenta de acceso."}
         </p>
       </header>
       <ConfiguracionClient
@@ -32,7 +35,7 @@ export default async function ConfiguracionPage() {
           horasSemanalesMax: overview.org.horasSemanalesMax,
           hasAuditPin: Boolean(overview.org.pinAuditoriaHash),
         }}
-        canEdit={session.rol === "ORG_ADMIN"}
+        canEdit={isOrgAdmin}
       />
     </div>
   );

@@ -18,7 +18,7 @@ logger = logging.getLogger("uvicorn.error")
 from app.config import settings
 from app.limiter import limiter
 from app.api import events, portal_auth, portal_whatsapp, portal_webhook, public_catalog, portal_subscriptions, portal_crm, portal_checador, internal_products
-from app.api import admin_auth, admin_users, admin_customers, admin_catalog, admin_crm, admin_subscriptions, admin_security, admin_notifications, admin_prospecting
+from app.api import admin_auth, admin_users, admin_customers, admin_catalog, admin_crm, admin_checador, admin_subscriptions, admin_security, admin_notifications, admin_prospecting
 from app.api.webhooks import (
     whatsapp_router,
     whatsapp_legacy_router,
@@ -83,6 +83,7 @@ app.include_router(admin_users.router)
 app.include_router(admin_customers.router)
 app.include_router(admin_catalog.router)
 app.include_router(admin_crm.router)
+app.include_router(admin_checador.router)
 app.include_router(admin_subscriptions.router)
 app.include_router(admin_security.router)
 app.include_router(admin_notifications.router)

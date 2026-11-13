@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Checador Facial IQISS — Quiosco",
     short_name: "Checador Quiosco",
     description:
-      "Terminal biométrica offline-first de control de asistencia empresarial.",
+      "Terminal de control de asistencia por reconocimiento facial.",
     start_url: "/kiosk",
     scope: "/",
     display: "standalone",

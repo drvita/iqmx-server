@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Checador Facial IQISS — Control de Asistencia Biométrico",
+  title: "Checador Facial IQISS — Control de Asistencia",
   description:
-    "Plataforma SaaS multi-inquilino de control de asistencia biométrico offline-first con IA local y cumplimiento de jornada laboral.",
+    "Plataforma de control de asistencia por reconocimiento facial y cumplimiento de jornada laboral.",
 };
 
 export const viewport: Viewport = {

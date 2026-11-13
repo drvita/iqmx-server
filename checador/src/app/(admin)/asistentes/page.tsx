@@ -11,6 +11,7 @@ export const dynamic = "force-dynamic";
 export default async function AsistentesPage() {
   const session = await getSessionOrNull();
   if (!session) redirect("/login");
+  if (session.rol !== "ORG_ADMIN") redirect("/dashboard");
 
   const [overview, users] = await Promise.all([
     getOrganizationOverview(session.orgId),

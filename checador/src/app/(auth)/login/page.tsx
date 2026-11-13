@@ -102,7 +102,7 @@ export default function LoginPage() {
 
             <div className="mt-7">
               <h1 className="text-2xl font-bold tracking-tight text-white sm:text-3xl lg:text-4xl">
-                Control de asistencia biométrico offline y cumplimiento laboral
+                Control de asistencia facial y cumplimiento laboral
               </h1>
               <p className="mt-4 max-w-xl text-sm leading-relaxed text-[#c4c1fb] sm:text-base">
                 Plataforma institucional de verificación facial en terminales de
@@ -160,7 +160,7 @@ export default function LoginPage() {
                     <CheckCircle2 className="h-3.5 w-3.5 text-[#85f8c4]" />
                     <span>Prueba de Vida Activa</span>
                   </span>
-                  <span className="font-mono text-[#85f8c4]">512d Vector</span>
+                  <span className="font-mono text-[#85f8c4]">Rostro verificado</span>
                 </div>
               </div>
             </div>

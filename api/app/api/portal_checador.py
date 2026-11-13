@@ -320,13 +320,13 @@ async def reset_checador_password(
     owner_email = customer.user.email if customer.user else ""
     temp_password = generate_temporary_password()
     m2m_url, secret = get_checador_internal_url_and_secret(db)
-    raw_body = json.dumps(
-        {
-            "organizationId": sub.external_tenant_id,
-            "ownerEmail": owner_email,
-            "newPassword": temp_password,
-        }
-    )
+    payload: Dict[str, Any] = {
+        "externalCustomerId": sub.external_tenant_id,
+        "password": temp_password,
+    }
+    if owner_email:
+        payload["ownerEmail"] = owner_email
+    raw_body = json.dumps(payload)
     headers = build_signed_headers(secret, raw_body)
 
     async with httpx.AsyncClient(timeout=15.0) as client:

@@ -8,6 +8,10 @@ import {
 export const dynamic = "force-dynamic";
 
 const featuresPatchSchema = z.object({
+  nombre: z.string().trim().min(2).max(150).optional(),
+  razonSocial: z.string().trim().max(200).nullable().optional(),
+  rfc: z.string().trim().max(13).nullable().optional(),
+  zonaHoraria: z.string().trim().min(3).max(60).optional(),
   planCodigo: z.string().trim().max(40).optional(),
   maxEmpleados: z.number().int().min(1).optional(),
   maxDispositivos: z.number().int().min(1).optional(),

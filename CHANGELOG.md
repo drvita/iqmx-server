@@ -11,6 +11,19 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Añadido
 
+- **Módulo de Administración Interna de Checador Facial (`web/` & `api/`)**:
+  - **Panel de Control Central (`/admin/checador`)**:
+    - Nueva interfaz administrativa en [`web/src/app/(admin)/admin/checador/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/(admin)/admin/checador/page.tsx) con búsqueda, paginación, métricas de uso vs. límites (colaboradores, terminales, sucursales), estado operativo y vigencia de membresía.
+    - Modal de configuración con pestañas de **Cuenta y Vigencia** (edición de razón social, RFC, zona horaria y botones rápidos de extensión `+30 días` / `+1 año`), **Límites y Módulos** (evidencias en la nube, roles extra, jornada semanal) y **JSON Avanzado**.
+    - Acciones rápidas de sincronización M2M de plan (`Sync`), suspensión/reactivación manual y restablecimiento de contraseña temporal para soporte técnico.
+    - Integración de **Gestión Checador** en la barra lateral administrativa ([`web/src/app/(admin)/admin/layout.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/(admin)/admin/layout.tsx)).
+  - **Endpoints Administrativos Centrales (`api/`)**:
+    - Nuevo router protegido [`api/app/api/admin_checador.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/api/admin_checador.py) registrado en [`api/app/main.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/main.py):
+      - `GET /api/admin/checador/tenants`: Reporte consolidado de organizaciones, métricas activas y suscripción en `public`.
+      - `PATCH /api/admin/checador/tenants/{org_id}/override`: Modificación de datos de cuenta (sincronizando `company_name`), vigencia de membresía (normalizada a UTC naive) y límites M2M hacia Checador.
+      - `POST /api/admin/checador/tenants/{org_id}/sync-plan`: Despacho M2M de cuotas y características del plan contratado.
+      - `POST /api/admin/checador/tenants/{org_id}/status`: Control manual de estado operativo (`activo`, `suspendido`, `cancelado`).
+      - `POST /api/admin/checador/tenants/{org_id}/reset-owner-password`: Generación de contraseña temporal con forzado de cambio al primer ingreso (`mustChangePassword: true`).
 - **Microservicio Checador Facial MVP (`checador/`)**:
   - **Core Multi-Tenant, Base de Datos y Seguridad**:
     - Esquema PostgreSQL dedicado (`checador`) con Drizzle ORM ([`checador/src/lib/db/schema.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/lib/db/schema.ts)), migraciones automáticas al arranque (`scripts/migrate.mjs`) incluyendo `pin_auditoria_hash` ([`0001_elite_calypso.sql`](file:///Users/laclavees12345/code/iqissmexico/main/checador/drizzle/0001_elite_calypso.sql)) y `must_change_password` ([`0002_young_maria_hill.sql`](file:///Users/laclavees12345/code/iqissmexico/main/checador/drizzle/0002_young_maria_hill.sql)).
@@ -32,6 +45,15 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Modificado
 
+- **Ampliación de Contrato M2M en Checador Facial (`checador/`)**:
+  - [`checador/src/services/provision/tenant.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/services/provision/tenant.ts) y [`checador/src/app/api/provision/tenant/[id]/features/route.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/api/provision/tenant/%5Bid%5D/features/route.ts): Soporte para actualización de datos fiscales y operativos de la cuenta (`nombre`, `razonSocial`, `rfc`, `zonaHoraria`) con validación Zod y bitácora en `audit_logs`.
+- **Lenguaje Claro y Experiencia Móvil (+40 años) (`checador/`)**:
+  - Eliminación de tecnicismos visibles (`512d`, `pgvector`, `PostgreSQL`, `SaaS`, `offline-first`, `fotos crudas`) en [`empleados/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/(admin)/empleados/page.tsx), [`EmployeesClient.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/components/admin/EmployeesClient.tsx), [`login/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/(auth)/login/page.tsx), [`layout.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/layout.tsx) y [`manifest.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/manifest.ts), adoptando términos accesibles (*"Colaboradores y Registro Facial"*, *"Capturas de Rostro"*, *"Rostro verificado"*).
+  - Optimización de tamaños táctiles y tipografía (`text-sm`, botones `min-h-[40px]` y `min-h-[44px]`) para lectura cómoda en smartphones y tablets.
+- **Control de Acceso RBAC para Rol Asistente (`RH_ASSISTANT`)**:
+  - En [`AdminShell.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/components/admin/AdminShell.tsx): Ocultación del módulo **Asistentes** para usuarios no-`ORG_ADMIN` y renombrado de **Configuración** a **Mi Cuenta**.
+  - En [`asistentes/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/(admin)/asistentes/page.tsx): Redirección estricta del lado del servidor hacia `/dashboard` para cualquier rol sin privilegios de administrador principal.
+  - En [`configuracion/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/(admin)/configuracion/page.tsx) y [`ConfiguracionClient.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/components/admin/ConfiguracionClient.tsx): Ocultación del formulario de identidad de marca, jornada laboral y PIN de auditoría para asistentes, dejando exclusivamente visible la tarjeta de cambio de contraseña propia.
 - **Gestión de Dispositivos y UX Móvil (`checador/`)**:
   - Separación de acciones en [`devices.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/services/admin/devices.ts) y [`DevicesClient.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/components/admin/DevicesClient.tsx): **Desvincular** invalida el token actual en Redis y genera nuevo PIN/QR; **Eliminar** borra dispositivos sin historial o archiva (`activo: false`) los que ya tienen checadas.
   - Reordenamiento responsivo en [`KioskApp.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/components/kiosk/KioskApp.tsx) para mostrar cámara arriba y botones de marcaje debajo en móviles sin scroll.
@@ -40,6 +62,10 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Corregido
 
+- **Aislamiento Multi-Tenant en Restablecimiento de Contraseñas (`checador/`)**:
+  - [`checador/src/services/provision/tenant.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/services/provision/tenant.ts): Se agregó validación obligatoria en `resetOwnerPassword` para abortar inmediatamente con error 404 si `externalCustomerId` no resuelve una organización válida o si no se especifican filtros unívocos, previniendo reseteos erróneos de cuentas ajenas.
+- **Payload M2M de Restablecimiento en Portal de Clientes (`api/` & `web/`)**:
+  - [`api/app/api/portal_checador.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/api/portal_checador.py): Corrección del payload enviado a `/api/provision/reset-owner-password` para despachar `externalCustomerId` y `password` en lugar de llaves incompatibles, resolviendo el error de restablecimiento de contraseña temporal desde [`/portal/checador`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/(customers)/portal/checador/page.tsx).
 - **Cálculo de Jornada y Métricas (`checador/`)**:
   - [`attendance-compliance.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/services/reports/attendance-compliance.ts) cierra el día como `completo` cuando existen `Entrada` y `Salida` aunque se haya omitido `Fin Comida`.
   - [`dashboard/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/(admin)/dashboard/page.tsx) y [`attendance/route.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/api/admin/reports/attendance/route.ts) contabilizan `Asistencias Hoy` por colaboradores únicos en lugar de eventos totales.

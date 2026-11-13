@@ -37,6 +37,10 @@ export function normalizeOrgStatus(
 }
 
 export interface ProvisionTenantFeaturesInput {
+  nombre?: string;
+  razonSocial?: string | null;
+  rfc?: string | null;
+  zonaHoraria?: string;
   planCodigo?: string;
   maxEmpleados?: number;
   maxDispositivos?: number;
@@ -266,6 +270,10 @@ export async function updateTenantFeatures(
     updatedAt: new Date(),
   };
 
+  if (patch.nombre !== undefined) updates.nombre = patch.nombre;
+  if (patch.razonSocial !== undefined) updates.razonSocial = patch.razonSocial;
+  if (patch.rfc !== undefined) updates.rfc = patch.rfc;
+  if (patch.zonaHoraria !== undefined) updates.zonaHoraria = patch.zonaHoraria;
   if (patch.planCodigo !== undefined) updates.planCodigo = patch.planCodigo;
   if (patch.maxEmpleados !== undefined) updates.maxEmpleados = patch.maxEmpleados;
   if (patch.maxDispositivos !== undefined)
@@ -345,6 +353,10 @@ export async function resetOwnerPassword(input: {
     ? await resolveTenantId(input.externalCustomerId)
     : null;
 
+  if (input.externalCustomerId && !orgId && !input.ownerEmail) {
+    throw new Error("No se encontró ninguna organización con el identificador proporcionado.");
+  }
+
   const [orgAdminRole] = await db
     .select({ id: schema.roles.id })
     .from(schema.roles)
@@ -369,6 +381,10 @@ export async function resetOwnerPassword(input: {
     conditions.push(
       eq(schema.usuarios.email, input.ownerEmail.trim().toLowerCase())
     );
+  }
+
+  if (conditions.length <= 1) {
+    throw new Error("Debe especificar una organización o correo válido.");
   }
 
   const [owner] = await db

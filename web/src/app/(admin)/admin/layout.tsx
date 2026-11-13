@@ -10,6 +10,7 @@ import {
   CubeIcon,
   CreditCardIcon,
   CpuChipIcon,
+  IdentificationIcon,
   ShieldCheckIcon,
   UserCircleIcon,
   ArrowRightOnRectangleIcon,
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { name: 'Productos y Planes', href: '/admin/products', icon: CubeIcon },
   { name: 'Suscripciones', href: '/admin/subscriptions', icon: CreditCardIcon },
   { name: 'Gestión CRM', href: '/admin/crm', icon: CpuChipIcon },
+  { name: 'Gestión Checador', href: '/admin/checador', icon: IdentificationIcon },
   { name: 'Usuarios Sistema', href: '/admin/users', icon: ShieldCheckIcon },
   { name: 'Mi Perfil', href: '/admin/profile', icon: UserCircleIcon },
 ];

@@ -34,13 +34,13 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 const NAV_ITEMS = [
-  { href: "/dashboard", label: "Inicio", icon: LayoutDashboard },
-  { href: "/empleados", label: "Empleados", icon: Users },
-  { href: "/horarios", label: "Horarios", icon: Clock },
-  { href: "/sucursales", label: "Sucursales", icon: Building2 },
-  { href: "/dispositivos", label: "Dispositivos", icon: TabletSmartphone },
-  { href: "/asistentes", label: "Asistentes", icon: UserCog },
-  { href: "/configuracion", label: "Configuración", icon: Settings },
+  { href: "/dashboard", label: "Inicio", icon: LayoutDashboard, adminOnly: false },
+  { href: "/empleados", label: "Colaboradores", icon: Users, adminOnly: false },
+  { href: "/horarios", label: "Horarios", icon: Clock, adminOnly: false },
+  { href: "/sucursales", label: "Sucursales", icon: Building2, adminOnly: false },
+  { href: "/dispositivos", label: "Dispositivos", icon: TabletSmartphone, adminOnly: false },
+  { href: "/asistentes", label: "Asistentes", icon: UserCog, adminOnly: true },
+  { href: "/configuracion", label: "Configuración", icon: Settings, adminOnly: false },
 ] as const;
 
 export function AdminShell({
@@ -104,22 +104,28 @@ export function AdminShell({
             </button>
           </div>
 
-          <nav className="flex gap-1 overflow-x-auto px-3 py-2.5 lg:flex-col lg:space-y-1 lg:p-3">
-            {NAV_ITEMS.map((item) => {
+          <nav className="flex gap-1.5 overflow-x-auto px-3 py-2.5 lg:flex-col lg:space-y-1 lg:p-3">
+            {NAV_ITEMS.filter(
+              (item) => !item.adminOnly || userRole === "ORG_ADMIN"
+            ).map((item) => {
               const Icon = item.icon;
               const active = pathname === item.href;
+              const label =
+                item.href === "/configuracion" && userRole !== "ORG_ADMIN"
+                  ? "Mi Cuenta"
+                  : item.label;
               return (
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2 text-xs font-medium transition lg:text-sm ${
+                  className={`flex min-h-[40px] shrink-0 items-center gap-2.5 rounded-xl px-3.5 py-2 text-sm font-medium transition ${
                     active
                       ? "bg-[#4f46e5] text-white shadow-xs"
                       : "text-indigo-100 hover:bg-white/10 hover:text-white"
                   }`}
                 >
                   <Icon className="h-4 w-4 shrink-0" />
-                  <span>{item.label}</span>
+                  <span>{label}</span>
                 </Link>
               );
             })}

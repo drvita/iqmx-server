@@ -124,7 +124,7 @@ export function EmployeesClient({
     if (vectors.length >= 3) {
       setFeedback({
         type: "error",
-        text: "Máximo 3 vectores faciales por empleado.",
+        text: "Máximo 3 capturas de rostro por colaborador.",
       });
       return;
     }
@@ -149,7 +149,7 @@ export function EmployeesClient({
       setVectors((prev) => [...prev, Array.from(res.embedding!)]);
       setFeedback({
         type: "ok",
-        text: `Vector 512d #${vectors.length + 1} extraído localmente (${res.latency.totalMs} ms). La foto cruda fue descartada.`,
+        text: `Rostro #${vectors.length + 1} capturado correctamente. La fotografía no se guarda por privacidad.`,
       });
     } catch (err) {
       setFeedback({
@@ -212,7 +212,7 @@ export function EmployeesClient({
     setVectors([]);
     setFeedback({
       type: "ok",
-      text: `Editando a ${emp.nombreCompleto}. Si no capturas nuevas fotos, se conservarán sus ${emp.vectoresCount} vectores actuales.`,
+      text: `Editando a ${emp.nombreCompleto}. Si no tomas nuevas capturas, se conservarán sus ${emp.vectoresCount} registros faciales actuales.`,
     });
   };
 
@@ -351,7 +351,7 @@ export function EmployeesClient({
         <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5 space-y-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-800">
-              Vectores Faciales Locales
+              Capturas de Rostro
             </span>
             <div className="flex items-center gap-2">
               <span className="tnum rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-[#4f46e5]">
@@ -426,9 +426,9 @@ export function EmployeesClient({
             className="mt-0.5 rounded border-slate-300 text-[#4f46e5]"
           />
           <span>
-            Confirmo que el empleado otorgó su{" "}
-            <strong>consentimiento biométrico expreso (LFPDPPP)</strong>. Solo
-            se almacenan vectores 512d, sin fotos crudas.
+            Confirmo que el colaborador otorgó su{" "}
+            <strong>autorización para registro facial</strong>. Solo se guarda
+            una firma matemática segura del rostro, nunca la fotografía original.
           </span>
         </label>
 
@@ -473,7 +473,7 @@ export function EmployeesClient({
             <thead>
               <tr className="border-b border-slate-200 text-slate-500">
                 <th className="py-2 pr-3 font-medium">Empleado</th>
-                <th className="py-2 pr-3 font-medium">Vectores</th>
+                <th className="py-2 pr-3 font-medium">Rostros</th>
                 <th className="py-2 pr-3 font-medium">Estado</th>
                 <th className="py-2 font-medium text-right">Acción</th>
               </tr>

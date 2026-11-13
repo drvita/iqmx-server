@@ -120,6 +120,7 @@ export function ConfiguracionClient({
 
   return (
     <div className="max-w-2xl space-y-6">
+    {canEdit && (
     <form
       onSubmit={handleSave}
       className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs"
@@ -288,12 +289,13 @@ export function ConfiguracionClient({
         <button
           type="submit"
           disabled={busy || uploadingLogo}
-          className="inline-flex w-full items-center justify-center rounded-xl bg-[#4f46e5] px-4 py-2.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+          className="inline-flex min-h-[44px] w-full items-center justify-center rounded-xl bg-[#4f46e5] px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
         >
           {busy ? "Guardando..." : "Guardar Configuración"}
         </button>
       )}
     </form>
+    )}
 
     <form
       onSubmit={async (e) => {
