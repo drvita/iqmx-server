@@ -14,12 +14,20 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_OPTIONS="--max-old-space-size=2048"
 
+# Asegurar que los binarios WASM de onnxruntime-web queden en public/ort
+RUN mkdir -p public/ort && cp -f node_modules/onnxruntime-web/dist/ort-wasm* public/ort/
+
 # Compilar la aplicación Next.js en modo standalone
 RUN npm run build
 
 # Empaquetar migrate.mjs autocontenido para ejecutar migraciones al arranque
 RUN npx esbuild scripts/migrate.mjs --bundle --platform=node \
     --format=esm --outfile=migrate.bundle.mjs \
+    --banner:js="import { createRequire } from 'module'; const require = createRequire(import.meta.url);"
+
+# Empaquetar script de descarga de modelos y runtime WASM
+RUN npx esbuild scripts/download-models.mjs --bundle --platform=node \
+    --format=esm --outfile=download-models.bundle.mjs \
     --banner:js="import { createRequire } from 'module'; const require = createRequire(import.meta.url);"
 
 # Stage 3: Runner de producción
@@ -38,6 +46,7 @@ COPY --from=builder --chown=iqmx:iqmx /app/public ./public
 COPY --from=builder --chown=iqmx:iqmx /app/.next/standalone ./
 COPY --from=builder --chown=iqmx:iqmx /app/.next/static ./.next/static
 COPY --from=builder --chown=iqmx:iqmx /app/migrate.bundle.mjs ./migrate.mjs
+COPY --from=builder --chown=iqmx:iqmx /app/download-models.bundle.mjs ./download-models.mjs
 COPY --from=builder --chown=iqmx:iqmx /app/drizzle ./drizzle
 
 USER iqmx
