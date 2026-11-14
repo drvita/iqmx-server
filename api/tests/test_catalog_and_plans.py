@@ -151,5 +151,55 @@ class TestCatalogAndPlans(unittest.TestCase):
         prod.service_url = original_url
         self.db.commit()
 
+    def test_admin_create_product_and_assign_plan_to_selected_product(self):
+        """Verifica que el admin pueda crear un producto nuevo y reasignar un plan de producto."""
+        temp_slug = "test-prod-catalog-ui"
+        existing_prod = self.db.query(Product).filter(Product.slug == temp_slug).first()
+        if existing_prod:
+            self.db.query(MembershipPlan).filter(MembershipPlan.product_id == existing_prod.id).delete()
+            self.db.delete(existing_prod)
+            self.db.commit()
+
+        prod_res = self.client.post("/api/admin/catalog/products", headers=self.headers, json={
+            "slug": temp_slug,
+            "name": "Producto Prueba UI",
+            "description": "Producto temporal para pruebas",
+            "service_url": "https://test.iqissmexico.com",
+            "provision_endpoint": "/api/provision/tenant",
+            "landing_path": "/landingpage/test"
+        })
+        self.assertEqual(prod_res.status_code, 201)
+        new_prod = prod_res.json()
+        new_prod_id = new_prod["id"]
+        self.assertEqual(new_prod["slug"], temp_slug)
+
+        crm = self.db.query(Product).filter(Product.slug == "crm").first()
+        self.assertIsNotNone(crm)
+
+        plan_res = self.client.post("/api/admin/catalog/plans", headers=self.headers, json={
+            "product_id": crm.id,
+            "name": "Plan Reasignable",
+            "slug": "plan-reasignable-test",
+            "price_mxn": 399.0,
+            "billing_interval": "monthly",
+            "features_payload": {"max_empleados": 10},
+            "is_public": False,
+            "is_active": True
+        })
+        self.assertEqual(plan_res.status_code, 201)
+        plan_id = plan_res.json()["id"]
+        self.assertEqual(plan_res.json()["product_id"], crm.id)
+
+        try:
+            patch_res = self.client.patch(f"/api/admin/catalog/plans/{plan_id}", headers=self.headers, json={
+                "product_id": new_prod_id
+            })
+            self.assertEqual(patch_res.status_code, 200)
+            self.assertEqual(patch_res.json()["product_id"], new_prod_id)
+        finally:
+            self.db.query(MembershipPlan).filter(MembershipPlan.id == plan_id).delete()
+            self.db.query(Product).filter(Product.id == new_prod_id).delete()
+            self.db.commit()
+
 if __name__ == "__main__":
     unittest.main()

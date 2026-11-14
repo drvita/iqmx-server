@@ -5,7 +5,9 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from typing import List, Optional, Any, Dict
 
+from app.config import settings
 from app.db.database import get_db
+from app.lib.crypto import encrypt_token
 from app.models.product import Product
 from app.models.membership_plan import MembershipPlan
 from app.api.admin_auth import get_current_admin
@@ -58,7 +60,7 @@ class CreateProductRequest(BaseModel):
     name: str = Field(..., min_length=2, max_length=100)
     description: Optional[str] = None
     service_url: Optional[str] = None
-    provision_endpoint: str = "/api/provision"
+    provision_endpoint: Optional[str] = "/api/provision"
     landing_path: Optional[str] = None
 
 class UpdateProductRequest(BaseModel):
@@ -81,6 +83,7 @@ class CreatePlanRequest(BaseModel):
     is_active: bool = True
 
 class UpdatePlanRequest(BaseModel):
+    product_id: Optional[int] = None
     name: Optional[str] = None
     description: Optional[str] = None
     price_mxn: Optional[float] = None
@@ -125,13 +128,30 @@ def create_product(
     if existing:
         raise HTTPException(status_code=409, detail="Ya existe un producto con ese slug.")
 
+    api_secret_encrypted = None
+    if clean_slug == "checador":
+        api_secret_encrypted = encrypt_token(
+            settings.CHECADOR_PROVISION_SECRET,
+            settings.TOKEN_ENCRYPTION_KEY,
+        )
+    elif clean_slug == "crm":
+        api_secret_encrypted = encrypt_token(
+            settings.CRM_PROVISION_SECRET,
+            settings.TOKEN_ENCRYPTION_KEY,
+        )
+
     product = Product(
         slug=clean_slug,
         name=req.name.strip(),
         description=req.description.strip() if req.description else None,
         service_url=req.service_url.strip() if req.service_url else None,
-        provision_endpoint=req.provision_endpoint.strip(),
+        provision_endpoint=(
+            req.provision_endpoint.strip()
+            if req.provision_endpoint and req.provision_endpoint.strip()
+            else None
+        ),
         landing_path=req.landing_path.strip() if req.landing_path else None,
+        api_secret_encrypted=api_secret_encrypted,
         is_active=True
     )
     db.add(product)
@@ -276,6 +296,22 @@ def update_plan(
     plan = db.query(MembershipPlan).filter(MembershipPlan.id == plan_id).first()
     if not plan:
         raise HTTPException(status_code=404, detail="Plan no encontrado.")
+
+    if req.product_id is not None and req.product_id != plan.product_id:
+        target_product = db.query(Product).filter(Product.id == req.product_id).first()
+        if not target_product:
+            raise HTTPException(status_code=404, detail="Producto destino no encontrado.")
+        collision = db.query(MembershipPlan).filter(
+            MembershipPlan.product_id == req.product_id,
+            MembershipPlan.slug == plan.slug,
+            MembershipPlan.id != plan.id,
+        ).first()
+        if collision:
+            raise HTTPException(
+                status_code=409,
+                detail="Ya existe un plan con ese slug en el producto destino.",
+            )
+        plan.product_id = req.product_id
 
     if req.name is not None:
         plan.name = req.name.strip()

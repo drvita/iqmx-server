@@ -34,7 +34,7 @@ def seed_catalog():
                 "description": "Control de asistencia facial con prueba de vida, reporte semanal de jornada y cumplimiento de privacidad.",
                 "service_url": "http://checador:3000",
                 "provision_endpoint": "/api/provision/tenant",
-                "landing_path": "/productos",
+                "landing_path": "/landingpage/checador",
                 "api_secret_encrypted": encrypt_token(
                     "checador_provision_secret_key_iqmx_default",
                     settings.TOKEN_ENCRYPTION_KEY

@@ -7,6 +7,25 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 > **Zona horaria de referencia:** Ciudad de México (CST / UTC-6).
 
+## [1.23.0] - 2026-11-14
+
+### Añadido
+
+- **Creación de Productos y Asignación Dinámica de Membresías (`web/` & `api/`)**:
+  - **Interfaz Administrativa de Productos (`/admin/products`)**:
+    - Nuevo modal y botón **Nuevo Producto** en [`web/src/app/(admin)/admin/products/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/(admin)/admin/products/page.tsx) para dar de alta productos directamente en el catálogo sin requerir scripts manuales o acceso por SSH.
+    - Botón de autocompletado rápido **Autocompletar Checador Facial** que rellena automáticamente nombre, `slug` (`checador`), URL del servicio, endpoint M2M (`/api/provision/tenant`), ruta de landing (`/landingpage/checador`) y descripción.
+    - Selector obligatorio de **Producto Asociado** tanto en el modal de **Nuevo Plan de Membresía** como en el de **Editar Plan**, permitiendo vincular explícitamente cada membresía al producto deseado o reasignarla entre productos.
+    - Botones de plantillas rápidas en la creación de planes (**Plantilla Checador Trial ($0)**, **Plantilla Checador Básico ($520)** y **Plantilla CRM**) para auto-configurar en un solo clic los metadatos y el JSON de `features_payload`.
+    - Actualización de etiquetas en las tarjetas de planes para reflejar de forma genérica `"Configuración del Plan (features_payload):"`.
+  - **Endpoints y Seguridad Backend (`api/`)**:
+    - Ampliación de `POST /api/admin/catalog/products` en [`api/app/api/admin_catalog.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/api/admin_catalog.py) con soporte para `provision_endpoint` opcional y cifrado automático en reposo de `api_secret_encrypted` para productos conocidos (`checador` o `crm`) usando la clave de encriptación de tokens.
+    - Soporte para reasignación de producto en `PATCH /api/admin/catalog/plans/{plan_id}` con validación de existencia del producto destino (`404`) y prevención de colisión por `slug` duplicado (`409`).
+    - Actualización del `landing_path` en [`api/app/db/seed_catalog.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/db/seed_catalog.py) hacia `/landingpage/checador`.
+    - Pruebas unitarias de regresión en [`api/tests/test_catalog_and_plans.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/tests/test_catalog_and_plans.py) (`test_admin_create_product_and_assign_plan_to_selected_product`).
+
+---
+
 ## [1.22.0] - 2026-11-13
 
 ### Añadido

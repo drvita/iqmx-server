@@ -36,6 +36,35 @@ type Plan = {
   is_active: boolean;
 };
 
+const CRM_DEFAULT_FEATURES = {
+  max_whatsapp_accounts: 1,
+  max_team_members: 5,
+  max_contacts: 200,
+  agenda_enabled: false,
+  lab_enabled: false,
+  tasks_enabled: false,
+};
+
+const CHECADOR_TRIAL_FEATURES = {
+  plan_codigo: "trial",
+  max_empleados: 15,
+  max_dispositivos: 2,
+  max_sucursales: 1,
+  cloud_evidences_enabled: false,
+  extra_roles_enabled: false,
+  horas_semanales_max: 48,
+};
+
+const CHECADOR_BASIC_FEATURES = {
+  plan_codigo: "basico",
+  max_empleados: 15,
+  max_dispositivos: 2,
+  max_sucursales: 1,
+  cloud_evidences_enabled: false,
+  extra_roles_enabled: false,
+  horas_semanales_max: 48,
+};
+
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -44,9 +73,26 @@ export default function AdminProductsPage() {
   );
   const [loading, setLoading] = useState(true);
 
+  // Modal para Crear Producto
+  const [isCreateProductModalOpen, setIsCreateProductModalOpen] =
+    useState(false);
+  const [createProductForm, setCreateProductForm] = useState({
+    name: "",
+    slug: "",
+    service_url: "",
+    provision_endpoint: "/api/provision",
+    landing_path: "",
+    description: "",
+  });
+  const [createProductError, setCreateProductError] = useState<string | null>(
+    null,
+  );
+  const [creatingProduct, setCreatingProduct] = useState(false);
+
   // Modal para Crear/Editar Plan con JSON crudo
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [planForm, setPlanForm] = useState({
+    product_id: "" as number | "",
     name: "",
     slug: "",
     description: "",
@@ -54,18 +100,7 @@ export default function AdminProductsPage() {
     billing_interval: "monthly",
     is_public: true,
     is_active: true,
-    features_json: JSON.stringify(
-      {
-        max_whatsapp_accounts: 1,
-        max_team_members: 5,
-        max_contacts: 200,
-        agenda_enabled: false,
-        lab_enabled: false,
-        tasks_enabled: false,
-      },
-      null,
-      2,
-    ),
+    features_json: JSON.stringify(CRM_DEFAULT_FEATURES, null, 2),
   });
   const [jsonError, setJsonError] = useState<string | null>(null);
   const [savingPlan, setSavingPlan] = useState(false);
@@ -73,6 +108,7 @@ export default function AdminProductsPage() {
   // Modal para Editar Plan con JSON crudo
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [editPlanForm, setEditPlanForm] = useState({
+    product_id: "" as number | "",
     name: "",
     slug: "",
     description: "",
@@ -129,9 +165,136 @@ export default function AdminProductsPage() {
     fetchData();
   }, [fetchData]);
 
+  const handleOpenCreateProduct = () => {
+    setCreateProductForm({
+      name: "",
+      slug: "",
+      service_url: "",
+      provision_endpoint: "/api/provision",
+      landing_path: "",
+      description: "",
+    });
+    setCreateProductError(null);
+    setIsCreateProductModalOpen(true);
+  };
+
+  const handleFillChecadorProductTemplate = () => {
+    setCreateProductForm({
+      name: "Checador Facial",
+      slug: "checador",
+      service_url: "https://checador.iqissmexico.com",
+      provision_endpoint: "/api/provision/tenant",
+      landing_path: "/landingpage/checador",
+      description:
+        "Control de asistencia facial con prueba de vida, reporte semanal de jornada y cumplimiento de privacidad.",
+    });
+    setCreateProductError(null);
+  };
+
+  const handleCreateProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreatingProduct(true);
+    setCreateProductError(null);
+
+    try {
+      const token = localStorage.getItem("iqmx_admin_token");
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+      const res = await fetch(`${apiUrl}/api/admin/catalog/products`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: createProductForm.name.trim(),
+          slug: createProductForm.slug.trim().toLowerCase(),
+          service_url: createProductForm.service_url.trim() || null,
+          provision_endpoint:
+            createProductForm.provision_endpoint.trim() || null,
+          landing_path: createProductForm.landing_path.trim() || null,
+          description: createProductForm.description.trim() || null,
+        }),
+      });
+
+      if (res.ok) {
+        const newProd: Product = await res.json();
+        setIsCreateProductModalOpen(false);
+        await fetchData();
+        setSelectedProductId(newProd.id);
+      } else {
+        const d = await res.json();
+        setCreateProductError(d.detail || "Error al crear el producto.");
+      }
+    } catch {
+      setCreateProductError("Error de red al comunicarse con el servidor.");
+    } finally {
+      setCreatingProduct(false);
+    }
+  };
+
+  const handleOpenCreatePlanModal = () => {
+    const defaultProductId = selectedProductId ?? (products[0]?.id || "");
+    const targetProd = products.find((p) => p.id === defaultProductId);
+    const defaultFeatures =
+      targetProd?.slug === "checador"
+        ? CHECADOR_BASIC_FEATURES
+        : CRM_DEFAULT_FEATURES;
+
+    setPlanForm({
+      product_id: defaultProductId,
+      name: "",
+      slug: "",
+      description: "",
+      price_mxn: 0,
+      billing_interval: "monthly",
+      is_public: true,
+      is_active: true,
+      features_json: JSON.stringify(defaultFeatures, null, 2),
+    });
+    setJsonError(null);
+    setIsModalOpen(true);
+  };
+
+  const applyPlanTemplate = (
+    template: "checador-trial" | "checador-basic" | "crm",
+  ) => {
+    if (template === "checador-trial") {
+      setPlanForm((prev) => ({
+        ...prev,
+        name: "Prueba Gratuita (1 Mes)",
+        slug: "checador-trial",
+        price_mxn: 0,
+        billing_interval: "monthly",
+        description:
+          "Prueba completa por 30 días: hasta 15 colaboradores, 2 terminales quiosco, 1 sucursal y reportes semanales.",
+        features_json: JSON.stringify(CHECADOR_TRIAL_FEATURES, null, 2),
+      }));
+    } else if (template === "checador-basic") {
+      setPlanForm((prev) => ({
+        ...prev,
+        name: "Plan Básico",
+        slug: "checador-basic",
+        price_mxn: 520,
+        billing_interval: "monthly",
+        description:
+          "Control de asistencia facial para PyMEs: hasta 15 colaboradores, 2 quioscos y 1 sucursal.",
+        features_json: JSON.stringify(CHECADOR_BASIC_FEATURES, null, 2),
+      }));
+    } else {
+      setPlanForm((prev) => ({
+        ...prev,
+        features_json: JSON.stringify(CRM_DEFAULT_FEATURES, null, 2),
+      }));
+    }
+    setJsonError(null);
+  };
+
   const handleCreatePlan = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedProductId) return;
+    if (!planForm.product_id) {
+      setJsonError("Debes seleccionar un producto asociado.");
+      return;
+    }
 
     let parsedPayload = {};
     try {
@@ -155,6 +318,7 @@ export default function AdminProductsPage() {
     setSavingPlan(true);
 
     try {
+      const targetProductId = Number(planForm.product_id);
       const token = localStorage.getItem("iqmx_admin_token");
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
       const res = await fetch(`${apiUrl}/api/admin/catalog/plans`, {
@@ -164,7 +328,7 @@ export default function AdminProductsPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          product_id: selectedProductId,
+          product_id: targetProductId,
           name: planForm.name.trim(),
           slug: planForm.slug.trim().toLowerCase(),
           description: planForm.description.trim() || undefined,
@@ -178,7 +342,8 @@ export default function AdminProductsPage() {
 
       if (res.ok) {
         setIsModalOpen(false);
-        fetchData();
+        setSelectedProductId(targetProductId);
+        await fetchData();
       } else {
         const d = await res.json();
         setJsonError(d.detail || "Error al guardar el plan.");
@@ -193,6 +358,7 @@ export default function AdminProductsPage() {
   const handleOpenEditPlan = (plan: Plan) => {
     setEditingPlan(plan);
     setEditPlanForm({
+      product_id: plan.product_id,
       name: plan.name,
       slug: plan.slug,
       description: plan.description || "",
@@ -244,6 +410,7 @@ export default function AdminProductsPage() {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
+            product_id: Number(editPlanForm.product_id),
             name: editPlanForm.name.trim(),
             description: editPlanForm.description.trim() || null,
             price_mxn: Number(editPlanForm.price_mxn),
@@ -345,16 +512,24 @@ export default function AdminProductsPage() {
             JSON de configuraciones que se despachará al CRM.
           </p>
         </div>
-        <button
-          onClick={() => {
-            setJsonError(null);
-            setIsModalOpen(true);
-          }}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 shadow-xs transition-colors shrink-0"
-        >
-          <PlusIcon className="h-4 w-4" />
-          <span>Nuevo Plan de Membresía</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={handleOpenCreateProduct}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3.5 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-50 shadow-xs transition-colors cursor-pointer"
+          >
+            <PlusIcon className="h-4 w-4 text-gray-500" />
+            <span>Nuevo Producto</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleOpenCreatePlanModal}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 shadow-xs transition-colors cursor-pointer"
+          >
+            <PlusIcon className="h-4 w-4" />
+            <span>Nuevo Plan de Membresía</span>
+          </button>
+        </div>
       </div>
 
       {/* Pestañas Claras de Producto */}
@@ -491,7 +666,7 @@ export default function AdminProductsPage() {
               <div className="mt-4 space-y-2">
                 <p className="font-semibold text-gray-500 text-[11px] uppercase tracking-wider flex items-center gap-1.5">
                   <CodeBracketIcon className="h-3.5 w-3.5 text-gray-400" />
-                  <span>Configuración enviada al CRM:</span>
+                  <span>Configuración del Plan (features_payload):</span>
                 </p>
                 <pre className="rounded-xl bg-gray-950 p-3 text-[11px] font-mono text-emerald-400 border border-gray-800 overflow-x-auto">
                   {JSON.stringify(plan.features_payload, null, 2)}
@@ -532,8 +707,8 @@ export default function AdminProductsPage() {
 
       {/* Modal Claro para Crear Plan con JSON Crudo */}
       {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl border border-gray-200">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs overflow-y-auto">
+          <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl border border-gray-200 max-h-[92vh] overflow-y-auto">
             <h3 className="text-base font-bold text-gray-900 flex items-center gap-2">
               <PlusIcon className="h-5 w-5 text-blue-600" />
               <span>Nuevo Plan de Membresía</span>
@@ -546,6 +721,58 @@ export default function AdminProductsPage() {
             )}
 
             <form onSubmit={handleCreatePlan} className="mt-4 space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700">
+                  Producto Asociado
+                </label>
+                <select
+                  required
+                  value={planForm.product_id}
+                  onChange={(e) => {
+                    const nextId = e.target.value ? Number(e.target.value) : "";
+                    const nextProd = products.find((p) => p.id === nextId);
+                    setPlanForm((prev) => {
+                      let nextJson = prev.features_json;
+                      if (
+                        nextProd?.slug === "checador" &&
+                        prev.features_json.trim() ===
+                          JSON.stringify(CRM_DEFAULT_FEATURES, null, 2)
+                      ) {
+                        nextJson = JSON.stringify(
+                          CHECADOR_BASIC_FEATURES,
+                          null,
+                          2,
+                        );
+                      } else if (
+                        nextProd?.slug === "crm" &&
+                        prev.features_json.trim() ===
+                          JSON.stringify(CHECADOR_BASIC_FEATURES, null, 2)
+                      ) {
+                        nextJson = JSON.stringify(
+                          CRM_DEFAULT_FEATURES,
+                          null,
+                          2,
+                        );
+                      }
+                      return {
+                        ...prev,
+                        product_id: nextId,
+                        features_json: nextJson,
+                      };
+                    });
+                  }}
+                  className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                >
+                  <option value="" disabled>
+                    Selecciona un producto...
+                  </option>
+                  {products.map((prod) => (
+                    <option key={prod.id} value={prod.id}>
+                      {prod.name} ({prod.slug})
+                    </option>
+                  ))}
+                </select>
+              </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700">
@@ -634,17 +861,46 @@ export default function AdminProductsPage() {
                 />
               </div>
 
-              <RawJsonEditor
-                value={planForm.features_json}
-                onChange={(val) =>
-                  setPlanForm({ ...planForm, features_json: val })
-                }
-                error={jsonError}
-                onErrorChange={setJsonError}
-                rows={7}
-                label="JSON de Configuración (features_payload)"
-                description="Parámetros que se despachan al CRM para este plan."
-              />
+              <div className="space-y-1.5">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[11px] font-medium text-gray-500 mr-1">
+                    Plantillas rápidas:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => applyPlanTemplate("checador-trial")}
+                    className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors cursor-pointer"
+                  >
+                    Plantilla Checador Trial ($0)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyPlanTemplate("checador-basic")}
+                    className="rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-semibold text-indigo-700 hover:bg-indigo-100 transition-colors cursor-pointer"
+                  >
+                    Plantilla Checador Básico ($520)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyPlanTemplate("crm")}
+                    className="rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+                  >
+                    Plantilla CRM
+                  </button>
+                </div>
+
+                <RawJsonEditor
+                  value={planForm.features_json}
+                  onChange={(val) =>
+                    setPlanForm({ ...planForm, features_json: val })
+                  }
+                  error={jsonError}
+                  onErrorChange={setJsonError}
+                  rows={7}
+                  label="JSON de Configuración (features_payload)"
+                  description="Parámetros que se despachan al microservicio para este plan."
+                />
+              </div>
 
               <div className="flex items-center gap-6 pt-1">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -731,6 +987,29 @@ export default function AdminProductsPage() {
             )}
 
             <form onSubmit={handleUpdatePlan} className="mt-4 space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700">
+                  Producto Asociado
+                </label>
+                <select
+                  required
+                  value={editPlanForm.product_id}
+                  onChange={(e) =>
+                    setEditPlanForm({
+                      ...editPlanForm,
+                      product_id: e.target.value ? Number(e.target.value) : "",
+                    })
+                  }
+                  className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                >
+                  {products.map((prod) => (
+                    <option key={prod.id} value={prod.id}>
+                      {prod.name} ({prod.slug})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700">
@@ -1045,6 +1324,176 @@ export default function AdminProductsPage() {
                   className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
                   {savingProduct ? "Guardando…" : "Guardar Cambios"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {/* Modal para Crear Nuevo Producto en Catálogo */}
+      {isCreateProductModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/50 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-xl border border-gray-200 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+                <CubeIcon className="h-5 w-5 text-blue-600" />
+                <span>Nuevo Producto en Catálogo</span>
+              </h3>
+              <button
+                type="button"
+                onClick={() => setIsCreateProductModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 text-lg leading-none cursor-pointer"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-indigo-100 bg-indigo-50/70 px-3 py-2">
+              <span className="text-[11px] font-medium text-indigo-900">
+                ¿Vas a dar de alta Checador Facial en este entorno?
+              </span>
+              <button
+                type="button"
+                onClick={handleFillChecadorProductTemplate}
+                className="rounded-lg bg-indigo-600 px-2.5 py-1 text-[11px] font-semibold text-white hover:bg-indigo-700 transition-colors cursor-pointer"
+              >
+                Autocompletar Checador Facial
+              </button>
+            </div>
+
+            {createProductError && (
+              <div className="mt-3 rounded-lg bg-red-50 p-3 text-xs text-red-700 border border-red-200">
+                {createProductError}
+              </div>
+            )}
+
+            <form onSubmit={handleCreateProduct} className="mt-4 space-y-3.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700">
+                    Nombre del Producto
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={createProductForm.name}
+                    onChange={(e) =>
+                      setCreateProductForm({
+                        ...createProductForm,
+                        name: e.target.value,
+                      })
+                    }
+                    placeholder="Checador Facial"
+                    className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700">
+                    Slug (Identificador único)
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={createProductForm.slug}
+                    onChange={(e) =>
+                      setCreateProductForm({
+                        ...createProductForm,
+                        slug: e.target.value.toLowerCase().replace(/\s+/g, "-"),
+                      })
+                    }
+                    placeholder="checador"
+                    className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 font-mono focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700">
+                  URL del Servicio (para Redirección / Clientes)
+                </label>
+                <input
+                  type="url"
+                  value={createProductForm.service_url}
+                  onChange={(e) =>
+                    setCreateProductForm({
+                      ...createProductForm,
+                      service_url: e.target.value,
+                    })
+                  }
+                  placeholder="https://checador.iqissmexico.com"
+                  className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700">
+                    Endpoint Interno M2M
+                  </label>
+                  <input
+                    type="text"
+                    value={createProductForm.provision_endpoint}
+                    onChange={(e) =>
+                      setCreateProductForm({
+                        ...createProductForm,
+                        provision_endpoint: e.target.value,
+                      })
+                    }
+                    placeholder="/api/provision/tenant"
+                    className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 font-mono focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700">
+                    Ruta de Landing Page Pública
+                  </label>
+                  <input
+                    type="text"
+                    value={createProductForm.landing_path}
+                    onChange={(e) =>
+                      setCreateProductForm({
+                        ...createProductForm,
+                        landing_path: e.target.value,
+                      })
+                    }
+                    placeholder="/landingpage/checador"
+                    className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 font-mono focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700">
+                  Descripción
+                </label>
+                <textarea
+                  rows={2}
+                  value={createProductForm.description}
+                  onChange={(e) =>
+                    setCreateProductForm({
+                      ...createProductForm,
+                      description: e.target.value,
+                    })
+                  }
+                  placeholder="Control de asistencia facial con prueba de vida..."
+                  className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:ring-1 focus:ring-blue-600"
+                />
+              </div>
+
+              <div className="mt-6 flex justify-end gap-2 border-t border-gray-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateProductModalOpen(false)}
+                  className="rounded-lg px-3 py-2 text-xs font-semibold text-gray-500 hover:bg-gray-100 transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={creatingProduct}
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition-colors disabled:opacity-50 cursor-pointer"
+                >
+                  {creatingProduct ? "Creando…" : "Crear Producto"}
                 </button>
               </div>
             </form>
