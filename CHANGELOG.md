@@ -11,6 +11,14 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ### Añadido
 
+- **Membresías Dinámicas desde Base de Datos en Checador Facial (`web/`)**:
+  - **Landing Comercial (`/landingpage/checador`)**:
+    - Conexión dinámica en [`web/src/app/landingpage/checador/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/landingpage/checador/page.tsx) hacia el endpoint público `GET /api/public/products/checador/plans?include_free=true`, eliminando precios y límites estáticos en duro.
+    - Renderizado responsivo de planes directamente desde los registros de PostgreSQL (`name`, `price_mxn`, `billing_interval`, `description` y `features_payload`: `max_empleados`, `max_dispositivos`, `max_sucursales`, `horas_semanales_max`, `cloud_evidences_enabled` y `extra_roles_enabled`).
+    - Estado de carga y tarjeta de respaldo *"Membresías en actualización"* con enlace a WhatsApp para cotización asistida en caso de que aún no existan planes activos.
+    - Ajuste en [`web/src/app/landingpage/checador/layout.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/landingpage/checador/layout.tsx) para no fijar precios estáticos en el esquema JSON-LD (`SoftwareApplication`).
+  - **Portal de Clientes (`/portal/checador`)**:
+    - Consulta dinámica en [`web/src/app/(customers)/portal/checador/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/(customers)/portal/checador/page.tsx) del catálogo público de Checador, mostrando el precio real del plan de pago y cuotas configuradas en base de datos en lugar de textos fijos.
 - **Creación de Productos y Asignación Dinámica de Membresías (`web/` & `api/`)**:
   - **Interfaz Administrativa de Productos (`/admin/products`)**:
     - Nuevo modal y botón **Nuevo Producto** en [`web/src/app/(admin)/admin/products/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/(admin)/admin/products/page.tsx) para dar de alta productos directamente en el catálogo sin requerir scripts manuales o acceso por SSH.

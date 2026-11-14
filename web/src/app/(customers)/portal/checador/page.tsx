@@ -38,9 +38,25 @@ interface ChecadorStatus {
   subscription: ChecadorSubscription | null;
 }
 
+interface PublicChecadorPlan {
+  id: number;
+  name: string;
+  slug: string;
+  description: string | null;
+  price_mxn: number;
+  billing_interval: string;
+  features_payload: {
+    max_empleados?: number;
+    max_dispositivos?: number;
+    max_sucursales?: number;
+    horas_semanales_max?: number;
+  };
+}
+
 export default function PortalChecadorPage() {
   const [loading, setLoading] = useState(true);
   const [statusData, setStatusData] = useState<ChecadorStatus | null>(null);
+  const [publicPlans, setPublicPlans] = useState<PublicChecadorPlan[]>([]);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [creds, setCreds] = useState<{ email: string; password: string } | null>(null);
@@ -56,12 +72,18 @@ export default function PortalChecadorPage() {
 
   const loadStatus = useCallback(async () => {
     try {
-      const res = await fetch('/api/portal/checador/status', {
-        headers: getHeaders(),
-      });
-      if (res.ok) {
-        const data = (await res.json()) as ChecadorStatus;
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+      const [statusRes, plansRes] = await Promise.all([
+        fetch('/api/portal/checador/status', { headers: getHeaders() }),
+        fetch(`${apiUrl}/api/public/products/checador/plans?include_free=true`),
+      ]);
+      if (statusRes.ok) {
+        const data = (await statusRes.json()) as ChecadorStatus;
         setStatusData(data);
+      }
+      if (plansRes.ok) {
+        const plansData = (await plansRes.json()) as PublicChecadorPlan[];
+        setPublicPlans(Array.isArray(plansData) ? plansData : []);
       }
     } finally {
       setLoading(false);
@@ -206,32 +228,59 @@ export default function PortalChecadorPage() {
         </div>
       )}
 
-      {!statusData?.checador_registered ? (
-        <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-5">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
-                <SparklesIcon className="h-3.5 w-3.5" />
-                {statusData?.has_used_trial_before ? 'Plan Básico — $520 MXN/mes' : 'Prueba Gratuita de 1 Mes'}
-              </span>
-              <h2 className="text-xl font-bold text-gray-900 mt-3">
-                Activa tu cuenta de Checador Facial
-              </h2>
-              <p className="text-sm text-gray-600 mt-1">
-                Incluye hasta 15 colaboradores, 2 terminales quiosco, 1 sucursal y reportes semanales de jornada. Después del mes de prueba: Plan Básico por <strong>$520 MXN/mes</strong>.
-              </p>
+      {!statusData?.checador_registered ? (() => {
+        const paidPlan = publicPlans.find((p) => p.price_mxn > 0);
+        const trialPlan = publicPlans.find((p) => p.price_mxn <= 0);
+        const activeRefPlan = statusData?.has_used_trial_before ? paidPlan : (trialPlan || paidPlan);
+        const activeFeatures = activeRefPlan?.features_payload || {};
+        const maxEmp = activeFeatures.max_empleados ?? 15;
+        const maxDisp = activeFeatures.max_dispositivos ?? 2;
+        const maxSuc = activeFeatures.max_sucursales ?? 1;
+
+        return (
+          <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-5">
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">
+                  <SparklesIcon className="h-3.5 w-3.5" />
+                  {statusData?.has_used_trial_before
+                    ? paidPlan
+                      ? `${paidPlan.name} — $${paidPlan.price_mxn.toLocaleString('es-MX')} MXN/${paidPlan.billing_interval === 'annual' ? 'año' : 'mes'}`
+                      : 'Plan de Pago'
+                    : trialPlan?.name || 'Prueba Gratuita de 1 Mes'}
+                </span>
+                <h2 className="text-xl font-bold text-gray-900 mt-3">
+                  Activa tu cuenta de Checador Facial
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Incluye hasta {maxEmp} colaboradores, {maxDisp}{' '}
+                  {maxDisp === 1 ? 'terminal quiosco' : 'terminales quiosco'}, {maxSuc}{' '}
+                  {maxSuc === 1 ? 'sucursal' : 'sucursales'} y reportes semanales de jornada.
+                  {!statusData?.has_used_trial_before && paidPlan ? (
+                    <>
+                      {' '}
+                      Después del periodo de prueba: {paidPlan.name} por{' '}
+                      <strong>
+                        ${paidPlan.price_mxn.toLocaleString('es-MX')} MXN/
+                        {paidPlan.billing_interval === 'annual' ? 'año' : 'mes'}
+                      </strong>
+                      .
+                    </>
+                  ) : null}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleRegister}
+                disabled={busyAction === 'register'}
+                className="shrink-0 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {busyAction === 'register' ? 'Activando cuenta...' : 'Crear cuenta de Checador'}
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={handleRegister}
-              disabled={busyAction === 'register'}
-              className="shrink-0 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
-            >
-              {busyAction === 'register' ? 'Activando cuenta...' : 'Crear cuenta de Checador'}
-            </button>
           </div>
-        </div>
-      ) : (
+        );
+      })() : (
         <div className="grid gap-6 md:grid-cols-2">
           <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm space-y-4">
             <div className="flex items-center justify-between">

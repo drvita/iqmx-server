@@ -37,20 +37,13 @@ const jsonLd = {
     name: 'IQISSMexico',
     url: 'https://iqissmexico.com',
   },
-  offers: [
-    {
-      '@type': 'Offer',
-      name: 'Prueba Gratuita 1 Mes',
-      price: '0',
-      priceCurrency: 'MXN',
-    },
-    {
-      '@type': 'Offer',
-      name: 'Plan Básico',
-      price: '520',
-      priceCurrency: 'MXN',
-    },
-  ],
+  offers: {
+    '@type': 'Offer',
+    priceCurrency: 'MXN',
+    availability: 'https://schema.org/InStock',
+    description:
+      'Membresías configurables según número de colaboradores y terminales, con prueba gratuita inicial disponible.',
+  },
 };
 
 export default function ChecadorLandingLayout({

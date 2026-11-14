@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
   ArrowRightIcon,
@@ -75,7 +75,40 @@ const FAQS = [
   },
 ];
 
+type PublicChecadorPlan = {
+  id: number;
+  product_id: number;
+  name: string;
+  slug: string;
+  description: string | null;
+  price_mxn: number;
+  billing_interval: string;
+  features_payload: {
+    max_empleados?: number;
+    max_dispositivos?: number;
+    max_sucursales?: number;
+    horas_semanales_max?: number;
+    cloud_evidences_enabled?: boolean;
+    extra_roles_enabled?: boolean;
+    [key: string]: unknown;
+  };
+};
+
 export default function ChecadorLandingPage() {
+  const [plans, setPlans] = useState<PublicChecadorPlan[]>([]);
+  const [loadingPlans, setLoadingPlans] = useState(true);
+
+  useEffect(() => {
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+    fetch(`${apiUrl}/api/public/products/checador/plans?include_free=true`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((data) => setPlans(Array.isArray(data) ? data : []))
+      .catch(() => setPlans([]))
+      .finally(() => setLoadingPlans(false));
+  }, []);
+
+  const heroEmployees = plans[0]?.features_payload?.max_empleados ?? 15;
+
   const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '5213318144928';
   const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
     'Hola, quiero más información sobre Checador Facial para mi empresa.'
@@ -155,7 +188,7 @@ export default function ChecadorLandingPage() {
               <div className="grid grid-cols-2 gap-3 text-left">
                 <div className="rounded-xl bg-indigo-950/70 border border-white/10 p-4">
                   <p className="text-[11px] text-indigo-200">Colaboradores</p>
-                  <p className="text-2xl font-bold text-white mt-1">Hasta 15</p>
+                  <p className="text-2xl font-bold text-white mt-1">Hasta {heroEmployees}</p>
                   <p className="text-[11px] text-emerald-300 mt-1">Plan inicial PyME</p>
                 </div>
                 <div className="rounded-xl bg-indigo-950/70 border border-white/10 p-4">
@@ -229,96 +262,159 @@ export default function ChecadorLandingPage() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-stretch">
-            {/* Prueba 1 Mes */}
-            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-8 flex flex-col justify-between">
-              <div>
-                <span className="inline-block rounded-full bg-indigo-100 px-3 py-1 text-xs font-bold text-indigo-700">
-                  Prueba Gratuita
-                </span>
-                <h3 className="text-2xl font-extrabold text-gray-900 mt-4">1 Mes Sin Costo</h3>
-                <p className="mt-2 text-sm text-gray-600">
-                  Ideal para validar la operación con tu equipo en sucursal antes de contratar.
-                </p>
-                <p className="mt-6 text-4xl font-extrabold text-gray-900">
-                  $0 <span className="text-sm font-medium text-gray-500">MXN / 30 días</span>
-                </p>
+          {loadingPlans ? (
+            <div className="p-12 text-center text-gray-400">
+              <div className="inline-block h-8 w-8 animate-spin rounded-full border-2 border-indigo-600 border-t-transparent" />
+              <p className="mt-3 text-xs">Cargando membresías disponibles…</p>
+            </div>
+          ) : plans.length > 0 ? (
+            <div
+              className={`grid grid-cols-1 gap-8 items-stretch mx-auto ${
+                plans.length === 1
+                  ? 'max-w-md'
+                  : plans.length === 2
+                    ? 'md:grid-cols-2'
+                    : 'md:grid-cols-3'
+              }`}
+            >
+              {plans.map((plan, idx) => {
+                const isFree = plan.price_mxn <= 0;
+                const isPaidFeatured = !isFree && (plans.length === 1 || idx === 1 || plan.slug.includes('basic'));
+                const f = plan.features_payload || {};
+                const maxEmpleados = f.max_empleados ?? 15;
+                const maxDispositivos = f.max_dispositivos ?? 2;
+                const maxSucursales = f.max_sucursales ?? 1;
+                const horasMax = f.horas_semanales_max ?? 48;
 
-                <ul className="mt-6 space-y-3 text-sm text-gray-700">
-                  <li className="flex items-center gap-2">
-                    <CheckIcon className="h-4 w-4 text-emerald-600 shrink-0" />
-                    Hasta 15 colaboradores activos
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckIcon className="h-4 w-4 text-emerald-600 shrink-0" />
-                    Hasta 2 terminales quiosco
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckIcon className="h-4 w-4 text-emerald-600 shrink-0" />
-                    1 sucursal y reportes semanales
-                  </li>
-                </ul>
-              </div>
+                return (
+                  <div
+                    key={plan.id}
+                    className={`rounded-2xl p-8 flex flex-col justify-between ${
+                      isPaidFeatured
+                        ? 'border-2 border-indigo-600 bg-white shadow-lg'
+                        : 'border border-gray-200 bg-gray-50'
+                    }`}
+                  >
+                    <div>
+                      <span
+                        className={`inline-block rounded-full px-3 py-1 text-xs font-bold ${
+                          isFree
+                            ? 'bg-indigo-100 text-indigo-700'
+                            : 'bg-indigo-600 text-white'
+                        }`}
+                      >
+                        {isFree ? 'Prueba Gratuita' : 'Plan Disponible'}
+                      </span>
+                      <h3 className="text-2xl font-extrabold text-gray-900 mt-4">
+                        {plan.name}
+                      </h3>
+                      <p className="mt-2 text-sm text-gray-600">
+                        {plan.description ||
+                          'Control de asistencia facial con respaldo y reportes de jornada.'}
+                      </p>
+                      <p className="mt-6 text-4xl font-extrabold text-gray-900">
+                        {isFree
+                          ? '$0'
+                          : `$${plan.price_mxn.toLocaleString('es-MX', {
+                              minimumFractionDigits: 0,
+                              maximumFractionDigits: 2,
+                            })}`}{' '}
+                        <span className="text-sm font-medium text-gray-500">
+                          {isFree
+                            ? 'MXN / 30 días'
+                            : `MXN / ${plan.billing_interval === 'annual' ? 'año' : 'mes'}`}
+                        </span>
+                      </p>
 
-              <Link
-                href="/portal/checador"
-                className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-600 bg-white px-5 py-3 text-sm font-bold text-indigo-700 hover:bg-indigo-50 transition-colors"
+                      <ul className="mt-6 space-y-3 text-sm text-gray-700">
+                        <li className="flex items-center gap-2">
+                          <CheckIcon className="h-4 w-4 text-emerald-600 shrink-0" />
+                          <span>Hasta {maxEmpleados} colaboradores activos</span>
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <CheckIcon className="h-4 w-4 text-emerald-600 shrink-0" />
+                          <span>
+                            Hasta {maxDispositivos}{' '}
+                            {maxDispositivos === 1 ? 'terminal quiosco' : 'terminales quiosco'}
+                          </span>
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <CheckIcon className="h-4 w-4 text-emerald-600 shrink-0" />
+                          <span>
+                            {maxSucursales}{' '}
+                            {maxSucursales === 1 ? 'sucursal activa' : 'sucursales activas'}
+                          </span>
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <CheckIcon className="h-4 w-4 text-emerald-600 shrink-0" />
+                          <span>Control de jornada semanal ({horasMax} h) y reportes</span>
+                        </li>
+                        {f.cloud_evidences_enabled === true && (
+                          <li className="flex items-center gap-2">
+                            <CheckIcon className="h-4 w-4 text-emerald-600 shrink-0" />
+                            <span>Respaldo de capturas de rostro en la nube incluido</span>
+                          </li>
+                        )}
+                        {f.extra_roles_enabled === true && (
+                          <li className="flex items-center gap-2">
+                            <CheckIcon className="h-4 w-4 text-emerald-600 shrink-0" />
+                            <span>Roles adicionales de supervisión y auditoría incluidos</span>
+                          </li>
+                        )}
+                      </ul>
+                    </div>
+
+                    {isFree ? (
+                      <Link
+                        href="/portal/checador"
+                        className="mt-8 inline-flex w-full items-center justify-center gap-2 rounded-xl border border-indigo-600 bg-white px-5 py-3 text-sm font-bold text-indigo-700 hover:bg-indigo-50 transition-colors"
+                      >
+                        <span>Activar Prueba Gratis</span>
+                        <ArrowRightIcon className="h-4 w-4" />
+                      </Link>
+                    ) : (
+                      <div className="mt-8 space-y-2.5">
+                        <Link
+                          href="/portal/checador"
+                          className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white hover:bg-indigo-700 transition-colors"
+                        >
+                          <span>Contratar en el Portal</span>
+                          <ArrowRightIcon className="h-4 w-4" />
+                        </Link>
+                        <a
+                          href={whatsappUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+                        >
+                          <UserGroupIcon className="h-4 w-4 text-emerald-600" />
+                          <span>Cotizar más colaboradores por WhatsApp</span>
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-gray-200 bg-gray-50 p-10 text-center max-w-lg mx-auto">
+              <h3 className="text-base font-bold text-gray-900">
+                Membresías en actualización
+              </h3>
+              <p className="mt-2 text-sm text-gray-600">
+                Estamos actualizando los paquetes disponibles. Contáctanos por WhatsApp para cotizar tu plan a la medida.
+              </p>
+              <a
+                href={whatsappUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
               >
-                <span>Activar Prueba Gratis</span>
-                <ArrowRightIcon className="h-4 w-4" />
-              </Link>
+                <UserGroupIcon className="h-4 w-4" />
+                <span>Solicitar información por WhatsApp</span>
+              </a>
             </div>
-
-            {/* Plan Básico */}
-            <div className="rounded-2xl border-2 border-indigo-600 bg-white p-8 shadow-lg flex flex-col justify-between">
-              <div>
-                <span className="inline-block rounded-full bg-indigo-600 px-3 py-1 text-xs font-bold text-white">
-                  Recomendado PyME
-                </span>
-                <h3 className="text-2xl font-extrabold text-gray-900 mt-4">Plan Básico</h3>
-                <p className="mt-2 text-sm text-gray-600">
-                  Operación continua para negocios y equipos que buscan orden y puntualidad.
-                </p>
-                <p className="mt-6 text-4xl font-extrabold text-gray-900">
-                  $520 <span className="text-sm font-medium text-gray-500">MXN / mes</span>
-                </p>
-
-                <ul className="mt-6 space-y-3 text-sm text-gray-700">
-                  <li className="flex items-center gap-2">
-                    <CheckIcon className="h-4 w-4 text-emerald-600 shrink-0" />
-                    Hasta 15 colaboradores activos (ampliable)
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckIcon className="h-4 w-4 text-emerald-600 shrink-0" />
-                    Hasta 2 terminales quiosco con marca propia
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <CheckIcon className="h-4 w-4 text-emerald-600 shrink-0" />
-                    Reportes semanales y soporte técnico incluido
-                  </li>
-                </ul>
-              </div>
-
-              <div className="mt-8 space-y-2.5">
-                <Link
-                  href="/portal/checador"
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 py-3 text-sm font-bold text-white hover:bg-indigo-700 transition-colors"
-                >
-                  <span>Contratar en el Portal</span>
-                  <ArrowRightIcon className="h-4 w-4" />
-                </Link>
-                <a
-                  href={whatsappUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  <UserGroupIcon className="h-4 w-4 text-emerald-600" />
-                  <span>Cotizar más colaboradores por WhatsApp</span>
-                </a>
-              </div>
-            </div>
-          </div>
+          )}
         </div>
       </section>
 
