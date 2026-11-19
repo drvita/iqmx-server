@@ -7,6 +7,28 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 > **Zona horaria de referencia:** Ciudad de México (CST / UTC-6).
 
+## [1.25.0] - 2026-11-19
+
+### Añadido
+
+- **Guía Ejecutiva, Presentación y Cumplimiento de la Reforma Laboral 2027 (`web/`)**:
+  - **Presentación Ejecutiva en PDF Descargable**:
+    - Generación automatizada mediante Chrome Headless del documento oficial en alta resolución: [`web/public/downloads/reforma-laboral-2027-checador-facial.pdf`](file:///Users/laclavees12345/code/iqissmexico/main/web/public/downloads/reforma-laboral-2027-checador-facial.pdf) (9 láminas panorámicas 16:9).
+    - Contenido estructurado: decreto constitucional DOF marzo 2026, escalonamiento a 46h (2027) y 40h (2028-2030), multas de \$29,000 a \$580,000+ MXN por inspección STPS, autodiagnóstico con preguntas detonadoras, arquitectura biométrica facial offline-first (ONNX + MiniFASNet), cumplimiento LFPDPPP, opciones genéricas e infraestructura a la medida (on-premise / hardware adaptable como tabletas y PCs), y canal directo con WhatsApp oficial `+52 314 156 0219`.
+    - Script de compilación reproducible en [`web/scripts/build-guia-2027-pdf.mjs`](file:///Users/laclavees12345/code/iqissmexico/main/web/scripts/build-guia-2027-pdf.mjs).
+  - **Página Web Interactiva de la Guía (`/guia-jornada-2027`)**:
+    - Nueva ruta pública en [`web/src/app/guia-jornada-2027/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/guia-jornada-2027/page.tsx) con visualización de láminas, carrusel responsivo, autodiagnóstico interactivo para patrones, descarga directa del PDF e integración de contacto vía WhatsApp.
+    - Metadatos optimizados para SEO y OpenGraph en [`web/src/app/guia-jornada-2027/layout.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/guia-jornada-2027/layout.tsx) e inclusión en [`web/src/app/sitemap.ts`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/sitemap.ts).
+  - **Assets Vectoriales Profesionales (SVGs)**:
+    - 6 diagramas vectoriales para presentación y web en [`web/public/images/checador/deck/`](file:///Users/laclavees12345/code/iqissmexico/main/web/public/images/checador/deck/): línea de tiempo 2026-2030, riesgos de incumplimiento e inspección STPS, arquitectura del quiosco offline-first, flujo de privacidad biométrica LFPDPPP, matriz de autodiagnóstico empresarial y comparativa de despliegue genérico vs a la medida (on-premise).
+  - **Alineación en la Landing de Ventas (`/landingpage/checador`)**:
+    - Banner y botón de acceso a la presentación ejecutiva y descarga del PDF desde [`web/src/app/landingpage/checador/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/landingpage/checador/page.tsx).
+    - Unificación del número de atención telefónica y WhatsApp corporativo al oficial: `+52 314 156 0219`.
+  - **Estilos de Impresión CSS**:
+    - Soporte para saltos de página y renderizado de presentaciones en [`web/src/app/globals.css`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/globals.css).
+
+---
+
 ## [1.24.0] - 2026-11-18
 
 ### Añadido

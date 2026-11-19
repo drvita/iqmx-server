@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 480" width="960" height="480" style="background:#ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <defs>
+    <linearGradient id="gradBar" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#4f46e5" />
+      <stop offset="100%" stop-color="#3730a3" />
+    </linearGradient>
+    <linearGradient id="gradHighlight" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#059669" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="115%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#0f172a" flood-opacity="0.08" />
+    </filter>
+  </defs>
+
+  <!-- Header -->
+  <text x="50" y="52" fill="#0f172a" font-size="22" font-weight="800">Calendario Gradual de Reducción de Jornada en México (2026 - 2030)</text>
+  <text x="50" y="80" fill="#64748b" font-size="14">Reducción obligatoria por decreto de la LFT cada 1° de enero (Sin reducción de salario ni prestaciones)</text>
+
+  <!-- Grid lines -->
+  <line x1="50" y1="360" x2="910" y2="360" stroke="#e2e8f0" stroke-width="1.5" />
+  <line x1="50" y1="280" x2="910" y2="280" stroke="#f1f5f9" stroke-width="1" stroke-dasharray="4" />
+  <line x1="50" y1="200" x2="910" y2="200" stroke="#f1f5f9" stroke-width="1" stroke-dasharray="4" />
+  <line x1="50" y1="120" x2="910" y2="120" stroke="#f1f5f9" stroke-width="1" stroke-dasharray="4" />
+
+  <!-- Y-Axis labels -->
+  <text x="35" y="364" fill="#94a3b8" font-size="11" text-anchor="end">0 h</text>
+  <text x="35" y="284" fill="#94a3b8" font-size="11" text-anchor="end">20 h</text>
+  <text x="35" y="204" fill="#94a3b8" font-size="11" text-anchor="end">40 h</text>
+  <text x="35" y="124" fill="#94a3b8" font-size="11" text-anchor="end">48 h</text>
+
+  <!-- Bar 1: 2026 (48h) -->
+  <g transform="translate(70, 0)">
+    <rect x="20" y="120" width="120" height="240" rx="12" fill="#94a3b8" opacity="0.4" />
+    <text x="80" y="160" fill="#1e293b" font-size="26" font-weight="900" text-anchor="middle">48 h</text>
+    <text x="80" y="185" fill="#475569" font-size="12" font-weight="600" text-anchor="middle">Jornada actual</text>
+    <text x="80" y="390" fill="#334155" font-size="16" font-weight="800" text-anchor="middle">2026</text>
+    <rect x="25" y="405" width="110" height="24" rx="6" fill="#f1f5f9" />
+    <text x="80" y="421" fill="#64748b" font-size="11" font-weight="700" text-anchor="middle">TRANSICIÓN</text>
+  </g>
+
+  <!-- Bar 2: 2027 (46h) DESTACADA -->
+  <g transform="translate(240, 0)">
+    <rect x="15" y="110" width="130" height="260" rx="14" fill="none" stroke="#059669" stroke-width="3" stroke-dasharray="6" />
+    <rect x="20" y="130" width="120" height="230" rx="12" fill="url(#gradHighlight)" filter="url(#shadow)" />
+    <!-- Badge Año Clave -->
+    <rect x="22" y="90" width="116" height="24" rx="12" fill="#059669" />
+    <text x="80" y="106" fill="#ffffff" font-size="10.5" font-weight="800" text-anchor="middle">ENTRADA EN VIGOR</text>
+    <text x="80" y="175" fill="#ffffff" font-size="30" font-weight="900" text-anchor="middle">46 h</text>
+    <text x="80" y="200" fill="#a7f3d0" font-size="13" font-weight="700" text-anchor="middle">-2 horas / sem</text>
+    <text x="80" y="226" fill="#ffffff" font-size="11" text-anchor="middle" opacity="0.95">Registro obligatorio</text>
+    <text x="80" y="390" fill="#059669" font-size="17" font-weight="900" text-anchor="middle">2027</text>
+    <rect x="25" y="405" width="110" height="24" rx="6" fill="#ecfdf5" />
+    <text x="80" y="421" fill="#059669" font-size="11" font-weight="800" text-anchor="middle">1° ENERO 2027</text>
+  </g>
+
+  <!-- Bar 3: 2028 (44h) -->
+  <g transform="translate(410, 0)">
+    <rect x="20" y="140" width="120" height="220" rx="12" fill="url(#gradBar)" />
+    <text x="80" y="180" fill="#ffffff" font-size="26" font-weight="900" text-anchor="middle">44 h</text>
+    <text x="80" y="204" fill="#c7d2fe" font-size="12" font-weight="600" text-anchor="middle">-4 horas</text>
+    <text x="80" y="390" fill="#334155" font-size="16" font-weight="800" text-anchor="middle">2028</text>
+    <rect x="25" y="405" width="110" height="24" rx="6" fill="#e0e7ff" />
+    <text x="80" y="421" fill="#4338ca" font-size="11" font-weight="700" text-anchor="middle">GRADUAL</text>
+  </g>
+
+  <!-- Bar 4: 2029 (42h) -->
+  <g transform="translate(580, 0)">
+    <rect x="20" y="150" width="120" height="210" rx="12" fill="url(#gradBar)" />
+    <text x="80" y="190" fill="#ffffff" font-size="26" font-weight="900" text-anchor="middle">42 h</text>
+    <text x="80" y="214" fill="#c7d2fe" font-size="12" font-weight="600" text-anchor="middle">-6 horas</text>
+    <text x="80" y="390" fill="#334155" font-size="16" font-weight="800" text-anchor="middle">2029</text>
+    <rect x="25" y="405" width="110" height="24" rx="6" fill="#e0e7ff" />
+    <text x="80" y="421" fill="#4338ca" font-size="11" font-weight="700" text-anchor="middle">GRADUAL</text>
+  </g>
+
+  <!-- Bar 5: 2030 (40h) META -->
+  <g transform="translate(750, 0)">
+    <rect x="20" y="160" width="120" height="200" rx="12" fill="#1e1b4b" />
+    <text x="80" y="200" fill="#ffffff" font-size="28" font-weight="900" text-anchor="middle">40 h</text>
+    <text x="80" y="224" fill="#818cf8" font-size="12" font-weight="700" text-anchor="middle">META FINAL</text>
+    <text x="80" y="390" fill="#1e1b4b" font-size="16" font-weight="800" text-anchor="middle">2030</text>
+    <rect x="25" y="405" width="110" height="24" rx="6" fill="#ede9fe" />
+    <text x="80" y="421" fill="#5b21b6" font-size="11" font-weight="800" text-anchor="middle">40 HORAS</text>
+  </g>
+</svg>

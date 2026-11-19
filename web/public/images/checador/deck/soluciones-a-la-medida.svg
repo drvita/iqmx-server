@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 480" width="960" height="480" style="background:#ffffff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;">
+  <defs>
+    <filter id="shadowSquare" x="-4%" y="-4%" width="108%" height="110%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#0f172a" flood-opacity="0.06" />
+    </filter>
+  </defs>
+
+  <!-- Title -->
+  <text x="50" y="48" fill="#0f172a" font-size="22" font-weight="800">Soluciones Empresariales a la Medida</text>
+  <text x="50" y="74" fill="#64748b" font-size="14">¿Tu empresa tiene reglas u operación particular? Creamos desarrollos y despliegues a tu medida</text>
+
+  <!-- Box 1: Geolocalización Móvil -->
+  <g transform="translate(50, 100)">
+    <rect x="0" y="0" width="195" height="330" rx="14" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5" filter="url(#shadowSquare)" />
+    <rect x="20" y="24" width="48" height="48" rx="12" fill="#eff6ff" />
+    <path d="M44 38c-4.4 0-8 3.6-8 8 0 6 8 14 8 14s8-8 8-14c0-4.4-3.6-8-8-8zm0 11c-1.7 0-3-1.3-3-3s1.3-3 3-3 3 1.3 3 3-1.3 3-3 3z" fill="#2563eb" />
+    <text x="20" y="104" fill="#0f172a" font-size="16" font-weight="800">Geolocalización</text>
+    <text x="20" y="124" fill="#0f172a" font-size="16" font-weight="800">y Geocercas</text>
+    <text x="20" y="156" fill="#64748b" font-size="12" font-weight="600">Personal en ruta o campo:</text>
+    <text x="20" y="180" fill="#334155" font-size="12">• Vendedores y técnicos</text>
+    <text x="20" y="200" fill="#334155" font-size="12">• Choferes y entregas</text>
+    <text x="20" y="220" fill="#334155" font-size="12">• Obra y proyectos</text>
+    <text x="20" y="240" fill="#334155" font-size="12">• Validación GPS por zona</text>
+    <rect x="15" y="280" width="165" height="26" rx="6" fill="#e0e7ff" />
+    <text x="97" y="297" fill="#4338ca" font-size="10" font-weight="700" text-anchor="middle">REGISTRO MÓVIL</text>
+  </g>
+
+  <!-- Box 2: Dispositivos Adaptados como Checador Físico -->
+  <g transform="translate(275, 100)">
+    <rect x="0" y="0" width="195" height="330" rx="14" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5" filter="url(#shadowSquare)" />
+    <rect x="20" y="24" width="48" height="48" rx="12" fill="#ecfdf5" />
+    <rect x="31" y="37" width="26" height="18" rx="3" fill="none" stroke="#059669" stroke-width="2.5" />
+    <line x1="39" y1="59" x2="49" y2="59" stroke="#059669" stroke-width="2.5" stroke-linecap="round" />
+    <text x="20" y="104" fill="#0f172a" font-size="16" font-weight="800">Equipos como</text>
+    <text x="20" y="124" fill="#0f172a" font-size="16" font-weight="800">Checador Físico</text>
+    <text x="20" y="156" fill="#64748b" font-size="12" font-weight="600">Adapta tu propio equipo:</text>
+    <text x="20" y="180" fill="#334155" font-size="12">• PC o laptop en recepción</text>
+    <text x="20" y="200" fill="#334155" font-size="12">• Tableta fija en acceso</text>
+    <text x="20" y="220" fill="#334155" font-size="12">• Teléfono móvil dedicado</text>
+    <text x="20" y="240" fill="#334155" font-size="12">• Sin comprar relojes caros</text>
+    <rect x="15" y="280" width="165" height="26" rx="6" fill="#d1fae5" />
+    <text x="97" y="297" fill="#065f46" font-size="10" font-weight="700" text-anchor="middle">PC · TABLET · MÓVIL</text>
+  </g>
+
+  <!-- Box 3: Despliegue On-Premise -->
+  <g transform="translate(500, 100)">
+    <rect x="0" y="0" width="195" height="330" rx="14" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5" filter="url(#shadowSquare)" />
+    <rect x="20" y="24" width="48" height="48" rx="12" fill="#fef3c7" />
+    <path d="M34 38h20v6H34zm0 10h20v6H34zm0 10h20v6H34z" fill="#d97706" />
+    <circle cx="50" cy="41" r="1.5" fill="#ffffff" />
+    <circle cx="50" cy="51" r="1.5" fill="#ffffff" />
+    <circle cx="50" cy="61" r="1.5" fill="#ffffff" />
+    <text x="20" y="104" fill="#0f172a" font-size="16" font-weight="800">Servidores</text>
+    <text x="20" y="124" fill="#0f172a" font-size="16" font-weight="800">On-Premise</text>
+    <text x="20" y="156" fill="#64748b" font-size="12" font-weight="600">Privacidad y Gobierno TI:</text>
+    <text x="20" y="180" fill="#334155" font-size="12">• Instalación en tus servidores</text>
+    <text x="20" y="200" fill="#334155" font-size="12">• Datos 100% en tu red</text>
+    <text x="20" y="220" fill="#334155" font-size="12">• Políticas internas de TI</text>
+    <text x="20" y="240" fill="#334155" font-size="12">• Control total de respaldos</text>
+    <rect x="15" y="280" width="165" height="26" rx="6" fill="#fef3c7" />
+    <text x="97" y="297" fill="#92400e" font-size="10" font-weight="700" text-anchor="middle">INFRAESTRUCTURA PROPIA</text>
+  </g>
+
+  <!-- Box 4: Instancia Aislada y Reglas Propias -->
+  <g transform="translate(725, 100)">
+    <rect x="0" y="0" width="185" height="330" rx="14" fill="#1e1b4b" filter="url(#shadowSquare)" />
+    <rect x="20" y="24" width="48" height="48" rx="12" fill="#312e81" />
+    <path d="M44 38c-3.3 0-6 2.7-6 6v4h-2v10h16V48h-2v-4c0-3.3-2.7-6-6-6zm-4 6c0-2.2 1.8-4 4-4s4 1.8 4 4v4h-8v-4z" fill="#a5b4fc" />
+    <text x="20" y="104" fill="#ffffff" font-size="16" font-weight="800">Instancia Aparte</text>
+    <text x="20" y="124" fill="#ffffff" font-size="16" font-weight="800">y Reglas Propias</text>
+    <text x="20" y="156" fill="#cbd5e1" font-size="12" font-weight="600">Adaptado a tu operación:</text>
+    <text x="20" y="180" fill="#cbd5e1" font-size="12">• Turnos y roles especiales</text>
+    <text x="20" y="200" fill="#cbd5e1" font-size="12">• Reportes personalizados</text>
+    <text x="20" y="220" fill="#cbd5e1" font-size="12">• Conexión con tu nómina</text>
+    <text x="20" y="240" fill="#cbd5e1" font-size="12">• Base de datos exclusiva</text>
+    <rect x="15" y="280" width="155" height="26" rx="6" fill="#3730a3" />
+    <text x="92" y="297" fill="#ffffff" font-size="10" font-weight="700" text-anchor="middle">DESARROLLO A MEDIDA</text>
+  </g>
+</svg>

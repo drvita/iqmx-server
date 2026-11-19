@@ -29,6 +29,12 @@ export default function sitemap(): MetadataRoute.Sitemap {
             priority: 0.9,
         },
         {
+            url: `${baseUrl}/guia-jornada-2027`,
+            lastModified: new Date(),
+            changeFrequency: 'monthly',
+            priority: 0.9,
+        },
+        {
             url: `${baseUrl}/privacidad`,
             lastModified: new Date(),
             changeFrequency: 'yearly',

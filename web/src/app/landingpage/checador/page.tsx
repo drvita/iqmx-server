@@ -259,7 +259,7 @@ export default function ChecadorLandingPage() {
 
   const heroEmployees = plans[0]?.features_payload?.max_empleados ?? 15;
 
-  const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '5213318144928';
+  const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '5213141560219';
   const whatsappUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
     'Hola, quiero más información sobre Checador Facial para mi empresa.'
   )}`;
@@ -305,6 +305,25 @@ export default function ChecadorLandingPage() {
                 >
                   <span>Ver Planes y Límites</span>
                 </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 text-xs">
+                <Link
+                  href="/guia-jornada-2027"
+                  className="inline-flex items-center gap-1.5 text-emerald-300 font-semibold hover:text-emerald-200 underline underline-offset-4"
+                >
+                  <span>Guía Reforma Laboral México 2027 (46 h)</span>
+                  <ArrowRightIcon className="h-3.5 w-3.5" />
+                </Link>
+                <span className="text-white/30">·</span>
+                <a
+                  href="/downloads/reforma-laboral-2027-checador-facial.pdf"
+                  download="reforma-laboral-2027-checador-facial.pdf"
+                  className="inline-flex items-center gap-1.5 text-indigo-100 font-semibold hover:text-white underline underline-offset-4"
+                >
+                  <ArrowDownTrayIcon className="h-3.5 w-3.5" />
+                  <span>Descargar Presentación PDF</span>
+                </a>
               </div>
 
               <div className="flex flex-wrap items-center gap-4 pt-2 text-xs text-indigo-200">
@@ -472,6 +491,42 @@ export default function ChecadorLandingPage() {
                   <ArrowTopRightOnSquareIcon className="h-3.5 w-3.5" />
                 </a>
               </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* REFORMA LABORAL MÉXICO 2027 */}
+      <section className="py-10 bg-slate-50 border-b border-slate-200">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="rounded-2xl border border-indigo-200 bg-white p-6 sm:p-8 shadow-sm grid grid-cols-1 lg:grid-cols-12 gap-6 items-center">
+            <div className="lg:col-span-8 space-y-2.5">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-indigo-700">
+                Exclusivo México · Vigencia 1° de enero de 2027
+              </span>
+              <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900">
+                Reforma Laboral en México 2027: prepárate antes del 1° de enero
+              </h2>
+              <p className="text-sm text-slate-600 leading-relaxed">
+                Con la reforma publicada en el DOF en 2026, la jornada semanal baja a <strong>46 horas</strong> y se vuelve obligatorio llevar un <strong>registro electrónico de jornada</strong> (Art. 132-XXXIV LFT), con multas desde <strong>$29,327 hasta $586,550 MXN</strong> (250 a 5,000 UMA, sujeto a lineamientos finales de la STPS). Checador Facial ya emite <strong>reportes semanales en CSV</strong> listos para entregar a la autoridad.
+              </p>
+            </div>
+            <div className="lg:col-span-4 flex flex-col sm:flex-row lg:flex-col gap-2.5">
+              <Link
+                href="/guia-jornada-2027"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#4f46e5] px-4 py-3 text-xs font-bold text-white hover:bg-indigo-700 transition-colors"
+              >
+                <span>Ver Guía Interactiva 2027</span>
+                <ArrowRightIcon className="h-4 w-4" />
+              </Link>
+              <a
+                href="/downloads/reforma-laboral-2027-checador-facial.pdf"
+                download="reforma-laboral-2027-checador-facial.pdf"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 transition-colors"
+              >
+                <ArrowDownTrayIcon className="h-4 w-4 text-[#4f46e5]" />
+                <span>Descargar Presentación PDF</span>
+              </a>
             </div>
           </div>
         </div>
@@ -1414,6 +1469,36 @@ export default function ChecadorLandingPage() {
               </a>
             </div>
           )}
+        </div>
+      </section>
+
+      {/* SOLUCIONES A LA MEDIDA */}
+      <section className="py-12 bg-white border-t border-gray-200">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="rounded-2xl bg-[#1e1b4b] p-6 sm:p-8 text-white flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-lg">
+            <div className="space-y-2 max-w-2xl">
+              <span className="inline-block rounded-full bg-white/10 px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-emerald-300">
+                Desarrollos a la medida
+              </span>
+              <h2 className="text-xl sm:text-2xl font-extrabold">
+                ¿Tu empresa requiere una solución a la medida?
+              </h2>
+              <p className="text-sm text-indigo-100 leading-relaxed">
+                Si nuestra versión estándar no encaja con tus reglas operativas, en IQISSMexico también diseñamos implementaciones personalizadas: registro móvil con geolocalización y geocercas, adaptación de PC, tableta o móvil como checador físico, despliegue en tus servidores propios (on-premise) o una instancia dedicada.
+              </p>
+            </div>
+            <a
+              href={`https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
+                'Hola, me interesa cotizar una solución de control de asistencia a la medida para mi empresa.'
+              )}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-bold text-[#1e1b4b] hover:bg-indigo-50 transition-colors"
+            >
+              <UserGroupIcon className="h-4 w-4 text-emerald-600" />
+              <span>Cotizar proyecto a la medida</span>
+            </a>
+          </div>
         </div>
       </section>
 

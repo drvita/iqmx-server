@@ -39,3 +39,24 @@ body {
 .animate-slide-up {
   animation: slide-up 0.3s ease-out;
 }
+
+@media (prefers-reduced-motion: no-preference) {
+  @supports ((animation-timeline: view()) and (animation-range: entry)) {
+    @keyframes deck-reveal {
+      from {
+        opacity: 0.15;
+        transform: translateY(24px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .scroll-reveal {
+      animation: deck-reveal auto linear both;
+      animation-timeline: view();
+      animation-range: entry 0% cover 24%;
+    }
+  }
+}
