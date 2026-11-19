@@ -7,6 +7,24 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 > **Zona horaria de referencia:** Ciudad de México (CST / UTC-6).
 
+## [1.24.0] - 2026-11-18
+
+### Añadido
+
+- **Vistas Reales y Adaptación Visual en la Landing de Checador Facial (`web/`)**:
+  - **Módulo Visual del Quiosco en el Hero (`/landingpage/checador`)**:
+    - Integración de vista previa interactiva de la **Terminal Quiosco (`/kiosk`)** en [`web/src/app/landingpage/checador/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/landingpage/checador/page.tsx), mostrando reloj digital en vivo, estado de red y botones de marcaje directo (`REGISTRAR ENTRADA`, `REGISTRAR SALIDA`, pausas de comida).
+    - Incorporación de fotografía optimizada de colaborador industrial mexicano mirando a cámara ([`web/public/images/checador/empleado-fabrica.png`](file:///Users/laclavees12345/code/iqissmexico/main/web/public/images/checador/empleado-fabrica.png)) con mirilla óptica de 4 esquinas, badge de prueba de vida activa y banner de confirmación de asistencia.
+    - Aplicación de mejores prácticas modernas con prioridad LCP (`fetchPriority="high"` sobre el pliegue).
+  - **Sección Visual *"Así funciona Checador Facial en tu operación diaria"***:
+    - **Bloque 1 (Terminal Quiosco en Sucursal)**: Recreación fiel de la interfaz de la tableta (`/kiosk`) para una empresa de demostración (*Manufacturas del Norte · Planta Monterrey · Acceso Principal*), mostrando controles de marcaje, total de colaboradores activos y estado listo sin datos sensibles ni errores de desarrollo.
+    - **Bloque 2 (Panel de Control y Reportes de Jornada)**: Recreación fiel del panel administrativo (`/dashboard`) con menú lateral limpio (*Laura Gómez · Administradora*), tarjetas de KPIs diarios (asistencias, retardos, turnos en curso, intentos rechazados por prueba de vida) y tablas completas con datos realistas para **Cumplimiento Semanal de Jornada** y **Registros Recientes de Asistencia** (con filtro de estado y evidencias locales de 15 días).
+    - **Bloque 3 (Enrolamiento Biométrico y Vinculación de Terminales)**: Demostración visual de los módulos de **Colaboradores** (`/empleados`) con formulario de enrolamiento facial (3 capturas sin almacenamiento de fotos crudas y consentimiento LFPDPPP) y **Dispositivos** (`/dispositivos`) con terminales vinculadas y generación de código QR / PIN de 6 dígitos.
+  - **Privacidad y Limpieza**:
+    - Eliminación completa de capturas crudas con datos sensibles y rostros personales del repositorio (`checador/public/screenshorts/`).
+
+---
+
 ## [1.23.0] - 2026-11-14
 
 ### Añadido
