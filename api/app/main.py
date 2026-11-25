@@ -107,7 +107,7 @@ app.include_router(events.router)
 app.include_router(internal_products.router)
 
 # Registrar servidor MCP para bots (/mcp y el legacy /mcp/mcp, sin redirección)
-for mcp_path in ("/mcp", "/mcp/mcp"):
+for mcp_path in ("/mcp", "/mcp/forum"):
     app.router.routes.append(
         Route(
             mcp_path,
