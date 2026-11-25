@@ -28,6 +28,8 @@ const nextConfig: NextConfig = {
         "*.ngrok-free.dev",
         "*.ngrok.io",
         "*.ngrok.app",
+        "checador.iqissmexico.com",
+  "*.iqissmexico.com",
       ],
     },
   },
