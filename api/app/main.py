@@ -106,16 +106,15 @@ app.include_router(admin_forum.router)
 app.include_router(events.router)
 app.include_router(internal_products.router)
 
-# Registrar servidor MCP para bots (/mcp y el legacy /mcp/mcp, sin redirección)
-for mcp_path in ("/mcp", "/forum"):
-    app.router.routes.append(
-        Route(
-            mcp_path,
-            endpoint=mcp_asgi_app,
-            methods=["GET", "POST", "DELETE", "OPTIONS"],
-            include_in_schema=False,
-        )
+# Registrar servidor MCP para bots (exactamente /mcp sin redirección)
+app.router.routes.append(
+    Route(
+        "/mcp",
+        endpoint=mcp_asgi_app,
+        methods=["GET", "POST", "DELETE", "OPTIONS"],
+        include_in_schema=False,
     )
+)
 
 @app.get("/health")
 async def health_check():
