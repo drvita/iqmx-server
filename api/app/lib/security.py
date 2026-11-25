@@ -2,6 +2,7 @@ import hmac
 import hashlib
 import logging
 from datetime import datetime, timedelta
+from typing import Optional
 import jwt
 from fastapi import Request, Header, HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -36,7 +37,7 @@ def hash_password(password: str) -> str:
     dk = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 100000)
     return f"pbkdf2${salt.hex()}${dk.hex()}"
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
+def verify_password(plain_password: str, hashed_password: Optional[str]) -> bool:
     """
     Verifica una contraseña contra su hash.
     Soporta contraseñas con bcrypt, pbkdf2 y SHA256 legado.

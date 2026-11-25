@@ -9,6 +9,7 @@ from app.models.customer_subscription import CustomerSubscription
 from app.models.membership_plan import MembershipPlan
 from app.models.product import Product
 from app.services.notifications.manager import NotificationManager
+from app.services.customers import is_placeholder_email
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -423,7 +424,7 @@ def expire_due_subscriptions(db: Session) -> List[CustomerSubscription]:
 
         # 2. Notificar al cliente vía Mailtrap (Plantilla de expiración + feedback por WhatsApp)
         customer = s.customer
-        if customer and customer.user and customer.user.email:
+        if customer and customer.user and customer.user.email and not is_placeholder_email(customer.user.email):
             company = customer.company_name or "tu empresa"
             contact = customer.contact_name or company
             plan_name = s.plan.name if s.plan else "Membresía IQISSMexico"
@@ -679,7 +680,7 @@ def dispatch_preventive_subscription_alerts(db: Session, dry_run: bool = False) 
     ).all()
 
     for s in cancelled_subs:
-        if s.customer and s.customer.user and s.customer.user.email:
+        if s.customer and s.customer.user and s.customer.user.email and not is_placeholder_email(s.customer.user.email):
             contact = s.customer.contact_name or s.customer.company_name
             company = s.customer.company_name
             plan_name = s.plan.name if s.plan else "Membresía"
@@ -722,7 +723,7 @@ def dispatch_preventive_subscription_alerts(db: Session, dry_run: bool = False) 
     ).all()
 
     for s in trial_subs:
-        if s.customer and s.customer.user and s.customer.user.email:
+        if s.customer and s.customer.user and s.customer.user.email and not is_placeholder_email(s.customer.user.email):
             contact = s.customer.contact_name or s.customer.company_name
             company = s.customer.company_name
             exp_formatted = s.current_period_end.strftime("%d/%m/%Y")
@@ -761,7 +762,7 @@ def dispatch_preventive_subscription_alerts(db: Session, dry_run: bool = False) 
     ).all()
 
     for s in past_due_subs:
-        if s.customer and s.customer.user and s.customer.user.email:
+        if s.customer and s.customer.user and s.customer.user.email and not is_placeholder_email(s.customer.user.email):
             contact = s.customer.contact_name or s.customer.company_name
             company = s.customer.company_name
             plan_name = s.plan.name if s.plan else "Membresía"

@@ -15,6 +15,7 @@ from app.models.customer_subscription import CustomerSubscription
 from app.models.user import User
 from app.models.role import Role
 from app.lib.security import hash_password
+from app.services.customers import normalize_phone
 from app.config import settings, resolve_frontend_base_url
 
 logger = logging.getLogger("uvicorn.error")
@@ -218,11 +219,13 @@ async def create_checkout_preference(
 
     customer = db.query(Customer).filter(Customer.user_id == user.id).first()
     if not customer:
+        clean_p = req.phone.strip() if req.phone else None
         customer = Customer(
             user_id=user.id,
             company_name=req.company_name.strip(),
             contact_name=req.contact_name.strip(),
-            phone=req.phone.strip() if req.phone else None,
+            phone=clean_p,
+            phone_normalized=normalize_phone(clean_p),
             origin="web_checkout",
             is_active=True,
             privacy_accepted_at=datetime.utcnow()

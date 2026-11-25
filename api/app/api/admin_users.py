@@ -14,6 +14,7 @@ from app.models.customer_webhook import CustomerWebhook
 from app.api.admin_auth import get_current_admin
 from app.lib.security import hash_password
 from app.lib.crypto import generate_secure_secret
+from app.services.customers import normalize_phone
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -273,16 +274,20 @@ def grant_customer_role(
         customer.company_name = req.company_name.strip()
         customer.contact_name = req.contact_name.strip()
         if req.phone is not None:
-            customer.phone = req.phone.strip() if req.phone else None
+            clean_p = req.phone.strip() if req.phone else None
+            customer.phone = clean_p
+            customer.phone_normalized = normalize_phone(clean_p)
         if req.tax_id is not None:
             customer.tax_id = req.tax_id.strip() if req.tax_id else None
         customer.is_active = True
     else:
+        clean_p = req.phone.strip() if req.phone else None
         customer = Customer(
             user_id=user.id,
             company_name=req.company_name.strip(),
             contact_name=req.contact_name.strip(),
-            phone=req.phone.strip() if req.phone else None,
+            phone=clean_p,
+            phone_normalized=normalize_phone(clean_p),
             tax_id=req.tax_id.strip() if req.tax_id else None,
             origin="admin_granted",
             privacy_accepted_at=datetime.utcnow(),

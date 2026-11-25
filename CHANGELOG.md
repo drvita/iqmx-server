@@ -9,6 +9,25 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 ## [1.27.1] - 2026-11-25
 
+### Añadido
+
+- **Registro Manual de Clientes Físicos y Vinculación Sin Duplicados (`api/` & `web/`) [SPEC-007]**:
+  - **Diseño UI en Google Stitch**:
+    - Generación de la pantalla de catálogo y modal de alta manual [`39e3be1ab94242fe9eb3ea7cb181268f`](file:///Users/laclavees12345/code/iqissmexico/main/02-docs/servicios/web.md) dentro del proyecto `7336256985322964978` (`IQMX Admin - Foro Colaborativo y Bots MCP`) aplicando el Design System oficial `assets/3acb582a627642a1bb987e143aea7bc4` (*IQISSMexico Enterprise Console*).
+  - **Persistencia, Migración y Modelos (`api/`)**:
+    - Migración Alembic [`a7b8c9d0e1f2_manual_customers_nullable_pw_and_phone_norm.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/alembic/versions/a7b8c9d0e1f2_manual_customers_nullable_pw_and_phone_norm.py) para permitir `password_hash = Column(String(255), nullable=True)` en [`api/app/models/user.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/models/user.py) y añadir la columna indexada `phone_normalized` en [`api/app/models/customer.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/models/customer.py) con backfill determinista de números telefónicos existentes.
+  - **Servicio de Dominio de Clientes (`api/`)**:
+    - Creación de [`api/app/services/customers/service.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/services/customers/service.py) con la lógica para normalización telefónica (`normalize_phone`), alta manual de clientes sin contraseña (`create_manual_customer`), generación de correo técnico placeholder (`@clientes.iqissmexico.local`) cuando no se proporcione email, y activación de cuentas existentes sin duplicar registros (`find_claimable_customer_for_registration`, `activate_claimed_customer`).
+  - **Endpoints y Seguridad Anti-Account Takeover (`api/`)**:
+    - Nuevo endpoint administrativo `POST /api/admin/customers` en [`api/app/api/admin_customers.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/api/admin_customers.py) para alta de empresas con origen `direct_sales` y habilitación inmediata en Foro (`forum_enabled=True`).
+    - Enriquecimiento del esquema `AdminCustomerResponse` con banderas `has_password` y `has_real_email`.
+    - Modificación de `POST /api/portal/auth/register` en [`api/app/api/portal_auth.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/api/portal_auth.py) para reclamar y activar clientes pre-registrados por correo o por teléfono normalizado cuando su email en base de datos sea placeholder, bloqueando con `409 Conflict` si ya contaban con un correo real distinto para evitar secuestro de cuentas por teléfonos públicos, bloqueando cuentas suspendidas con `403 Forbidden` y rechazando el registro de correos con el dominio técnico interno reservado.
+    - Bloqueo de inicio de sesión (`401 Unauthorized`) y de recuperación de contraseña en `/forgot-password` para cuentas sin contraseña definida o con correo técnico placeholder.
+    - Sincronización de `phone_normalized` en altas vía checkout ([`api/app/api/public_catalog.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/api/public_catalog.py)) y concesión de rol de cliente ([`api/app/api/admin_users.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/api/admin_users.py)), así como guardas de no-envío de emails automáticos a dominios `.local` en [`api/app/services/subscription_service.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/services/subscription_service.py).
+    - Suite de pruebas unitarias exhaustiva en [`api/tests/test_manual_customers.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/tests/test_manual_customers.py).
+  - **Interfaz Administrativa de Clientes (`web/`)**:
+    - Actualización de [`web/src/app/(admin)/admin/customers/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/(admin)/admin/customers/page.tsx) con el botón primario **+ Nuevo Cliente**, modal accesible de registro manual con atajo `Escape`, validaciones en vivo, badges visuales de origen (*Cliente Físico*), portal (*Sin acceso al portal*) y soporte para edición de clientes sin correo electrónico registrado.
+
 ### Corregido
 
 - **Reducción de Ruido en Sentry para Rechazos Esperados del Webhook de WhatsApp (`api/`) [IQMX-MAIN-API-8]**:

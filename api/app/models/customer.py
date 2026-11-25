@@ -12,6 +12,7 @@ class Customer(Base):
     company_name = Column(String(150), nullable=False)
     contact_name = Column(String(100), nullable=False)
     phone = Column(String(50), nullable=True)
+    phone_normalized = Column(String(30), nullable=True, index=True)
     tax_id = Column(String(50), nullable=True)  # RFC / Tax ID
     origin = Column(String(30), default="web_signup", nullable=False)  # web_signup, direct_sales, internal
     

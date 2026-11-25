@@ -12,6 +12,11 @@ from app.models.customer import Customer
 from app.models.user import User
 from app.models.customer_subscription import CustomerSubscription
 from app.api.admin_auth import get_current_admin
+from app.services.customers import (
+    create_manual_customer,
+    is_placeholder_email,
+    normalize_phone,
+)
 
 logger = logging.getLogger("uvicorn.error")
 
@@ -31,10 +36,31 @@ class AdminCustomerResponse(BaseModel):
     origin: str
     is_active: bool
     forum_enabled: bool = False
+    has_password: bool = True
+    has_real_email: bool = True
     privacy_accepted_at: datetime
     created_at: datetime
     whatsapp_numbers_count: int = 0
     active_plans: List[str] = []
+
+
+class AdminCreateCustomerRequest(BaseModel):
+    company_name: str = Field(..., min_length=2, max_length=150)
+    contact_name: str = Field(..., min_length=2, max_length=100)
+    email: Optional[str] = Field(None, max_length=150)
+    phone: Optional[str] = Field(None, max_length=50)
+    tax_id: Optional[str] = Field(None, max_length=50)
+    forum_enabled: bool = True
+
+    @field_validator("email")
+    @classmethod
+    def validate_email_format(cls, v: Optional[str]) -> Optional[str]:
+        if v is None or not v.strip():
+            return None
+        clean = v.strip().lower()
+        if not re.match(EMAIL_REGEX, clean):
+            raise ValueError("El correo electrónico no tiene un formato válido.")
+        return clean
 
 
 class AdminCustomerStatusUpdate(BaseModel):
@@ -61,67 +87,11 @@ class AdminUpdateCustomerRequest(BaseModel):
         return clean
 
 
-@router.get("", response_model=List[AdminCustomerResponse])
-def list_customers(
-    db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
-):
-    """
-    Lista todos los clientes corporativos registrados en el portal central,
-    incluyendo su correo, estado, números de WhatsApp asociados y membresías activas.
-    """
-    customers = db.query(Customer).order_by(Customer.id.desc()).all()
-    now = datetime.utcnow()
-
-    results = []
-    for c in customers:
-        user_email = c.user.email if c.user else "sin_correo"
-        wa_count = len(c.whatsapp_numbers) if c.whatsapp_numbers else 0
-
-        # Membresías activas o trial vigentes
-        active_plans = []
-        if c.subscriptions:
-            for s in c.subscriptions:
-                if s.status in ["active", "trial"] and s.current_period_end > now:
-                    plan_name = s.plan.name if s.plan else f"Plan #{s.plan_id}"
-                    active_plans.append(plan_name)
-
-        results.append(AdminCustomerResponse(
-            id=c.id,
-            user_id=c.user_id,
-            company_name=c.company_name,
-            contact_name=c.contact_name,
-            email=user_email,
-            phone=c.phone,
-            tax_id=c.tax_id,
-            origin=c.origin or "web_signup",
-            is_active=c.is_active,
-            forum_enabled=bool(c.forum_enabled),
-            privacy_accepted_at=c.privacy_accepted_at,
-            created_at=c.created_at,
-            whatsapp_numbers_count=wa_count,
-            active_plans=active_plans
-        ))
-
-    return results
-
-
-@router.get("/{customer_id}", response_model=AdminCustomerResponse)
-def get_customer_detail(
-    customer_id: int,
-    db: Session = Depends(get_db),
-    admin: User = Depends(get_current_admin)
-):
-    """Obtiene el detalle de un cliente específico."""
-    c = db.query(Customer).filter(Customer.id == customer_id).first()
-    if not c:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Cliente #{customer_id} no encontrado."
-        )
-
-    now = datetime.utcnow()
-    user_email = c.user.email if c.user else "sin_correo"
+def _build_customer_response(c: Customer, now: datetime) -> AdminCustomerResponse:
+    raw_email = c.user.email if c.user else None
+    has_real_email = bool(raw_email and not is_placeholder_email(raw_email))
+    user_email = raw_email if raw_email else "sin_correo"
+    has_password = bool(c.user and c.user.password_hash)
     wa_count = len(c.whatsapp_numbers) if c.whatsapp_numbers else 0
 
     active_plans = []
@@ -142,11 +112,66 @@ def get_customer_detail(
         origin=c.origin or "web_signup",
         is_active=c.is_active,
         forum_enabled=bool(c.forum_enabled),
+        has_password=has_password,
+        has_real_email=has_real_email,
         privacy_accepted_at=c.privacy_accepted_at,
         created_at=c.created_at,
         whatsapp_numbers_count=wa_count,
-        active_plans=active_plans
+        active_plans=active_plans,
     )
+
+
+@router.get("", response_model=List[AdminCustomerResponse])
+def list_customers(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    """
+    Lista todos los clientes corporativos registrados en el portal central,
+    incluyendo su correo, estado, números de WhatsApp asociados y membresías activas.
+    """
+    customers = db.query(Customer).order_by(Customer.id.desc()).all()
+    now = datetime.utcnow()
+    return [_build_customer_response(c, now) for c in customers]
+
+
+@router.post("", response_model=AdminCustomerResponse, status_code=status.HTTP_201_CREATED)
+def create_customer(
+    payload: AdminCreateCustomerRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """
+    Registra manualmente un cliente físico desde el panel administrativo (sin contraseña).
+    """
+    customer = create_manual_customer(
+        db,
+        company_name=payload.company_name,
+        contact_name=payload.contact_name,
+        email=payload.email,
+        phone=payload.phone,
+        tax_id=payload.tax_id,
+        forum_enabled=payload.forum_enabled,
+        admin_id=admin.id,
+    )
+    return _build_customer_response(customer, datetime.utcnow())
+
+
+@router.get("/{customer_id}", response_model=AdminCustomerResponse)
+def get_customer_detail(
+    customer_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin)
+):
+    """Obtiene el detalle de un cliente específico."""
+    c = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not c:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Cliente #{customer_id} no encontrado."
+        )
+
+    return _build_customer_response(c, datetime.utcnow())
 
 
 @router.patch("/{customer_id}/status", response_model=AdminCustomerResponse)
@@ -206,6 +231,11 @@ def update_customer(
     # 1. Validación y actualización de Email
     if payload.email is not None:
         clean_email = payload.email.strip().lower()
+        if is_placeholder_email(clean_email):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="El dominio de correo técnico está reservado para uso interno.",
+            )
         if clean_email != user.email:
             existing = db.query(User).filter(User.email == clean_email).first()
             if existing and existing.id != user.id:
@@ -252,7 +282,21 @@ def update_customer(
 
     # 4. Teléfono
     if payload.phone is not None:
-        customer.phone = payload.phone.strip() if payload.phone.strip() else None
+        clean_phone = payload.phone.strip() if payload.phone.strip() else None
+        norm_phone = normalize_phone(clean_phone)
+        if norm_phone:
+            existing_phone = (
+                db.query(Customer)
+                .filter(Customer.phone_normalized == norm_phone, Customer.id != customer.id)
+                .first()
+            )
+            if existing_phone:
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail=f"El teléfono ya se encuentra registrado en otro cliente ({existing_phone.company_name}).",
+                )
+        customer.phone = clean_phone
+        customer.phone_normalized = norm_phone
 
     # 5. Tax ID / RFC
     if payload.tax_id is not None:

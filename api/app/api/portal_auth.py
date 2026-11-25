@@ -24,6 +24,12 @@ from app.lib.security import (
 from app.lib.crypto import generate_secure_secret
 from app.config import settings
 from app.services.notifications.manager import NotificationManager
+from app.services.customers import (
+    activate_claimed_customer,
+    find_claimable_customer_for_registration,
+    is_placeholder_email,
+    normalize_phone,
+)
 from app.lib.redis_client import (
     save_email_verification_token,
     consume_email_verification_token,
@@ -153,65 +159,86 @@ async def register_customer(
         )
 
     clean_email = req.email.strip().lower()
-
-    # Verificar si el correo ya existe
-    existing_user = db.query(User).filter(User.email == clean_email).first()
-    if existing_user:
+    if is_placeholder_email(clean_email):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El correo electrónico ingresado ya se encuentra registrado."
+            detail="El dominio de correo ingresado está reservado para uso interno.",
         )
 
-    # Obtener o crear rol 'customer'
-    customer_role = db.query(Role).filter(Role.name == "customer").first()
-    if not customer_role:
-        customer_role = Role(name="customer")
-        db.add(customer_role)
-        db.commit()
-        db.refresh(customer_role)
+    # Verificar si existe cuenta pre-registrada sin contraseña elegible para vinculación
+    claimable = find_claimable_customer_for_registration(
+        db,
+        clean_email=clean_email,
+        raw_phone=req.phone,
+    )
 
     # Capturar IP para cumplimiento de auditoría legal
     client_ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else None)
     if client_ip and "," in client_ip:
         client_ip = client_ip.split(",")[0].strip()
 
-    # 1. Crear usuario
-    new_user = User(
-        name=req.contact_name.strip(),
-        email=clean_email,
-        password_hash=hash_password(req.password),
-        role_id=customer_role.id
-    )
-    new_user.roles.append(customer_role)
-    db.add(new_user)
-    db.commit()
-    db.refresh(new_user)
+    if claimable is not None:
+        existing_user, existing_customer = claimable
+        new_user, new_customer = activate_claimed_customer(
+            db,
+            user=existing_user,
+            customer=existing_customer,
+            clean_email=clean_email,
+            contact_name=req.contact_name,
+            company_name=req.company_name,
+            raw_phone=req.phone,
+            tax_id=req.tax_id,
+            password=req.password,
+            client_ip=client_ip,
+        )
+    else:
+        # Obtener o crear rol 'customer'
+        customer_role = db.query(Role).filter(Role.name == "customer").first()
+        if not customer_role:
+            customer_role = Role(name="customer")
+            db.add(customer_role)
+            db.commit()
+            db.refresh(customer_role)
 
-    # 2. Crear registro de Customer
-    new_customer = Customer(
-        user_id=new_user.id,
-        company_name=req.company_name.strip(),
-        contact_name=req.contact_name.strip(),
-        phone=req.phone.strip() if req.phone else None,
-        tax_id=req.tax_id.strip() if req.tax_id else None,
-        origin="web_signup",
-        privacy_accepted_at=datetime.utcnow(),
-        privacy_ip=client_ip,
-        is_active=True
-    )
-    db.add(new_customer)
-    db.commit()
-    db.refresh(new_customer)
+        # 1. Crear usuario
+        new_user = User(
+            name=req.contact_name.strip(),
+            email=clean_email,
+            password_hash=hash_password(req.password),
+            role_id=customer_role.id
+        )
+        new_user.roles.append(customer_role)
+        db.add(new_user)
+        db.commit()
+        db.refresh(new_user)
 
-    # 3. Inicializar configuración de webhook con secreto pre-generado
-    new_webhook = CustomerWebhook(
-        customer_id=new_customer.id,
-        url=None,
-        secret_token=generate_secure_secret(32),
-        is_active=True
-    )
-    db.add(new_webhook)
-    db.commit()
+        # 2. Crear registro de Customer
+        clean_phone = req.phone.strip() if req.phone and req.phone.strip() else None
+        new_customer = Customer(
+            user_id=new_user.id,
+            company_name=req.company_name.strip(),
+            contact_name=req.contact_name.strip(),
+            phone=clean_phone,
+            phone_normalized=normalize_phone(clean_phone),
+            tax_id=req.tax_id.strip() if req.tax_id else None,
+            origin="web_signup",
+            privacy_accepted_at=datetime.utcnow(),
+            privacy_ip=client_ip,
+            is_active=True
+        )
+        db.add(new_customer)
+        db.commit()
+        db.refresh(new_customer)
+
+        # 3. Inicializar configuración de webhook con secreto pre-generado
+        new_webhook = CustomerWebhook(
+            customer_id=new_customer.id,
+            url=None,
+            secret_token=generate_secure_secret(32),
+            is_active=True
+        )
+        db.add(new_webhook)
+        db.commit()
 
     # 4. Generar token de acceso JWT
     token = create_access_token(data={"sub": str(new_user.id), "user_id": new_user.id, "email": new_user.email})
@@ -266,6 +293,11 @@ async def login_customer(
     Verifica credenciales, valida pertenencia al rol 'customer' y retorna el token JWT.
     """
     clean_email = req.email.strip().lower()
+    if is_placeholder_email(clean_email):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="El dominio de correo ingresado está reservado para uso interno.",
+        )
     user = db.query(User).filter(User.email == clean_email).first()
 
     if not user or not verify_password(req.password, user.password_hash):
@@ -513,7 +545,7 @@ async def forgot_password(
     )
 
     user = db.query(User).filter(User.email == clean_email).first()
-    if not user or user.has_role("bot"):
+    if not user or user.has_role("bot") or not user.password_hash or is_placeholder_email(user.email):
         # Anti-enumeración: log informativo interno y respuesta idéntica
         logger.info(f"[ForgotPassword] Solicitud ignorada o correo no existente: {clean_email}")
         return ForgotPasswordResponse(success=True, message=generic_msg)

@@ -12,6 +12,8 @@ import {
   XMarkIcon,
   ExclamationCircleIcon,
   ArrowPathIcon,
+  PlusIcon,
+  InformationCircleIcon,
 } from "@heroicons/react/24/outline";
 
 type Customer = {
@@ -25,6 +27,8 @@ type Customer = {
   origin: string;
   is_active: boolean;
   forum_enabled: boolean;
+  has_password?: boolean;
+  has_real_email?: boolean;
   privacy_accepted_at: string;
   created_at: string;
   whatsapp_numbers_count: number;
@@ -51,6 +55,20 @@ export default function AdminCustomersPage() {
   });
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
+
+  // Estados para modal de creación manual
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    company_name: "",
+    contact_name: "",
+    phone: "",
+    email: "",
+    tax_id: "",
+    forum_enabled: true,
+  });
+  const [createSaving, setCreateSaving] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+
   const [feedbackMsg, setFeedbackMsg] = useState<{
     type: "success" | "error";
     text: string;
@@ -78,6 +96,18 @@ export default function AdminCustomersPage() {
   useEffect(() => {
     fetchCustomers();
   }, [fetchCustomers]);
+
+  useEffect(() => {
+    if (!showCreateModal && !selectedCustomerForEdit) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowCreateModal(false);
+        setSelectedCustomerForEdit(null);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showCreateModal, selectedCustomerForEdit]);
 
   const handleToggleStatus = async (customer: Customer) => {
     const token = localStorage.getItem("iqmx_admin_token");
@@ -156,12 +186,83 @@ export default function AdminCustomersPage() {
     }
   };
 
+  const openCreateModal = () => {
+    setCreateForm({
+      company_name: "",
+      contact_name: "",
+      phone: "",
+      email: "",
+      tax_id: "",
+      forum_enabled: true,
+    });
+    setCreateError(null);
+    setShowCreateModal(true);
+  };
+
+  const handleCreateCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCreateError(null);
+    setFeedbackMsg(null);
+
+    const cleanPhone = createForm.phone.trim();
+    const cleanEmail = createForm.email.trim();
+    if (!cleanPhone && !cleanEmail) {
+      setCreateError(
+        "Debes ingresar al menos un número de teléfono o un correo electrónico.",
+      );
+      return;
+    }
+
+    const token = localStorage.getItem("iqmx_admin_token");
+    if (!token) return;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+    setCreateSaving(true);
+
+    try {
+      const res = await fetch(`${apiUrl}/api/admin/customers`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          company_name: createForm.company_name.trim(),
+          contact_name: createForm.contact_name.trim(),
+          phone: cleanPhone || null,
+          email: cleanEmail || null,
+          tax_id: createForm.tax_id.trim() || null,
+          forum_enabled: createForm.forum_enabled,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        const detail =
+          typeof data.detail === "string"
+            ? data.detail
+            : "Error al registrar el cliente.";
+        setCreateError(detail);
+      } else {
+        setCustomers((prev) => [data, ...prev]);
+        setFeedbackMsg({
+          type: "success",
+          text: `Cliente ${data.company_name} registrado exitosamente.`,
+        });
+        setShowCreateModal(false);
+      }
+    } catch {
+      setCreateError("Error de comunicación con el servidor.");
+    } finally {
+      setCreateSaving(false);
+    }
+  };
+
   const openEditModal = (c: Customer) => {
     setSelectedCustomerForEdit(c);
     setEditForm({
       company_name: c.company_name,
       contact_name: c.contact_name,
-      email: c.email,
+      email: c.has_real_email === false ? "" : c.email,
       phone: c.phone || "",
       tax_id: c.tax_id || "",
       is_active: c.is_active,
@@ -193,7 +294,7 @@ export default function AdminCustomersPage() {
           body: JSON.stringify({
             company_name: editForm.company_name.trim(),
             contact_name: editForm.contact_name.trim(),
-            email: editForm.email.trim(),
+            ...(editForm.email.trim() ? { email: editForm.email.trim() } : {}),
             phone: editForm.phone.trim() || null,
             tax_id: editForm.tax_id.trim() || null,
             is_active: editForm.is_active,
@@ -246,16 +347,26 @@ export default function AdminCustomersPage() {
           </p>
         </div>
 
-        {/* Buscador Rápido */}
-        <div className="relative max-w-xs w-full">
-          <MagnifyingGlassIcon className="h-4 w-4 text-gray-400 absolute left-3 top-3" />
-          <input
-            type="text"
-            placeholder="Buscar por empresa, email, RFC..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-900 placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-2xs"
-          />
+        {/* Buscador Rápido y Botón Alta Manual */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto">
+          <div className="relative sm:w-64 w-full">
+            <MagnifyingGlassIcon className="h-4 w-4 text-gray-400 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              placeholder="Buscar por empresa, email, RFC..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-4 py-2 bg-white border border-gray-200 rounded-xl text-xs text-gray-900 placeholder-gray-400 focus:outline-hidden focus:ring-2 focus:ring-blue-500 shadow-2xs"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition-colors shadow-xs cursor-pointer whitespace-nowrap"
+          >
+            <PlusIcon className="h-4 w-4 shrink-0" />
+            <span>Nuevo Cliente</span>
+          </button>
         </div>
       </div>
 
@@ -303,6 +414,11 @@ export default function AdminCustomersPage() {
                         <span className="font-semibold text-gray-900 text-sm">
                           {c.company_name}
                         </span>
+                        {c.has_password === false && (
+                          <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-700 border border-amber-200">
+                            Sin acceso al portal
+                          </span>
+                        )}
                       </div>
                       <p className="text-xs text-gray-600 mt-1">
                         <span className="font-medium text-gray-700">
@@ -314,7 +430,13 @@ export default function AdminCustomersPage() {
                 </td>
 
                 <td className="px-5 py-4">
-                  <p className="font-mono text-xs text-gray-800">{c.email}</p>
+                  {c.has_real_email === false ? (
+                    <p className="text-[11px] text-gray-400 italic">
+                      Sin correo registrado
+                    </p>
+                  ) : (
+                    <p className="font-mono text-xs text-gray-800">{c.email}</p>
+                  )}
                   {c.phone ? (
                     <p className="text-xs text-gray-500 flex items-center gap-1.5 mt-1">
                       <PhoneIcon className="h-3.5 w-3.5 text-gray-400 shrink-0" />
@@ -351,9 +473,11 @@ export default function AdminCustomersPage() {
                   <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-[11px] font-medium text-gray-700">
                     {c.origin === "web_signup"
                       ? "Registro Web"
-                      : c.origin === "admin_granted"
-                        ? "Alta Manual"
-                        : c.origin}
+                      : c.origin === "direct_sales"
+                        ? "Cliente Físico"
+                        : c.origin === "admin_granted"
+                          ? "Alta Manual"
+                          : c.origin}
                   </span>
                 </td>
 
@@ -431,6 +555,193 @@ export default function AdminCustomersPage() {
         </table>
       </div>
 
+      {/* Modal de Registro Manual de Cliente */}
+      {showCreateModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-customer-modal-title"
+        >
+          <div className="w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-gray-200 max-h-[92vh] overflow-y-auto">
+            <div className="flex items-start justify-between pb-3 border-b border-gray-100">
+              <div>
+                <h3
+                  id="create-customer-modal-title"
+                  className="text-base font-bold text-gray-900"
+                >
+                  Registrar Cliente Manual
+                </h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Alta rápida de cliente físico para trabajar en el Foro Colaborativo.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 transition-colors cursor-pointer"
+                aria-label="Cerrar modal"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+
+            {createError && (
+              <div className="mt-4 rounded-lg bg-red-50 border border-red-200 p-3 text-xs text-red-700 flex items-start gap-2">
+                <ExclamationCircleIcon className="h-4 w-4 shrink-0 mt-0.5 text-red-500" />
+                <span>{createError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCreateCustomer} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Nombre de la Empresa *
+                </label>
+                <input
+                  type="text"
+                  required
+                  minLength={2}
+                  value={createForm.company_name}
+                  onChange={(e) =>
+                    setCreateForm({ ...createForm, company_name: e.target.value })
+                  }
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 font-medium focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-hidden"
+                  placeholder="Ej. Ferretería del Pacífico S.A."
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  Nombre del Contacto Principal *
+                </label>
+                <input
+                  type="text"
+                  required
+                  minLength={2}
+                  value={createForm.contact_name}
+                  onChange={(e) =>
+                    setCreateForm({ ...createForm, contact_name: e.target.value })
+                  }
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 font-medium focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-hidden"
+                  placeholder="Ej. Carlos Mendoza"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Teléfono de Contacto
+                  </label>
+                  <input
+                    type="tel"
+                    value={createForm.phone}
+                    onChange={(e) =>
+                      setCreateForm({ ...createForm, phone: e.target.value })
+                    }
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 font-medium focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-hidden"
+                    placeholder="+52 314 123 4567"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-700 mb-1">
+                    Correo Electrónico
+                  </label>
+                  <input
+                    type="email"
+                    value={createForm.email}
+                    onChange={(e) =>
+                      setCreateForm({ ...createForm, email: e.target.value })
+                    }
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 font-mono focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-hidden"
+                    placeholder="opcional@empresa.com"
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-500 -mt-2">
+                Ingresa al menos un teléfono o un correo electrónico para identificar al cliente.
+              </p>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">
+                  RFC / Tax ID (Opcional)
+                </label>
+                <input
+                  type="text"
+                  value={createForm.tax_id}
+                  onChange={(e) =>
+                    setCreateForm({
+                      ...createForm,
+                      tax_id: e.target.value.toUpperCase(),
+                    })
+                  }
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-xs text-gray-900 font-mono uppercase focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-hidden"
+                  placeholder="XAXX010101000"
+                />
+              </div>
+
+              <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3.5">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={createForm.forum_enabled}
+                    onChange={(e) =>
+                      setCreateForm({
+                        ...createForm,
+                        forum_enabled: e.target.checked,
+                      })
+                    }
+                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <div>
+                    <span className="block text-xs font-bold text-gray-900">
+                      Habilitada en el Foro Colaborativo
+                    </span>
+                    <span className="block text-[11px] text-gray-600 mt-0.5">
+                      Permite crear temas y participar en el Foro de inmediato.
+                    </span>
+                  </div>
+                </label>
+              </div>
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-[11px] text-slate-600 flex items-start gap-2">
+                <InformationCircleIcon className="h-4 w-4 text-blue-600 shrink-0 mt-0.5" />
+                <span>
+                  Se registrará la empresa sin contraseña para trabajar en el Foro. Si el
+                  cliente se registra después en el portal con el mismo teléfono o correo,
+                  su cuenta se vinculará automáticamente sin duplicarse.
+                </span>
+              </div>
+
+              <div className="mt-6 flex justify-end gap-2 border-t border-gray-100 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="rounded-lg px-3.5 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-100 transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={createSaving}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 transition-colors disabled:opacity-50 cursor-pointer shadow-xs"
+                >
+                  {createSaving ? (
+                    <>
+                      <ArrowPathIcon className="h-3.5 w-3.5 animate-spin" />
+                      <span>Registrando…</span>
+                    </>
+                  ) : (
+                    <span>Registrar Cliente</span>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Modal de Edición de Cliente */}
       {selectedCustomerForEdit && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
@@ -498,11 +809,12 @@ export default function AdminCustomersPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-gray-700 mb-1">
-                    Correo Electrónico de Login *
+                    Correo Electrónico de Login{" "}
+                    {selectedCustomerForEdit.has_real_email !== false ? "*" : "(Opcional)"}
                   </label>
                   <input
                     type="email"
-                    required
+                    required={selectedCustomerForEdit.has_real_email !== false}
                     value={editForm.email}
                     onChange={(e) =>
                       setEditForm({ ...editForm, email: e.target.value })
