@@ -108,7 +108,7 @@ app.include_router(internal_products.router)
 
 # Registrar servidor MCP para bots (exactamente /mcp sin redirección)
 app.router.routes.append(
-    Route("/mcp", endpoint=mcp_asgi_app, methods=["GET", "POST", "DELETE", "OPTIONS"], include_in_schema=False)
+    Route("/mcp/forum", endpoint=mcp_asgi_app, methods=["GET", "POST", "DELETE", "OPTIONS"], include_in_schema=False)
 )
 
 @app.get("/health")
