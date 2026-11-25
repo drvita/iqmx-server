@@ -7,6 +7,27 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 > **Zona horaria de referencia:** Ciudad de México (CST / UTC-6).
 
+## [1.27.0] - 2026-11-25
+
+### Añadido
+
+- **Respuestas Anidadas en MCP y Renderizado Markdown con UX Mejorada en Foro (`api/` & `web/`)**:
+  - **Estructura Jerárquica de Respuestas (`replies`) en MCP (`api/`)**:
+    - Actualización de `get_thread_detail` en [`api/app/services/forum/service.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/services/forum/service.py) con soporte para el parámetro `nested=True` sin romper compatibilidad existente (`nested=False` por defecto).
+    - Agrupación estructurada de respuestas anidadas dentro de la propiedad `replies: [...]` en cada mensaje principal (`parent_post_id is None`), paginando por mensajes principales para garantizar que ninguna respuesta quede separada de su mensaje padre entre páginas.
+    - Exposición de `total_messages` (total combinado de principales y respuestas) junto a `posts_total` (total de mensajes principales) en la herramienta MCP `get_thread` ([`api/app/mcp/server.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/mcp/server.py)).
+    - Pruebas unitarias de regresión en [`api/tests/test_forum_service.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/tests/test_forum_service.py) y pruebas de integración RPC en [`api/tests/test_mcp_server.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/tests/test_mcp_server.py).
+  - **Renderizado Markdown Completo (CommonMark + GFM) en el Foro (`web/`)**:
+    - Integración de `react-markdown`, `remark-gfm` y `remark-breaks` en [`web/package.json`](file:///Users/laclavees12345/code/iqissmexico/main/web/package.json).
+    - Nuevo componente cliente [`ForumMarkdown.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/components/admin/foro/ForumMarkdown.tsx) seguro contra XSS (sin `rehype-raw`), con formateo visual limpio para encabezados `h1`–`h4`, negritas, cursivas, listas ordenadas y con viñetas, citas (`blockquote`), bloques de código con scroll horizontal, tablas responsivas y enlaces externos seguros (`target="_blank" rel="noopener noreferrer"`).
+    - Resaltado automático de menciones tipo `@usuario` (ej. `@danna-muse`, `@angy-go`, `@chava-galindo`) con badges semánticos en azul e indicador especial en ámbar para `@all`, discriminando correos electrónicos y bloques de código.
+  - **Experiencia de Usuario (UX) Optimizada en el Hilo del Foro (`web/`)**:
+    - **Respuesta Inline Contextual**: Al hacer clic en "Responder" en cualquier publicación, se despliega un formulario inline justo debajo del mensaje padre con foco automático (`autoFocus`), indicador de a quién se responde y atajo de teclado rápido `Ctrl+Enter` / `Cmd+Enter` para enviar.
+    - El compositor inferior queda reservado exclusivamente para la creación de nuevos mensajes principales sin perder borradores.
+    - **Recarga Silenciosa y Automática**: Botón manual "Actualizar" con animación de carga e indicador de última hora de actualización (`Actualizado HH:MM`), junto a un selector "Auto 30s" que actualiza el hilo de discusión en segundo plano cada 30 segundos (con pausa automática al ocultar la pestaña y reactivación inmediata al volver) sin desmontar la pantalla ni borrar el texto que el usuario esté escribiendo.
+
+---
+
 ## [1.26.0] - 2026-11-24
 
 ### Añadido

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import {
   ArrowLeftIcon,
+  ArrowPathIcon,
   ArrowUturnLeftIcon,
   CpuChipIcon,
   ExclamationTriangleIcon,
@@ -12,6 +13,7 @@ import {
   TrashIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
+import ForumMarkdown from '@/components/admin/foro/ForumMarkdown';
 
 type ForumPost = {
   id: number;
@@ -58,11 +60,20 @@ export default function AdminForoDetailPage() {
   const [thread, setThread] = useState<ForumThreadDetail | null>(null);
   const [currentAdminId, setCurrentAdminId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<Date | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const isFetchingRef = useRef(false);
 
-  // Composer principal / respuesta
-  const [replyTo, setReplyTo] = useState<ForumPost | null>(null);
+  // Respuesta inline por mensaje padre
+  const [replyingToPostId, setReplyingToPostId] = useState<number | null>(null);
+  const [replyBody, setReplyBody] = useState('');
+  const [postingReply, setPostingReply] = useState(false);
+  const [replyError, setReplyError] = useState<string | null>(null);
+
+  // Composer principal (nuevo mensaje raíz)
   const [newPostBody, setNewPostBody] = useState('');
   const [posting, setPosting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
@@ -109,42 +120,95 @@ export default function AdminForoDetailPage() {
     }
   }, [deleteTarget]);
 
-  const fetchDetail = useCallback(async () => {
-    setLoading(true);
-    setErrorMsg(null);
-    try {
-      const token = localStorage.getItem('iqmx_admin_token');
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
-      const [threadRes, meRes] = await Promise.all([
-        fetch(`${apiUrl}/api/admin/forum/threads/${threadId}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-        fetch(`${apiUrl}/api/admin/auth/me`, {
-          headers: { Authorization: `Bearer ${token}` },
-        }),
-      ]);
+  const fetchDetail = useCallback(
+    async (options?: { silent?: boolean }) => {
+      if (isFetchingRef.current) return;
+      isFetchingRef.current = true;
+      const silent = Boolean(options?.silent);
 
-      if (meRes.ok) {
-        const me = await meRes.json();
-        setCurrentAdminId(me.id);
-      }
+      try {
+        await Promise.resolve();
+        if (silent) {
+          setRefreshing(true);
+        }
 
-      if (!threadRes.ok) {
-        const data = await threadRes.json().catch(() => null);
-        setErrorMsg(data?.detail || 'No se pudo cargar el tema.');
-      } else {
-        setThread(await threadRes.json());
+        const token = localStorage.getItem('iqmx_admin_token');
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+        const requests: Promise<Response>[] = [
+          fetch(`${apiUrl}/api/admin/forum/threads/${threadId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ];
+        if (!silent) {
+          requests.push(
+            fetch(`${apiUrl}/api/admin/auth/me`, {
+              headers: { Authorization: `Bearer ${token}` },
+            })
+          );
+        }
+
+        const [threadRes, meRes] = await Promise.all(requests);
+
+        if (meRes && meRes.ok) {
+          const me = await meRes.json();
+          setCurrentAdminId(me.id);
+        }
+
+        if (!threadRes.ok) {
+          if (!silent) {
+            const data = await threadRes.json().catch(() => null);
+            setErrorMsg(data?.detail || 'No se pudo cargar el tema.');
+          }
+        } else {
+          setErrorMsg(null);
+          setThread(await threadRes.json());
+          setLastUpdatedAt(new Date());
+        }
+      } catch {
+        if (!silent) {
+          setErrorMsg('Error de conexión con el servidor.');
+        }
+      } finally {
+        isFetchingRef.current = false;
+        if (silent) {
+          setRefreshing(false);
+        } else {
+          setLoading(false);
+        }
       }
-    } catch {
-      setErrorMsg('Error de conexión con el servidor.');
-    } finally {
-      setLoading(false);
-    }
-  }, [threadId]);
+    },
+    [threadId]
+  );
 
   useEffect(() => {
-    if (threadId) fetchDetail();
+    if (!threadId) return;
+    const timerId = window.setTimeout(() => {
+      void fetchDetail();
+    }, 0);
+    return () => window.clearTimeout(timerId);
   }, [threadId, fetchDetail]);
+
+  useEffect(() => {
+    if (!threadId || !autoRefresh) return;
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchDetail({ silent: true });
+      }
+    }, 30_000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        fetchDetail({ silent: true });
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      window.clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [threadId, autoRefresh, fetchDetail]);
 
   const handleStatusChange = async (newStatus: string) => {
     if (!thread) return;
@@ -230,7 +294,7 @@ export default function AdminForoDetailPage() {
         },
         body: JSON.stringify({
           body: newPostBody.trim(),
-          parent_post_id: replyTo ? replyTo.id : null,
+          parent_post_id: null,
         }),
       });
       const data = await res.json().catch(() => null);
@@ -238,13 +302,46 @@ export default function AdminForoDetailPage() {
         setPostError(data?.detail || 'No se pudo publicar el mensaje.');
       } else {
         setNewPostBody('');
-        setReplyTo(null);
-        fetchDetail();
+        fetchDetail({ silent: true });
       }
     } catch {
       setPostError('Error de conexión al publicar el mensaje.');
     } finally {
       setPosting(false);
+    }
+  };
+
+  const handlePublishInlineReply = async (e: React.FormEvent, parentPostId: number) => {
+    e.preventDefault();
+    if (!thread || !replyBody.trim()) return;
+    setPostingReply(true);
+    setReplyError(null);
+    try {
+      const token = localStorage.getItem('iqmx_admin_token');
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+      const res = await fetch(`${apiUrl}/api/admin/forum/threads/${thread.id}/posts`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          body: replyBody.trim(),
+          parent_post_id: parentPostId,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        setReplyError(data?.detail || 'No se pudo publicar la respuesta.');
+      } else {
+        setReplyBody('');
+        setReplyingToPostId(null);
+        fetchDetail({ silent: true });
+      }
+    } catch {
+      setReplyError('Error de conexión al publicar la respuesta.');
+    } finally {
+      setPostingReply(false);
     }
   };
 
@@ -266,7 +363,7 @@ export default function AdminForoDetailPage() {
       if (res.ok) {
         setEditingPostId(null);
         setEditingPostBody('');
-        fetchDetail();
+        fetchDetail({ silent: true });
       } else {
         const data = await res.json().catch(() => null);
         setActionError(data?.detail || 'No se pudo editar el mensaje.');
@@ -304,7 +401,7 @@ export default function AdminForoDetailPage() {
         });
         if (res.ok) {
           setDeleteTarget(null);
-          fetchDetail();
+          fetchDetail({ silent: true });
         } else {
           const data = await res.json().catch(() => null);
           setActionError(data?.detail || 'No se pudo borrar el mensaje.');
@@ -316,6 +413,9 @@ export default function AdminForoDetailPage() {
       setDeleting(false);
     }
   };
+
+  const formatTime = (date: Date) =>
+    date.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
 
   const formatDateTime = (iso: string) => {
     return new Date(iso).toLocaleString('es-MX', {
@@ -440,16 +540,57 @@ export default function AdminForoDetailPage() {
           </p>
         </div>
 
-        <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4 text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
-          {thread.body}
+        <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4">
+          <ForumMarkdown content={thread.body} />
         </div>
       </div>
 
       {/* Hilo de mensajes */}
       <div className="space-y-4">
-        <h2 className="text-sm font-bold text-gray-900">
-          Mensajes y aportes ({thread.posts.filter((p) => !p.deleted).length})
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-bold text-gray-900">
+            Mensajes y aportes ({thread.posts.filter((p) => !p.deleted).length})
+          </h2>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {lastUpdatedAt && (
+              <span className="text-[11px] text-gray-400">
+                Actualizado {formatTime(lastUpdatedAt)}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => fetchDetail({ silent: true })}
+              disabled={refreshing}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60 cursor-pointer"
+            >
+              <ArrowPathIcon
+                className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin text-blue-600' : 'text-gray-500'}`}
+                aria-hidden="true"
+              />
+              <span>{refreshing ? 'Actualizando…' : 'Actualizar'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setAutoRefresh((prev) => !prev)}
+              aria-pressed={autoRefresh}
+              title="Recarga automática silenciosa cada 30 segundos"
+              className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors cursor-pointer ${
+                autoRefresh
+                  ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                  : 'border-gray-200 bg-white text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${
+                  autoRefresh ? 'bg-emerald-500' : 'bg-gray-300'
+                }`}
+                aria-hidden="true"
+              />
+              <span>Auto 30s</span>
+            </button>
+          </div>
+        </div>
 
         {rootPosts.length === 0 && (
           <div className="rounded-xl border border-dashed border-gray-300 bg-white p-8 text-center text-xs text-gray-500">
@@ -481,11 +622,20 @@ export default function AdminForoDetailPage() {
                       {thread.status !== 'archived' && (
                         <button
                           type="button"
-                          onClick={() => setReplyTo(post)}
+                          onClick={() => {
+                            if (replyingToPostId === post.id) {
+                              setReplyingToPostId(null);
+                              setReplyError(null);
+                            } else {
+                              setReplyingToPostId(post.id);
+                              setReplyBody('');
+                              setReplyError(null);
+                            }
+                          }}
                           className="inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] font-semibold text-blue-700 hover:bg-blue-50 cursor-pointer"
                         >
                           <ArrowUturnLeftIcon className="h-3.5 w-3.5" aria-hidden="true" />
-                          <span>Responder</span>
+                          <span>{replyingToPostId === post.id ? 'Cerrar' : 'Responder'}</span>
                         </button>
                       )}
                       {canEdit && (
@@ -538,14 +688,10 @@ export default function AdminForoDetailPage() {
                       </button>
                     </div>
                   </div>
+                ) : post.deleted ? (
+                  <p className="text-sm italic text-gray-400">{post.body}</p>
                 ) : (
-                  <p
-                    className={`text-sm whitespace-pre-wrap leading-relaxed ${
-                      post.deleted ? 'italic text-gray-400' : 'text-gray-800'
-                    }`}
-                  >
-                    {post.body}
-                  </p>
+                  <ForumMarkdown content={post.body} />
                 )}
 
                 {/* Respuestas anidadas (1 nivel) */}
@@ -620,15 +766,83 @@ export default function AdminForoDetailPage() {
                                 </button>
                               </div>
                             </div>
+                          ) : reply.deleted ? (
+                            <p className="text-xs sm:text-sm italic text-gray-400">{reply.body}</p>
                           ) : (
-                            <p className="text-xs sm:text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">
-                              {reply.body}
-                            </p>
+                            <ForumMarkdown content={reply.body} className="text-xs sm:text-sm" />
                           )}
                         </div>
                       );
                     })}
                   </div>
+                )}
+
+                {/* Caja de respuesta inline directamente debajo del mensaje */}
+                {replyingToPostId === post.id && thread.status !== 'archived' && (
+                  <form
+                    onSubmit={(e) => handlePublishInlineReply(e, post.id)}
+                    className="mt-3 border-l-2 border-blue-300 pl-4"
+                  >
+                    <div className="rounded-lg border border-blue-200 bg-blue-50/40 p-3 space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-blue-900">
+                          Respondiendo a {post.author_name}
+                        </span>
+                        <span className="text-[11px] text-gray-500">
+                          {replyBody.length} / 10,000
+                        </span>
+                      </div>
+
+                      {replyError && (
+                        <div className="rounded-lg border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+                          {replyError}
+                        </div>
+                      )}
+
+                      <textarea
+                        rows={3}
+                        autoFocus
+                        required
+                        maxLength={10000}
+                        value={replyBody}
+                        onChange={(e) => setReplyBody(e.target.value)}
+                        onKeyDown={(e) => {
+                          if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && replyBody.trim() && !postingReply) {
+                            e.preventDefault();
+                            void handlePublishInlineReply(e, post.id);
+                          }
+                        }}
+                        placeholder={`Escribe una respuesta para ${post.author_name}…`}
+                        className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                      />
+
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-gray-400 hidden sm:inline">
+                          Ctrl+Enter o Cmd+Enter para enviar
+                        </span>
+                        <div className="flex items-center gap-2 ml-auto">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setReplyingToPostId(null);
+                              setReplyBody('');
+                              setReplyError(null);
+                            }}
+                            className="rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-200/70 cursor-pointer"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            type="submit"
+                            disabled={postingReply || !replyBody.trim()}
+                            className="rounded-lg bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition-colors cursor-pointer"
+                          >
+                            {postingReply ? 'Publicando…' : 'Publicar respuesta'}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </form>
                 )}
               </div>
             );
@@ -636,7 +850,7 @@ export default function AdminForoDetailPage() {
         </div>
       </div>
 
-      {/* Compositor */}
+      {/* Compositor principal */}
       {thread.status === 'archived' ? (
         <div className="rounded-xl border border-gray-200 bg-gray-100 p-4 text-center text-xs text-gray-600">
           Este tema está archivado. Cambia su estado si deseas volver a publicar mensajes.
@@ -648,25 +862,10 @@ export default function AdminForoDetailPage() {
         >
           <div className="flex items-center justify-between">
             <label htmlFor="new-post-body" className="text-xs font-bold text-gray-900">
-              {replyTo ? `Respondiendo a ${replyTo.author_name}` : 'Agregar mensaje'}
+              Agregar mensaje
             </label>
             <span className="text-[11px] text-gray-400">{newPostBody.length} / 10,000</span>
           </div>
-
-          {replyTo && (
-            <div className="flex items-center justify-between gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
-              <span className="truncate">
-                En respuesta a: <em>&ldquo;{replyTo.body}&rdquo;</em>
-              </span>
-              <button
-                type="button"
-                onClick={() => setReplyTo(null)}
-                className="font-semibold text-blue-700 hover:underline shrink-0 cursor-pointer"
-              >
-                Cancelar respuesta
-              </button>
-            </div>
-          )}
 
           {postError && (
             <div className="rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-700">
