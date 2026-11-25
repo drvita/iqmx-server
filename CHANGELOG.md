@@ -7,6 +7,21 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 > **Zona horaria de referencia:** Ciudad de México (CST / UTC-6).
 
+## [1.27.1] - 2026-11-25
+
+### Corregido
+
+- **Reducción de Ruido en Sentry para Rechazos Esperados del Webhook de WhatsApp (`api/`) [IQMX-MAIN-API-8]**:
+  - Degradación de `logger.error` a `logger.warning` en [`verify_whatsapp_signature`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/lib/security.py#L144-L190) cuando falta la cabecera `X-Hub-Signature-256`, el formato no inicia con `sha256=` o la firma HMAC no coincide, manteniendo intactas las respuestas HTTP `401` y `400`.
+  - Cobertura de pruebas unitarias para los tres escenarios de rechazo sin invocación a `logger.error` en [`api/tests/test_webhooks.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/tests/test_webhooks.py).
+
+### Mejorado
+
+- **Observabilidad y Trazabilidad de Logs en Sentry (`api/`) [IQMX-MAIN-API-B]**:
+  - Configuración explícita de `attach_stacktrace=True` y `LoggingIntegration(level=logging.INFO, event_level=logging.ERROR)` en `sentry_sdk.init` dentro de [`api/app/main.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/main.py#L36-L45) para adjuntar pila de ejecución completa a futuros eventos originados desde loggers.
+
+---
+
 ## [1.27.0] - 2026-11-25
 
 ### Añadido

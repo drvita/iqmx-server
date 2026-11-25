@@ -1,6 +1,7 @@
 import unittest
 import urllib.parse
 import json
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 from app.main import app
 from app.config import settings
@@ -179,6 +180,38 @@ class TestWebhooks(unittest.TestCase):
         res_legacy = self.client.post("/mercadopago", json={})
         self.assertEqual(res_legacy.status_code, 200)
         self.assertEqual(res_legacy.json(), {"status": "ok"})
+
+    def test_webhook_missing_signature_returns_401_without_error_log(self):
+        with patch.object(settings, "META_APP_SECRET", "test_meta_secret_123"), \
+             patch("app.lib.security.logger") as mock_logger:
+            res = self.client.post("/whatsapp", json={"object": "whatsapp_business_account"})
+            self.assertEqual(res.status_code, 401)
+            mock_logger.warning.assert_called_once()
+            mock_logger.error.assert_not_called()
+
+    def test_webhook_invalid_signature_format_returns_400_without_error_log(self):
+        with patch.object(settings, "META_APP_SECRET", "test_meta_secret_123"), \
+             patch("app.lib.security.logger") as mock_logger:
+            res = self.client.post(
+                "/whatsapp",
+                json={"object": "whatsapp_business_account"},
+                headers={"X-Hub-Signature-256": "invalid_format"},
+            )
+            self.assertEqual(res.status_code, 400)
+            mock_logger.warning.assert_called_once()
+            mock_logger.error.assert_not_called()
+
+    def test_webhook_wrong_signature_returns_401_without_error_log(self):
+        with patch.object(settings, "META_APP_SECRET", "test_meta_secret_123"), \
+             patch("app.lib.security.logger") as mock_logger:
+            res = self.client.post(
+                "/whatsapp",
+                json={"object": "whatsapp_business_account"},
+                headers={"X-Hub-Signature-256": "sha256=deadbeef"},
+            )
+            self.assertEqual(res.status_code, 401)
+            mock_logger.warning.assert_called_once()
+            mock_logger.error.assert_not_called()
 
 
 if __name__ == "__main__":

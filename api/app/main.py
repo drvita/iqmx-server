@@ -3,6 +3,7 @@ import sys
 import logging
 from contextlib import asynccontextmanager
 import sentry_sdk
+from sentry_sdk.integrations.logging import LoggingIntegration
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
@@ -37,6 +38,10 @@ if ENVIRONMENT == "production":
     sentry_sdk.init(
         dsn="https://384bea36ce9fd0da0ea7271af0d53e83@o1332916.ingest.us.sentry.io/4511673327222784",
         send_default_pii=True,
+        attach_stacktrace=True,
+        integrations=[
+            LoggingIntegration(level=logging.INFO, event_level=logging.ERROR),
+        ],
     )
 
 @asynccontextmanager

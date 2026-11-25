@@ -153,14 +153,14 @@ async def verify_whatsapp_signature(request: Request, x_hub_signature_256: str =
         return
 
     if not x_hub_signature_256:
-        logger.error("Falta la cabecera X-Hub-Signature-256 en la petición del Webhook.")
+        logger.warning("Falta la cabecera X-Hub-Signature-256 en la petición del Webhook.")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Falta la cabecera X-Hub-Signature-256."
         )
 
     if not x_hub_signature_256.startswith("sha256="):
-        logger.error("Firma inválida: No inicia con el formato 'sha256='.")
+        logger.warning("Firma inválida: No inicia con el formato 'sha256='.")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Formato de firma inválido."
@@ -181,7 +181,7 @@ async def verify_whatsapp_signature(request: Request, x_hub_signature_256: str =
 
     # Comparar de forma segura para prevenir ataques de temporización (timing attacks)
     if not hmac.compare_digest(expected_signature, received_signature):
-        logger.error("Fallo de autenticidad: La firma provista no coincide con la firma esperada.")
+        logger.warning("Fallo de autenticidad: La firma provista no coincide con la firma esperada.")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Firma digital no válida. Evento rechazado."
