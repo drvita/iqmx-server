@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import binascii
 import contextvars
 import json
 import logging
@@ -11,12 +12,14 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from mcp.server.transport_security import TransportSecuritySettings
 
+from app.config import settings
 from app.db.database import SessionLocal
 from app.services.bots.tokens import BotActor, BotTokenAuthError, authenticate_bot_token
 from app.services.forum.service import (
     TEXT_ATTACHMENT_CONTENT_TYPES,
     ForumError,
     check_mcp_rate_limit,
+    create_attachment,
     create_post,
     create_thread as create_forum_thread,
     format_utc_iso,
@@ -39,6 +42,7 @@ mcp_server = MCPServer(
         "Usa list_companies para conocer las empresas disponibles, list_threads para explorar temas, "
         "get_thread para leer la conversación completa (con respuestas y metadatos de archivos adjuntos), "
         "get_attachment para leer o descargar un archivo adjunto por su id, "
+        "upload_attachment para subir archivos adjuntos a un tema o mensaje en base64 o utf-8, "
         "create_thread para abrir un nuevo tema y post_message para aportar ideas o comentarios."
     ),
 )
@@ -279,6 +283,80 @@ def get_attachment(attachment_id: int) -> dict[str, Any]:
             db.close()
     except ForumError as exc:
         _log_tool_call(actor, "get_attachment", None, f"error:{type(exc).__name__}")
+        raise ToolError(str(exc))
+
+
+@mcp_server.tool(
+    name="upload_attachment",
+    description=(
+        "Sube un archivo adjunto a un tema abierto o en curso del foro (o a un mensaje específico dentro del tema). "
+        "Parámetros: thread_id (entero requerido), filename (nombre con extensión, ej. 'propuesta.pdf' o 'notas.md'), "
+        "content (contenido codificado en Base64 para binarios o texto plano si encoding='utf-8'), "
+        "encoding ('base64' por defecto o 'utf-8') y post_id (entero opcional; si se omite se adjunta al tema raíz). "
+        "Tipos permitidos: .png, .jpg, .jpeg, .webp, .pdf, .docx, .xlsx, .csv, .txt, .md (máx. 10 MB, máx. 5 adjuntos por elemento)."
+    ),
+)
+def upload_attachment(
+    thread_id: int,
+    filename: str,
+    content: str,
+    encoding: str = "base64",
+    post_id: Optional[int] = None,
+) -> dict[str, Any]:
+    actor = _require_actor()
+    clean_encoding = (encoding or "").strip().lower()
+    if clean_encoding not in {"base64", "utf-8"}:
+        _log_tool_call(actor, "upload_attachment", thread_id, "error:InvalidEncoding")
+        raise ToolError("Encoding no válido. Usa 'base64' para archivos binarios o 'utf-8' para texto plano.")
+
+    if clean_encoding == "base64":
+        raw_b64 = (content or "").strip()
+        if raw_b64.startswith("data:") and ";base64," in raw_b64:
+            raw_b64 = raw_b64.split(";base64,", 1)[1]
+        cleaned_b64 = "".join(raw_b64.split())
+        max_b64_len = int(settings.FORUM_MAX_FILE_SIZE_MB * 1024 * 1024 * 1.4) + 1024
+        if len(cleaned_b64) > max_b64_len:
+            _log_tool_call(actor, "upload_attachment", thread_id, "error:PayloadTooLarge")
+            raise ToolError(
+                f"El archivo excede el límite máximo de {settings.FORUM_MAX_FILE_SIZE_MB} MB."
+            )
+        try:
+            data = base64.b64decode(cleaned_b64, validate=True)
+        except (binascii.Error, ValueError):
+            _log_tool_call(actor, "upload_attachment", thread_id, "error:InvalidBase64")
+            raise ToolError("El contenido Base64 no es válido.")
+    else:
+        data = (content or "").encode("utf-8")
+
+    try:
+        check_mcp_rate_limit(actor.token_id, "write")
+        db = SessionLocal()
+        try:
+            att = create_attachment(
+                db,
+                thread_id=thread_id,
+                post_id=post_id,
+                filename=filename,
+                content_type=None,
+                data=data,
+                uploaded_by_user_id=actor.user_id,
+                is_bot=True,
+                scoped_customer_id=actor.customer_id,
+            )
+            _log_tool_call(actor, "upload_attachment", thread_id, "ok")
+            return {
+                "id": att["id"],
+                "thread_id": att["thread_id"],
+                "post_id": att["post_id"],
+                "filename": att["filename"],
+                "content_type": att["content_type"],
+                "size_bytes": att["size_bytes"],
+                "created_at": _serialize_dt(att["created_at"]),
+            }
+        finally:
+            db.close()
+    except ForumError as exc:
+        _log_tool_call(actor, "upload_attachment", thread_id, f"error:{type(exc).__name__}")
         raise ToolError(str(exc))
 
 

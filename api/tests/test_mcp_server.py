@@ -13,6 +13,7 @@ from app.main import app
 from app.models.api_token import ApiToken
 from app.models.bot_profile import BotProfile
 from app.models.customer import Customer
+from app.models.forum_attachment import ForumAttachment
 from app.models.forum_post import ForumPost
 from app.models.forum_thread import ForumThread
 from app.models.role import Role
@@ -82,6 +83,9 @@ class TestMCPServer(unittest.TestCase):
 
     def tearDown(self):
         if self.created_thread_ids:
+            self.db.query(ForumAttachment).filter(ForumAttachment.thread_id.in_(self.created_thread_ids)).delete(
+                synchronize_session=False
+            )
             self.db.query(ForumPost).filter(ForumPost.thread_id.in_(self.created_thread_ids)).delete(
                 synchronize_session=False
             )
@@ -249,7 +253,15 @@ class TestMCPServer(unittest.TestCase):
                 tool_names = {t["name"] for t in res_tools.json()["result"]["tools"]}
                 self.assertEqual(
                     tool_names,
-                    {"list_companies", "list_threads", "get_thread", "post_message", "create_thread", "get_attachment"},
+                    {
+                        "list_companies",
+                        "list_threads",
+                        "get_thread",
+                        "post_message",
+                        "create_thread",
+                        "get_attachment",
+                        "upload_attachment",
+                    },
                 )
 
                 # 2. Bot con empresa asignada: solo ve company_a
@@ -631,3 +643,216 @@ class TestMCPServer(unittest.TestCase):
                     self.assertFalse(is_err_p)
                     self.assertEqual(pdf_data["encoding"], "base64")
                     self.assertEqual(base64.b64decode(pdf_data["content"]), b"%PDF-1.4\n%B")
+
+    def test_mcp_upload_attachment_scoping_validation_and_roundtrip(self):
+        import base64
+        import tempfile
+        from app.services.forum.storage import LocalForumStorage
+
+        fake_redis = FakeRedis()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            storage = LocalForumStorage(tmpdir)
+            with (
+                patch("app.services.forum.service.get_redis_client", return_value=fake_redis),
+                patch("app.services.forum.service.get_forum_storage", return_value=storage),
+            ):
+                with TestClient(app) as client:
+                    # 1. Crear mensaje en thread_a y adjuntar PDF con prefijo data URI base64
+                    res_post = self._rpc(
+                        client,
+                        self.token_scoped,
+                        "tools/call",
+                        {"name": "post_message", "arguments": {"thread_id": self.thread_a["id"], "body": "Mensaje con PDF"}},
+                        req_id=501,
+                    )
+                    is_err_p, post_obj = self._parse_tool_result(res_post)
+                    self.assertFalse(is_err_p)
+
+                    pdf_bytes = b"%PDF-1.4\n%Propuesta Lugo"
+                    pdf_b64 = base64.b64encode(pdf_bytes).decode("ascii")
+                    res_up_pdf = self._rpc(
+                        client,
+                        self.token_scoped,
+                        "tools/call",
+                        {
+                            "name": "upload_attachment",
+                            "arguments": {
+                                "thread_id": self.thread_a["id"],
+                                "post_id": post_obj["id"],
+                                "filename": "propuesta_lugo.pdf",
+                                "content": f"data:application/pdf;base64,{pdf_b64}",
+                                "encoding": "base64",
+                            },
+                        },
+                        req_id=502,
+                    )
+                    is_err_up, up_pdf = self._parse_tool_result(res_up_pdf)
+                    self.assertFalse(is_err_up)
+                    self.assertEqual(up_pdf["thread_id"], self.thread_a["id"])
+                    self.assertEqual(up_pdf["post_id"], post_obj["id"])
+                    self.assertEqual(up_pdf["filename"], "propuesta_lugo.pdf")
+                    self.assertEqual(up_pdf["content_type"], "application/pdf")
+                    self.assertEqual(up_pdf["size_bytes"], len(pdf_bytes))
+                    self.assertTrue(up_pdf["created_at"].endswith("Z"))
+
+                    # 2. Roundtrip: get_thread incluye el adjunto en el post y get_attachment devuelve los bytes exactos
+                    res_thread = self._rpc(
+                        client,
+                        self.token_scoped,
+                        "tools/call",
+                        {"name": "get_thread", "arguments": {"thread_id": self.thread_a["id"]}},
+                        req_id=503,
+                    )
+                    is_err_t, detail = self._parse_tool_result(res_thread)
+                    self.assertFalse(is_err_t)
+                    matching_posts = [p for p in detail["posts"] if p["id"] == post_obj["id"]]
+                    self.assertEqual(len(matching_posts), 1)
+                    self.assertEqual(len(matching_posts[0]["attachments"]), 1)
+                    self.assertEqual(matching_posts[0]["attachments"][0]["id"], up_pdf["id"])
+
+                    res_get = self._rpc(
+                        client,
+                        self.token_scoped,
+                        "tools/call",
+                        {"name": "get_attachment", "arguments": {"attachment_id": up_pdf["id"]}},
+                        req_id=504,
+                    )
+                    is_err_g, get_pdf = self._parse_tool_result(res_get)
+                    self.assertFalse(is_err_g)
+                    self.assertEqual(get_pdf["encoding"], "base64")
+                    self.assertEqual(base64.b64decode(get_pdf["content"]), pdf_bytes)
+
+                    # 3. Subir archivo .md en utf-8 directamente al tema raíz (post_id=None)
+                    md_text = "# Resumen Ejecutivo\n\nTodo listo."
+                    res_up_md = self._rpc(
+                        client,
+                        self.token_scoped,
+                        "tools/call",
+                        {
+                            "name": "upload_attachment",
+                            "arguments": {
+                                "thread_id": self.thread_a["id"],
+                                "filename": "resumen.md",
+                                "content": md_text,
+                                "encoding": "utf-8",
+                            },
+                        },
+                        req_id=505,
+                    )
+                    is_err_md, up_md = self._parse_tool_result(res_up_md)
+                    self.assertFalse(is_err_md)
+                    self.assertIsNone(up_md["post_id"])
+                    self.assertEqual(up_md["content_type"], "text/markdown")
+
+                    res_get_md = self._rpc(
+                        client,
+                        self.token_scoped,
+                        "tools/call",
+                        {"name": "get_attachment", "arguments": {"attachment_id": up_md["id"]}},
+                        req_id=506,
+                    )
+                    is_err_gmd, get_md = self._parse_tool_result(res_get_md)
+                    self.assertFalse(is_err_gmd)
+                    self.assertEqual(get_md["encoding"], "utf-8")
+                    self.assertEqual(get_md["content"], md_text)
+
+                    # 4. Bot scoped NO puede subir archivos a thread_b (otra empresa)
+                    res_denied = self._rpc(
+                        client,
+                        self.token_scoped,
+                        "tools/call",
+                        {
+                            "name": "upload_attachment",
+                            "arguments": {
+                                "thread_id": self.thread_b["id"],
+                                "filename": "ajeno.md",
+                                "content": "No permitido",
+                                "encoding": "utf-8",
+                            },
+                        },
+                        req_id=507,
+                    )
+                    is_err_den, msg_den = self._parse_tool_result(res_denied)
+                    self.assertTrue(is_err_den)
+                    self.assertIn("Tema no encontrado", str(msg_den))
+
+                    # 5. Tema cerrado (status='done') rechaza upload_attachment
+                    update_thread(self.db, self.thread_b["id"], status="done")
+                    res_done = self._rpc(
+                        client,
+                        self.token_global,
+                        "tools/call",
+                        {
+                            "name": "upload_attachment",
+                            "arguments": {
+                                "thread_id": self.thread_b["id"],
+                                "filename": "tarde.md",
+                                "content": "Tema cerrado",
+                                "encoding": "utf-8",
+                            },
+                        },
+                        req_id=508,
+                    )
+                    is_err_done, msg_done = self._parse_tool_result(res_done)
+                    self.assertTrue(is_err_done)
+                    self.assertIn("abiertos o en curso", str(msg_done))
+
+                    # 6. Base64 corrupto rechazado
+                    res_bad_b64 = self._rpc(
+                        client,
+                        self.token_scoped,
+                        "tools/call",
+                        {
+                            "name": "upload_attachment",
+                            "arguments": {
+                                "thread_id": self.thread_a["id"],
+                                "filename": "corrupto.pdf",
+                                "content": "%%%no-valido%%%",
+                                "encoding": "base64",
+                            },
+                        },
+                        req_id=509,
+                    )
+                    is_err_b64, msg_b64 = self._parse_tool_result(res_bad_b64)
+                    self.assertTrue(is_err_b64)
+                    self.assertIn("base64", str(msg_b64).lower())
+
+                    # 7. Magic bytes inválidos rechazados (.pdf con contenido de texto plano)
+                    fake_pdf_b64 = base64.b64encode(b"no soy pdf").decode("ascii")
+                    res_bad_magic = self._rpc(
+                        client,
+                        self.token_scoped,
+                        "tools/call",
+                        {
+                            "name": "upload_attachment",
+                            "arguments": {
+                                "thread_id": self.thread_a["id"],
+                                "filename": "falso.pdf",
+                                "content": fake_pdf_b64,
+                                "encoding": "base64",
+                            },
+                        },
+                        req_id=510,
+                    )
+                    is_err_magic, msg_magic = self._parse_tool_result(res_bad_magic)
+                    self.assertTrue(is_err_magic)
+                    self.assertIn("PDF válido", str(msg_magic))
+
+                    # 8. Encoding no soportado rechazado
+                    res_bad_enc = self._rpc(
+                        client,
+                        self.token_scoped,
+                        "tools/call",
+                        {
+                            "name": "upload_attachment",
+                            "arguments": {
+                                "thread_id": self.thread_a["id"],
+                                "filename": "texto.txt",
+                                "content": "hola",
+                                "encoding": "latin-1",
+                            },
+                        },
+                        req_id=511,
+                    )
+                    is_err_enc, _ = self._parse_tool_result(res_bad_enc)
+                    self.assertTrue(is_err_enc)

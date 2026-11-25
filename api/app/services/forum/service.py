@@ -641,11 +641,27 @@ def create_attachment(
     content_type: Optional[str],
     data: bytes,
     uploaded_by_user_id: int,
+    is_bot: bool = False,
+    scoped_customer_id: Optional[int] = None,
 ) -> dict:
     """Valida, guarda en almacenamiento y registra un adjunto del foro."""
-    thread = db.query(ForumThread).filter(ForumThread.id == thread_id, ForumThread.deleted_at.is_(None)).first()
-    if not thread:
+    query = (
+        db.query(ForumThread, Customer)
+        .join(Customer, ForumThread.customer_id == Customer.id)
+        .filter(ForumThread.id == thread_id, ForumThread.deleted_at.is_(None))
+    )
+    if is_bot:
+        query = query.filter(Customer.is_active.is_(True), Customer.forum_enabled.is_(True))
+    if scoped_customer_id is not None:
+        query = query.filter(ForumThread.customer_id == scoped_customer_id)
+
+    row = query.first()
+    if not row:
         raise ForumNotFoundError("Tema no encontrado.")
+
+    thread, _ = row
+    if is_bot and thread.status not in BOT_WRITABLE_STATUSES:
+        raise ForumValidationError("Solo es posible adjuntar archivos en temas abiertos o en curso.")
 
     if post_id is not None:
         post = (
