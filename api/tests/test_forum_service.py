@@ -274,3 +274,97 @@ class TestForumService(unittest.TestCase):
         self.assertTrue(after_delete["posts"][0]["deleted"])
         self.assertEqual(after_delete["posts"][0]["body"], "Mensaje eliminado")
         self.assertEqual([r["id"] for r in after_delete["posts"][0]["replies"]], [r1["id"]])
+
+    def test_attachments_validation_storage_and_utc_format(self):
+        import tempfile
+        from unittest.mock import patch
+        from app.services.forum.service import (
+            create_attachment,
+            format_utc_iso,
+            get_attachment_for_download,
+            soft_delete_attachment,
+        )
+        from app.services.forum.storage import LocalForumStorage
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            storage = LocalForumStorage(tmpdir)
+            with patch("app.services.forum.service.get_forum_storage", return_value=storage):
+                t = create_thread(
+                    self.db,
+                    customer_id=self.company_a.id,
+                    title="Tema con adjuntos",
+                    body="Probando archivos",
+                    author_user_id=self.admin.id,
+                )
+                self.created_thread_ids.append(t["id"])
+
+                # 1. Rechazar magic bytes falsos (archivo binario disfrazado de PDF)
+                with self.assertRaises(ForumValidationError):
+                    create_attachment(
+                        self.db,
+                        thread_id=t["id"],
+                        post_id=None,
+                        filename="malicioso.pdf",
+                        content_type="application/pdf",
+                        data=b"MZ\x90\x00not_a_pdf",
+                        uploaded_by_user_id=self.admin.id,
+                    )
+
+                # 2. Rechazar extensión no permitida
+                with self.assertRaises(ForumValidationError):
+                    create_attachment(
+                        self.db,
+                        thread_id=t["id"],
+                        post_id=None,
+                        filename="script.exe",
+                        content_type="application/octet-stream",
+                        data=b"MZ...",
+                        uploaded_by_user_id=self.admin.id,
+                    )
+
+                # 3. Subir PNG y PDF válidos y verificar límite de 5 por elemento
+                png_bytes = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR"
+                att_png = create_attachment(
+                    self.db,
+                    thread_id=t["id"],
+                    post_id=None,
+                    filename="captura.png",
+                    content_type="image/png",
+                    data=png_bytes,
+                    uploaded_by_user_id=self.admin.id,
+                )
+                self.assertEqual(att_png["content_type"], "image/png")
+                self.assertTrue(format_utc_iso(att_png["created_at"]).endswith("Z"))
+
+                for i in range(4):
+                    create_attachment(
+                        self.db,
+                        thread_id=t["id"],
+                        post_id=None,
+                        filename=f"doc_{i}.pdf",
+                        content_type="application/pdf",
+                        data=b"%PDF-1.4\n%test",
+                        uploaded_by_user_id=self.admin.id,
+                    )
+
+                with self.assertRaises(ForumValidationError):
+                    create_attachment(
+                        self.db,
+                        thread_id=t["id"],
+                        post_id=None,
+                        filename="sexto.pdf",
+                        content_type="application/pdf",
+                        data=b"%PDF-1.4\n%extra",
+                        uploaded_by_user_id=self.admin.id,
+                    )
+
+                detail = get_thread_detail(self.db, t["id"])
+                self.assertEqual(len(detail["attachments"]), 5)
+
+                meta, downloaded = get_attachment_for_download(self.db, att_png["id"])
+                self.assertEqual(downloaded, png_bytes)
+                self.assertEqual(meta["filename"], "captura.png")
+
+                soft_delete_attachment(self.db, att_png["id"])
+                with self.assertRaises(ForumNotFoundError):
+                    get_attachment_for_download(self.db, att_png["id"])

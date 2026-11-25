@@ -95,6 +95,9 @@ class Settings(BaseSettings):
     MCP_RATE_LIMIT_READ_PER_MIN: int = 60
     MCP_RATE_LIMIT_WRITE_PER_MIN: int = 10
     FORUM_MAX_BODY_CHARS: int = 10000
+    FORUM_UPLOADS_DIR: str = "/app/data/forum_uploads"
+    FORUM_MAX_FILE_SIZE_MB: int = 10
+    FORUM_MAX_ATTACHMENTS_PER_ITEM: int = 5
 
     @property
     def db_url(self) -> str:

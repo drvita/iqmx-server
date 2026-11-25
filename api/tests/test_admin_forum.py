@@ -181,3 +181,56 @@ class TestAdminForumEndpoints(unittest.TestCase):
             self.client.get(f"/api/admin/forum/threads/{thread_id}", headers=self.admin_headers).status_code,
             404,
         )
+
+    def test_admin_forum_attachments_and_utc_z(self):
+        import tempfile
+        from unittest.mock import patch
+        from app.services.forum.storage import LocalForumStorage
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            storage = LocalForumStorage(tmpdir)
+            with patch("app.services.forum.service.get_forum_storage", return_value=storage):
+                res_create = self.client.post(
+                    "/api/admin/forum/threads",
+                    headers=self.admin_headers,
+                    json={
+                        "customer_id": self.customer.id,
+                        "title": "Tema REST con archivos",
+                        "body": "Prueba de upload y descarga",
+                    },
+                )
+                self.assertEqual(res_create.status_code, 201)
+                thread = res_create.json()
+                self.created_thread_ids.append(thread["id"])
+                self.assertTrue(thread["created_at"].endswith("Z"))
+
+                res_up = self.client.post(
+                    f"/api/admin/forum/threads/{thread['id']}/attachments",
+                    headers=self.admin_headers,
+                    files={"file": ("propuesta.pdf", b"%PDF-1.4\n%contenido", "application/pdf")},
+                )
+                self.assertEqual(res_up.status_code, 201)
+                att = res_up.json()
+                self.assertEqual(att["filename"], "propuesta.pdf")
+                self.assertTrue(att["created_at"].endswith("Z"))
+
+                res_dl = self.client.get(
+                    f"/api/admin/forum/attachments/{att['id']}/download?inline=true",
+                    headers=self.admin_headers,
+                )
+                self.assertEqual(res_dl.status_code, 200)
+                self.assertEqual(res_dl.content, b"%PDF-1.4\n%contenido")
+                self.assertEqual(res_dl.headers.get("x-content-type-options"), "nosniff")
+
+                res_del = self.client.delete(
+                    f"/api/admin/forum/attachments/{att['id']}",
+                    headers=self.admin_headers,
+                )
+                self.assertEqual(res_del.status_code, 204)
+                self.assertEqual(
+                    self.client.get(
+                        f"/api/admin/forum/attachments/{att['id']}/download",
+                        headers=self.admin_headers,
+                    ).status_code,
+                    404,
+                )

@@ -22,6 +22,7 @@ from app.models.prospecting import (
 )
 from app.models.forum_thread import ForumThread
 from app.models.forum_post import ForumPost
+from app.models.forum_attachment import ForumAttachment
 from app.models.bot_profile import BotProfile
 from app.models.api_token import ApiToken
 
@@ -49,6 +50,7 @@ __all__ = [
     "ProspectingSource",
     "ForumThread",
     "ForumPost",
+    "ForumAttachment",
     "BotProfile",
     "ApiToken",
 ]

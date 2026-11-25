@@ -9,6 +9,8 @@ import {
   PlusIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
+import { AttachmentPicker, uploadForumAttachments } from '@/components/admin/foro/ForumAttachments';
+import { formatLocalDateTime } from '@/lib/date';
 
 type CompanyOption = {
   id: number;
@@ -72,6 +74,7 @@ export default function AdminForoPage() {
   const [formBody, setFormBody] = useState('');
   const [formPeriod, setFormPeriod] = useState('');
   const [formDueAt, setFormDueAt] = useState('');
+  const [formFiles, setFormFiles] = useState<File[]>([]);
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
 
@@ -132,11 +135,17 @@ export default function AdminForoPage() {
   }, [companyFilter, statusFilter, searchQuery, page]);
 
   useEffect(() => {
-    fetchCompanies();
+    const id = window.setTimeout(() => {
+      void fetchCompanies();
+    }, 0);
+    return () => window.clearTimeout(id);
   }, [fetchCompanies]);
 
   useEffect(() => {
-    fetchThreads();
+    const id = window.setTimeout(() => {
+      void fetchThreads();
+    }, 0);
+    return () => window.clearTimeout(id);
   }, [fetchThreads]);
 
   const openCreateModal = () => {
@@ -145,6 +154,7 @@ export default function AdminForoPage() {
     setFormBody('');
     setFormPeriod('');
     setFormDueAt('');
+    setFormFiles([]);
     setCreateError(null);
     setIsCreateOpen(true);
   };
@@ -180,6 +190,21 @@ export default function AdminForoPage() {
       if (!res.ok) {
         setCreateError(data?.detail || 'No se pudo crear el tema.');
       } else {
+        if (formFiles.length > 0 && data?.id) {
+          try {
+            await uploadForumAttachments(data.id, formFiles);
+          } catch (uploadErr) {
+            setCreateError(
+              uploadErr instanceof Error
+                ? `Tema creado, pero falló un adjunto: ${uploadErr.message}`
+                : 'Tema creado, pero no se pudieron subir los adjuntos.'
+            );
+            setPage(1);
+            fetchThreads();
+            return;
+          }
+        }
+        setFormFiles([]);
         setIsCreateOpen(false);
         setPage(1);
         fetchThreads();
@@ -193,12 +218,7 @@ export default function AdminForoPage() {
 
   const formatDateTime = (iso: string | null) => {
     if (!iso) return 'Sin actividad';
-    return new Date(iso).toLocaleString('es-MX', {
-      day: '2-digit',
-      month: 'short',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    return formatLocalDateTime(iso);
   };
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -517,6 +537,13 @@ export default function AdminForoPage() {
               className="mt-1 w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
             />
           </div>
+
+          <AttachmentPicker
+            files={formFiles}
+            onChange={setFormFiles}
+            disabled={creating}
+            label="Adjuntar archivos al tema"
+          />
 
           <div className="flex justify-end gap-2 border-t border-gray-100 pt-4">
             <button

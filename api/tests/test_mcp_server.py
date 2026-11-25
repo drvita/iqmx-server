@@ -249,7 +249,7 @@ class TestMCPServer(unittest.TestCase):
                 tool_names = {t["name"] for t in res_tools.json()["result"]["tools"]}
                 self.assertEqual(
                     tool_names,
-                    {"list_companies", "list_threads", "get_thread", "post_message", "create_thread"},
+                    {"list_companies", "list_threads", "get_thread", "post_message", "create_thread", "get_attachment"},
                 )
 
                 # 2. Bot con empresa asignada: solo ve company_a
@@ -546,3 +546,88 @@ class TestMCPServer(unittest.TestCase):
                 self.assertFalse(detail2["has_more_posts"])
                 self.assertEqual(detail2["posts"][0]["id"], p2["id"])
                 self.assertEqual(detail2["posts"][0]["replies"], [])
+
+    def test_mcp_get_attachment_scoping_and_utc_dates(self):
+        import base64
+        import tempfile
+        from app.services.forum.service import create_attachment
+        from app.services.forum.storage import LocalForumStorage
+
+        fake_redis = FakeRedis()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            storage = LocalForumStorage(tmpdir)
+            with (
+                patch("app.services.forum.service.get_redis_client", return_value=fake_redis),
+                patch("app.services.forum.service.get_forum_storage", return_value=storage),
+            ):
+                att_txt = create_attachment(
+                    self.db,
+                    thread_id=self.thread_a["id"],
+                    post_id=None,
+                    filename="notas.md",
+                    content_type="text/markdown",
+                    data=b"# Hola\nArchivo de prueba",
+                    uploaded_by_user_id=self.admin.id,
+                )
+                att_pdf_b = create_attachment(
+                    self.db,
+                    thread_id=self.thread_b["id"],
+                    post_id=None,
+                    filename="secreto_b.pdf",
+                    content_type="application/pdf",
+                    data=b"%PDF-1.4\n%B",
+                    uploaded_by_user_id=self.admin.id,
+                )
+
+                with TestClient(app) as client:
+                    # 1. get_thread incluye attachments y fechas con Z
+                    res_t = self._rpc(
+                        client,
+                        self.token_scoped,
+                        "tools/call",
+                        {"name": "get_thread", "arguments": {"thread_id": self.thread_a["id"]}},
+                        req_id=401,
+                    )
+                    is_err, detail = self._parse_tool_result(res_t)
+                    self.assertFalse(is_err)
+                    self.assertEqual(len(detail["attachments"]), 1)
+                    self.assertEqual(detail["attachments"][0]["id"], att_txt["id"])
+                    self.assertTrue(detail["attachments"][0]["created_at"].endswith("Z"))
+
+                    # 2. get_attachment devuelve texto utf-8
+                    res_att = self._rpc(
+                        client,
+                        self.token_scoped,
+                        "tools/call",
+                        {"name": "get_attachment", "arguments": {"attachment_id": att_txt["id"]}},
+                        req_id=402,
+                    )
+                    is_err_a, att_data = self._parse_tool_result(res_att)
+                    self.assertFalse(is_err_a)
+                    self.assertEqual(att_data["encoding"], "utf-8")
+                    self.assertIn("Archivo de prueba", att_data["content"])
+
+                    # 3. Bot scoped NO puede descargar adjunto de empresa B
+                    res_denied = self._rpc(
+                        client,
+                        self.token_scoped,
+                        "tools/call",
+                        {"name": "get_attachment", "arguments": {"attachment_id": att_pdf_b["id"]}},
+                        req_id=403,
+                    )
+                    is_err_d, msg_d = self._parse_tool_result(res_denied)
+                    self.assertTrue(is_err_d)
+                    self.assertIn("no encontrado", str(msg_d).lower())
+
+                    # 4. Bot global sí lee el PDF de empresa B en base64
+                    res_pdf = self._rpc(
+                        client,
+                        self.token_global,
+                        "tools/call",
+                        {"name": "get_attachment", "arguments": {"attachment_id": att_pdf_b["id"]}},
+                        req_id=404,
+                    )
+                    is_err_p, pdf_data = self._parse_tool_result(res_pdf)
+                    self.assertFalse(is_err_p)
+                    self.assertEqual(pdf_data["encoding"], "base64")
+                    self.assertEqual(base64.b64decode(pdf_data["content"]), b"%PDF-1.4\n%B")

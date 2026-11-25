@@ -1,24 +1,30 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Annotated, List, Optional
+from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile, status
+from pydantic import BaseModel, Field, PlainSerializer
 from sqlalchemy.orm import Session
 
 from app.api.admin_auth import get_current_admin
 from app.db.database import get_db
 from app.models.user import User
 from app.services.forum.service import (
+    INLINE_SAFE_CONTENT_TYPES,
     ForumNotFoundError,
     ForumPermissionError,
     ForumValidationError,
+    create_attachment,
     create_post,
     create_thread,
+    format_utc_iso,
+    get_attachment_for_download,
     get_thread_detail,
     list_threads,
     list_visible_companies,
+    soft_delete_attachment,
     soft_delete_post,
     soft_delete_thread,
     update_post,
@@ -27,10 +33,22 @@ from app.services.forum.service import (
 
 router = APIRouter(prefix="/api/admin/forum", tags=["admin-forum"])
 
+UtcDateTime = Annotated[datetime, PlainSerializer(lambda dt: format_utc_iso(dt) or "", return_type=str)]
+
 
 class ForumCompanyResponse(BaseModel):
     id: int
     company_name: str
+
+
+class ForumAttachmentResponse(BaseModel):
+    id: int
+    thread_id: int
+    post_id: Optional[int] = None
+    filename: str
+    content_type: str
+    size_bytes: int
+    created_at: UtcDateTime
 
 
 class ForumThreadSummaryResponse(BaseModel):
@@ -40,12 +58,12 @@ class ForumThreadSummaryResponse(BaseModel):
     title: str
     status: str
     period_label: Optional[str] = None
-    due_at: Optional[datetime] = None
+    due_at: Optional[UtcDateTime] = None
     author_name: str
     author_is_bot: bool
     posts_count: int
-    last_post_at: Optional[datetime] = None
-    created_at: datetime
+    last_post_at: Optional[UtcDateTime] = None
+    created_at: UtcDateTime
 
 
 class ForumThreadListResponse(BaseModel):
@@ -62,9 +80,10 @@ class ForumPostResponse(BaseModel):
     author_user_id: int
     author_name: str
     author_is_bot: bool
-    created_at: datetime
-    updated_at: datetime
+    created_at: UtcDateTime
+    updated_at: UtcDateTime
     deleted: bool
+    attachments: List[ForumAttachmentResponse] = []
 
 
 class ForumThreadDetailResponse(BaseModel):
@@ -75,13 +94,14 @@ class ForumThreadDetailResponse(BaseModel):
     body: str
     status: str
     period_label: Optional[str] = None
-    due_at: Optional[datetime] = None
+    due_at: Optional[UtcDateTime] = None
     author_user_id: int
     author_name: str
     author_is_bot: bool
-    last_post_at: Optional[datetime] = None
-    created_at: datetime
-    updated_at: datetime
+    last_post_at: Optional[UtcDateTime] = None
+    created_at: UtcDateTime
+    updated_at: UtcDateTime
+    attachments: List[ForumAttachmentResponse] = []
     posts: List[ForumPostResponse]
 
 
@@ -282,6 +302,73 @@ def delete_forum_post(
     """Realiza el borrado lógico de cualquier mensaje del foro."""
     try:
         soft_delete_post(db, post_id)
+        return None
+    except Exception as exc:
+        raise _handle_forum_error(exc)
+
+
+@router.post("/threads/{thread_id}/attachments", response_model=ForumAttachmentResponse, status_code=status.HTTP_201_CREATED)
+async def upload_forum_attachment(
+    thread_id: int,
+    file: UploadFile = File(...),
+    post_id: Optional[int] = Form(None),
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Sube un archivo adjunto a un tema o a un mensaje del foro."""
+    try:
+        data = await file.read()
+        return create_attachment(
+            db,
+            thread_id=thread_id,
+            post_id=post_id,
+            filename=file.filename or "archivo",
+            content_type=file.content_type,
+            data=data,
+            uploaded_by_user_id=admin.id,
+        )
+    except Exception as exc:
+        raise _handle_forum_error(exc)
+
+
+@router.get("/attachments/{attachment_id}/download")
+def download_forum_attachment(
+    attachment_id: int,
+    inline: bool = Query(False),
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Descarga o previsualiza un archivo adjunto del foro con autenticación administrativa."""
+    try:
+        meta, data = get_attachment_for_download(db, attachment_id)
+        disposition_type = (
+            "inline"
+            if inline and meta["content_type"] in INLINE_SAFE_CONTENT_TYPES
+            else "attachment"
+        )
+        encoded_name = quote(meta["filename"])
+        return Response(
+            content=data,
+            media_type=meta["content_type"],
+            headers={
+                "Content-Disposition": f"{disposition_type}; filename*=UTF-8''{encoded_name}",
+                "X-Content-Type-Options": "nosniff",
+                "Cache-Control": "private, max-age=300",
+            },
+        )
+    except Exception as exc:
+        raise _handle_forum_error(exc)
+
+
+@router.delete("/attachments/{attachment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_forum_attachment(
+    attachment_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_current_admin),
+):
+    """Elimina lógicamente un archivo adjunto del foro."""
+    try:
+        soft_delete_attachment(db, attachment_id)
         return None
     except Exception as exc:
         raise _handle_forum_error(exc)

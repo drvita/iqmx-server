@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import logging
-from datetime import datetime
+import re
+import secrets
+from datetime import datetime, timezone
+from pathlib import Path
 from typing import Optional
 
 from sqlalchemy import func, or_
@@ -11,15 +15,43 @@ from app.config import settings
 from app.lib.redis_client import get_redis_client
 from app.models.bot_profile import BotProfile
 from app.models.customer import Customer
+from app.models.forum_attachment import ForumAttachment
 from app.models.forum_post import ForumPost
 from app.models.forum_thread import ForumThread
 from app.models.role import Role
 from app.models.user import User
+from app.services.forum.storage import ForumStorageError, get_forum_storage
 
 logger = logging.getLogger("uvicorn.error")
 
 VALID_THREAD_STATUSES = ("open", "in_progress", "done", "archived")
 BOT_WRITABLE_STATUSES = ("open", "in_progress")
+
+ALLOWED_ATTACHMENT_EXTS: dict[str, str] = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".csv": "text/csv",
+    ".txt": "text/plain",
+    ".md": "text/markdown",
+}
+TEXT_ATTACHMENT_CONTENT_TYPES = {"text/csv", "text/plain", "text/markdown"}
+INLINE_SAFE_CONTENT_TYPES = {"image/png", "image/jpeg", "image/webp", "application/pdf"}
+
+
+def format_utc_iso(dt: Optional[datetime]) -> Optional[str]:
+    """Serializa un datetime en ISO-8601 UTC explícito con sufijo 'Z'."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt_utc = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt_utc = dt.astimezone(timezone.utc)
+    return dt_utc.isoformat().replace("+00:00", "Z")
 
 
 class ForumError(Exception):
@@ -250,7 +282,26 @@ def get_thread_detail(
             "created_at": post.created_at,
             "updated_at": post.updated_at,
             "deleted": is_deleted,
+            "attachments": [],
         })
+
+    attachment_rows = (
+        db.query(ForumAttachment)
+        .filter(ForumAttachment.thread_id == thread.id, ForumAttachment.deleted_at.is_(None))
+        .order_by(ForumAttachment.created_at.asc(), ForumAttachment.id.asc())
+        .all()
+    )
+    thread_attachments: list[dict] = []
+    attachments_by_post: dict[int, list[dict]] = {}
+    for att in attachment_rows:
+        att_dict = _serialize_attachment(att)
+        if att.post_id is None:
+            thread_attachments.append(att_dict)
+        else:
+            attachments_by_post.setdefault(att.post_id, []).append(att_dict)
+
+    for post_item in posts_payload:
+        post_item["attachments"] = attachments_by_post.get(post_item["id"], [])
 
     total_messages = len(posts_payload)
 
@@ -298,6 +349,7 @@ def get_thread_detail(
         "last_post_at": thread.last_post_at,
         "created_at": thread.created_at,
         "updated_at": thread.updated_at,
+        "attachments": thread_attachments,
         "posts": paged_posts,
         "posts_total": posts_total,
         "total_messages": total_messages,
@@ -535,3 +587,191 @@ def soft_delete_post(db: Session, post_id: int) -> None:
         raise ForumNotFoundError("Mensaje no encontrado.")
     post.deleted_at = datetime.utcnow()
     db.commit()
+
+
+def _sanitize_filename(raw_name: str) -> str:
+    base = Path(raw_name or "archivo").name
+    cleaned = re.sub(r"[^a-zA-Z0-9._\-\s()]", "_", base).strip()
+    if not cleaned:
+        cleaned = "archivo"
+    return cleaned[:200]
+
+
+def _validate_magic_bytes(ext: str, data: bytes) -> None:
+    if ext == ".png" and not data.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise ForumValidationError("El contenido del archivo no corresponde a una imagen PNG válida.")
+    if ext in (".jpg", ".jpeg") and not data.startswith(b"\xff\xd8\xff"):
+        raise ForumValidationError("El contenido del archivo no corresponde a una imagen JPEG válida.")
+    if ext == ".webp" and not (len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP"):
+        raise ForumValidationError("El contenido del archivo no corresponde a una imagen WebP válida.")
+    if ext == ".pdf" and not data.startswith(b"%PDF-"):
+        raise ForumValidationError("El contenido del archivo no corresponde a un PDF válido.")
+    if ext in (".docx", ".xlsx") and not data.startswith(b"PK\x03\x04"):
+        raise ForumValidationError("El contenido del archivo no corresponde a un documento Office válido.")
+    if ext in (".txt", ".md", ".csv"):
+        if b"\x00" in data[:4096]:
+            raise ForumValidationError("El archivo de texto contiene datos binarios no permitidos.")
+        try:
+            data.decode("utf-8")
+        except UnicodeDecodeError:
+            try:
+                data.decode("latin-1")
+            except UnicodeDecodeError:
+                raise ForumValidationError("No fue posible decodificar el archivo de texto.")
+
+
+def _serialize_attachment(att: ForumAttachment) -> dict:
+    return {
+        "id": att.id,
+        "thread_id": att.thread_id,
+        "post_id": att.post_id,
+        "filename": att.original_filename,
+        "content_type": att.content_type,
+        "size_bytes": att.size_bytes,
+        "created_at": att.created_at,
+    }
+
+
+def create_attachment(
+    db: Session,
+    *,
+    thread_id: int,
+    post_id: Optional[int],
+    filename: str,
+    content_type: Optional[str],
+    data: bytes,
+    uploaded_by_user_id: int,
+) -> dict:
+    """Valida, guarda en almacenamiento y registra un adjunto del foro."""
+    thread = db.query(ForumThread).filter(ForumThread.id == thread_id, ForumThread.deleted_at.is_(None)).first()
+    if not thread:
+        raise ForumNotFoundError("Tema no encontrado.")
+
+    if post_id is not None:
+        post = (
+            db.query(ForumPost)
+            .filter(ForumPost.id == post_id, ForumPost.thread_id == thread_id, ForumPost.deleted_at.is_(None))
+            .first()
+        )
+        if not post:
+            raise ForumNotFoundError("Mensaje no encontrado en este tema.")
+
+    if not data:
+        raise ForumValidationError("El archivo está vacío.")
+
+    max_bytes = settings.FORUM_MAX_FILE_SIZE_MB * 1024 * 1024
+    if len(data) > max_bytes:
+        raise ForumValidationError(f"El archivo excede el límite máximo de {settings.FORUM_MAX_FILE_SIZE_MB} MB.")
+
+    safe_name = _sanitize_filename(filename)
+    ext = Path(safe_name).suffix.lower()
+    canonical_mime = ALLOWED_ATTACHMENT_EXTS.get(ext)
+    if not canonical_mime:
+        allowed_list = ", ".join(sorted(ALLOWED_ATTACHMENT_EXTS.keys()))
+        raise ForumValidationError(f"Tipo de archivo no permitido ({ext or 'sin extensión'}). Permitidos: {allowed_list}")
+
+    _validate_magic_bytes(ext, data)
+
+    existing_count_q = db.query(func.count(ForumAttachment.id)).filter(
+        ForumAttachment.thread_id == thread_id,
+        ForumAttachment.deleted_at.is_(None),
+    )
+    if post_id is None:
+        existing_count_q = existing_count_q.filter(ForumAttachment.post_id.is_(None))
+    else:
+        existing_count_q = existing_count_q.filter(ForumAttachment.post_id == post_id)
+
+    existing_count = existing_count_q.scalar() or 0
+    if existing_count >= settings.FORUM_MAX_ATTACHMENTS_PER_ITEM:
+        raise ForumValidationError(
+            f"Se alcanzó el límite máximo de {settings.FORUM_MAX_ATTACHMENTS_PER_ITEM} archivos adjuntos."
+        )
+
+    sha256_hex = hashlib.sha256(data).hexdigest()
+    now = datetime.utcnow()
+    stored_key = f"threads/{thread_id}/{secrets.token_hex(16)}{ext}"
+
+    storage = get_forum_storage()
+    try:
+        storage.save(stored_key, data)
+    except ForumStorageError as exc:
+        raise ForumValidationError(str(exc))
+
+    attachment = ForumAttachment(
+        thread_id=thread_id,
+        post_id=post_id,
+        original_filename=safe_name,
+        stored_key=stored_key,
+        content_type=canonical_mime,
+        size_bytes=len(data),
+        sha256=sha256_hex,
+        uploaded_by_user_id=uploaded_by_user_id,
+        created_at=now,
+    )
+    db.add(attachment)
+    db.commit()
+    db.refresh(attachment)
+    return _serialize_attachment(attachment)
+
+
+def get_attachment_for_download(
+    db: Session,
+    attachment_id: int,
+    *,
+    scoped_customer_id: Optional[int] = None,
+    only_active_customers: bool = False,
+) -> tuple[dict, bytes]:
+    """Obtiene metadatos y bytes de un adjunto validando acceso por empresa."""
+    q = (
+        db.query(ForumAttachment, ForumThread, Customer)
+        .join(ForumThread, ForumAttachment.thread_id == ForumThread.id)
+        .join(Customer, ForumThread.customer_id == Customer.id)
+        .filter(
+            ForumAttachment.id == attachment_id,
+            ForumAttachment.deleted_at.is_(None),
+            ForumThread.deleted_at.is_(None),
+        )
+    )
+    if only_active_customers:
+        q = q.filter(Customer.is_active.is_(True), Customer.forum_enabled.is_(True))
+    if scoped_customer_id is not None:
+        q = q.filter(ForumThread.customer_id == scoped_customer_id)
+
+    row = q.first()
+    if not row:
+        raise ForumNotFoundError("Archivo adjunto no encontrado.")
+
+    att, _, _ = row
+    if att.post_id is not None:
+        post = (
+            db.query(ForumPost)
+            .filter(ForumPost.id == att.post_id, ForumPost.deleted_at.is_(None))
+            .first()
+        )
+        if not post:
+            raise ForumNotFoundError("El mensaje asociado a este archivo fue eliminado.")
+
+    storage = get_forum_storage()
+    try:
+        data = storage.read(att.stored_key)
+    except FileNotFoundError:
+        raise ForumNotFoundError("El archivo físico no se encuentra disponible.")
+
+    return _serialize_attachment(att), data
+
+
+def soft_delete_attachment(db: Session, attachment_id: int) -> None:
+    """Marca un adjunto como eliminado y borra el archivo físico."""
+    att = (
+        db.query(ForumAttachment)
+        .filter(ForumAttachment.id == attachment_id, ForumAttachment.deleted_at.is_(None))
+        .first()
+    )
+    if not att:
+        raise ForumNotFoundError("Archivo adjunto no encontrado.")
+    att.deleted_at = datetime.utcnow()
+    db.commit()
+    try:
+        get_forum_storage().delete(att.stored_key)
+    except Exception as exc:
+        logger.warning(f"No se pudo eliminar el archivo físico {att.stored_key}: {exc}")

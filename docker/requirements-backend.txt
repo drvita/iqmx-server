@@ -27,3 +27,4 @@ sentry-sdk>=2.0.0
 
 # MCP Server
 mcp>=2.0.0
+python-multipart>=0.0.9

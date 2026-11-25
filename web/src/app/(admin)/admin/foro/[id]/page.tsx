@@ -9,11 +9,24 @@ import {
   ArrowUturnLeftIcon,
   CpuChipIcon,
   ExclamationTriangleIcon,
+  PaperAirplaneIcon,
+  PaperClipIcon,
   PencilSquareIcon,
   TrashIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 import ForumMarkdown from '@/components/admin/foro/ForumMarkdown';
+import {
+  AttachmentPicker,
+  FORUM_ACCEPTED_EXTENSIONS,
+  FORUM_MAX_ATTACHMENTS,
+  FORUM_MAX_FILE_SIZE_BYTES,
+  ForumAttachmentItem,
+  ForumAttachmentList,
+  formatFileSize,
+  uploadForumAttachments,
+} from '@/components/admin/foro/ForumAttachments';
+import { formatLocalDateTime, formatLocalTime } from '@/lib/date';
 
 type ForumPost = {
   id: number;
@@ -25,6 +38,7 @@ type ForumPost = {
   created_at: string;
   updated_at: string;
   deleted: boolean;
+  attachments?: ForumAttachmentItem[];
 };
 
 type ForumThreadDetail = {
@@ -42,6 +56,7 @@ type ForumThreadDetail = {
   last_post_at: string | null;
   created_at: string;
   updated_at: string;
+  attachments?: ForumAttachmentItem[];
   posts: ForumPost[];
 };
 
@@ -70,13 +85,22 @@ export default function AdminForoDetailPage() {
   // Respuesta inline por mensaje padre
   const [replyingToPostId, setReplyingToPostId] = useState<number | null>(null);
   const [replyBody, setReplyBody] = useState('');
+  const [replyFiles, setReplyFiles] = useState<File[]>([]);
   const [postingReply, setPostingReply] = useState(false);
   const [replyError, setReplyError] = useState<string | null>(null);
 
-  // Composer principal (nuevo mensaje raíz)
+  // Composer principal (nuevo mensaje raíz, sticky minimalista)
   const [newPostBody, setNewPostBody] = useState('');
+  const [postFiles, setPostFiles] = useState<File[]>([]);
   const [posting, setPosting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
+  const [composerExpanded, setComposerExpanded] = useState(false);
+  const composerFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Adjuntos del tema principal
+  const [threadFiles, setThreadFiles] = useState<File[]>([]);
+  const [uploadingThreadFiles, setUploadingThreadFiles] = useState(false);
+  const [deletingAttachmentId, setDeletingAttachmentId] = useState<number | null>(null);
 
   // Edición de mensaje propio
   const [editingPostId, setEditingPostId] = useState<number | null>(null);
@@ -301,13 +325,57 @@ export default function AdminForoDetailPage() {
       if (!res.ok) {
         setPostError(data?.detail || 'No se pudo publicar el mensaje.');
       } else {
+        if (postFiles.length > 0 && data?.id) {
+          try {
+            await uploadForumAttachments(thread.id, postFiles, data.id);
+          } catch (uploadErr) {
+            setPostError(
+              uploadErr instanceof Error
+                ? `Mensaje publicado, pero falló un adjunto: ${uploadErr.message}`
+                : 'Mensaje publicado, pero no se pudieron subir los adjuntos.'
+            );
+          }
+        }
         setNewPostBody('');
+        setPostFiles([]);
+        setComposerExpanded(false);
         fetchDetail({ silent: true });
       }
     } catch {
       setPostError('Error de conexión al publicar el mensaje.');
     } finally {
       setPosting(false);
+    }
+  };
+
+  const handleComposerFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setPostError(null);
+    const selected = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (selected.length === 0) return;
+
+    const remaining = Math.max(0, FORUM_MAX_ATTACHMENTS - postFiles.length);
+    if (remaining === 0) {
+      setPostError(`Máximo ${FORUM_MAX_ATTACHMENTS} archivos por mensaje.`);
+      return;
+    }
+
+    const accepted: File[] = [];
+    for (const file of selected) {
+      if (file.size > FORUM_MAX_FILE_SIZE_BYTES) {
+        setPostError(`"${file.name}" excede el máximo de 10 MB.`);
+        continue;
+      }
+      if (accepted.length >= remaining) {
+        setPostError(`Solo se permiten hasta ${FORUM_MAX_ATTACHMENTS} archivos.`);
+        break;
+      }
+      accepted.push(file);
+    }
+
+    if (accepted.length > 0) {
+      setPostFiles((prev) => [...prev, ...accepted]);
+      setComposerExpanded(true);
     }
   };
 
@@ -334,7 +402,19 @@ export default function AdminForoDetailPage() {
       if (!res.ok) {
         setReplyError(data?.detail || 'No se pudo publicar la respuesta.');
       } else {
+        if (replyFiles.length > 0 && data?.id) {
+          try {
+            await uploadForumAttachments(thread.id, replyFiles, data.id);
+          } catch (uploadErr) {
+            setReplyError(
+              uploadErr instanceof Error
+                ? `Respuesta publicada, pero falló un adjunto: ${uploadErr.message}`
+                : 'Respuesta publicada, pero no se pudieron subir los adjuntos.'
+            );
+          }
+        }
         setReplyBody('');
+        setReplyFiles([]);
         setReplyingToPostId(null);
         fetchDetail({ silent: true });
       }
@@ -414,18 +494,47 @@ export default function AdminForoDetailPage() {
     }
   };
 
-  const formatTime = (date: Date) =>
-    date.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
-
-  const formatDateTime = (iso: string) => {
-    return new Date(iso).toLocaleString('es-MX', {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+  const handleUploadThreadFiles = async (filesToUpload: File[]) => {
+    if (!thread || filesToUpload.length === 0) return;
+    setUploadingThreadFiles(true);
+    setActionError(null);
+    try {
+      await uploadForumAttachments(thread.id, filesToUpload);
+      setThreadFiles([]);
+      fetchDetail({ silent: true });
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : 'No se pudieron subir los archivos.');
+    } finally {
+      setUploadingThreadFiles(false);
+    }
   };
+
+  const handleDeleteAttachment = async (attachmentId: number) => {
+    setDeletingAttachmentId(attachmentId);
+    setActionError(null);
+    try {
+      const token = localStorage.getItem('iqmx_admin_token');
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+      const res = await fetch(`${apiUrl}/api/admin/forum/attachments/${attachmentId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        fetchDetail({ silent: true });
+      } else {
+        const data = await res.json().catch(() => null);
+        setActionError(data?.detail || 'No se pudo eliminar el archivo adjunto.');
+      }
+    } catch {
+      setActionError('Error de conexión al eliminar el archivo.');
+    } finally {
+      setDeletingAttachmentId(null);
+    }
+  };
+
+  const formatTime = (date: Date) => formatLocalTime(date);
+
+  const formatDateTime = (iso: string) => formatLocalDateTime(iso);
 
   if (loading) {
     return (
@@ -462,8 +571,11 @@ export default function AdminForoDetailPage() {
     }
   }
 
+  const isComposerOpen =
+    composerExpanded || newPostBody.length > 0 || postFiles.length > 0 || Boolean(postError);
+
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-4xl pb-6">
       <div>
         <Link
           href="/admin/foro"
@@ -543,6 +655,38 @@ export default function AdminForoDetailPage() {
         <div className="rounded-xl border border-gray-100 bg-gray-50/70 p-4">
           <ForumMarkdown content={thread.body} />
         </div>
+
+        {(thread.attachments && thread.attachments.length > 0) && (
+          <ForumAttachmentList
+            attachments={thread.attachments}
+            onDelete={handleDeleteAttachment}
+            deletingId={deletingAttachmentId}
+          />
+        )}
+
+        {thread.status !== 'archived' && (
+          <div className="pt-1 space-y-2">
+            <AttachmentPicker
+              files={threadFiles}
+              onChange={setThreadFiles}
+              existingCount={thread.attachments?.length || 0}
+              disabled={uploadingThreadFiles}
+              label="Adjuntar archivo al tema"
+            />
+            {threadFiles.length > 0 && (
+              <div>
+                <button
+                  type="button"
+                  disabled={uploadingThreadFiles}
+                  onClick={() => handleUploadThreadFiles(threadFiles)}
+                  className="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50 cursor-pointer"
+                >
+                  {uploadingThreadFiles ? 'Subiendo archivos…' : `Subir ${threadFiles.length} archivo(s)`}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Hilo de mensajes */}
@@ -625,10 +769,12 @@ export default function AdminForoDetailPage() {
                           onClick={() => {
                             if (replyingToPostId === post.id) {
                               setReplyingToPostId(null);
+                              setReplyFiles([]);
                               setReplyError(null);
                             } else {
                               setReplyingToPostId(post.id);
                               setReplyBody('');
+                              setReplyFiles([]);
                               setReplyError(null);
                             }
                           }}
@@ -691,7 +837,16 @@ export default function AdminForoDetailPage() {
                 ) : post.deleted ? (
                   <p className="text-sm italic text-gray-400">{post.body}</p>
                 ) : (
-                  <ForumMarkdown content={post.body} />
+                  <>
+                    <ForumMarkdown content={post.body} />
+                    {post.attachments && post.attachments.length > 0 && (
+                      <ForumAttachmentList
+                        attachments={post.attachments}
+                        onDelete={handleDeleteAttachment}
+                        deletingId={deletingAttachmentId}
+                      />
+                    )}
+                  </>
                 )}
 
                 {/* Respuestas anidadas (1 nivel) */}
@@ -769,7 +924,16 @@ export default function AdminForoDetailPage() {
                           ) : reply.deleted ? (
                             <p className="text-xs sm:text-sm italic text-gray-400">{reply.body}</p>
                           ) : (
-                            <ForumMarkdown content={reply.body} className="text-xs sm:text-sm" />
+                            <>
+                              <ForumMarkdown content={reply.body} className="text-xs sm:text-sm" />
+                              {reply.attachments && reply.attachments.length > 0 && (
+                                <ForumAttachmentList
+                                  attachments={reply.attachments}
+                                  onDelete={handleDeleteAttachment}
+                                  deletingId={deletingAttachmentId}
+                                />
+                              )}
+                            </>
                           )}
                         </div>
                       );
@@ -816,6 +980,12 @@ export default function AdminForoDetailPage() {
                         className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
                       />
 
+                      <AttachmentPicker
+                        files={replyFiles}
+                        onChange={setReplyFiles}
+                        disabled={postingReply}
+                      />
+
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-[11px] text-gray-400 hidden sm:inline">
                           Ctrl+Enter o Cmd+Enter para enviar
@@ -826,6 +996,7 @@ export default function AdminForoDetailPage() {
                             onClick={() => {
                               setReplyingToPostId(null);
                               setReplyBody('');
+                              setReplyFiles([]);
                               setReplyError(null);
                             }}
                             className="rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-200/70 cursor-pointer"
@@ -850,50 +1021,158 @@ export default function AdminForoDetailPage() {
         </div>
       </div>
 
-      {/* Compositor principal */}
+      {/* Compositor principal fijo (sticky minimalista) */}
       {thread.status === 'archived' ? (
         <div className="rounded-xl border border-gray-200 bg-gray-100 p-4 text-center text-xs text-gray-600">
           Este tema está archivado. Cambia su estado si deseas volver a publicar mensajes.
         </div>
       ) : (
-        <form
-          onSubmit={handlePublishPost}
-          className="rounded-xl border border-gray-200 bg-white p-4 sm:p-5 shadow-xs space-y-3"
-        >
-          <div className="flex items-center justify-between">
-            <label htmlFor="new-post-body" className="text-xs font-bold text-gray-900">
-              Agregar mensaje
-            </label>
-            <span className="text-[11px] text-gray-400">{newPostBody.length} / 10,000</span>
-          </div>
+        <div className="sticky bottom-3 z-20 mt-4">
+          <form
+            onSubmit={handlePublishPost}
+            className="rounded-2xl border border-gray-200/90 bg-white/95 backdrop-blur-md shadow-lg transition-all"
+          >
+            <input
+              ref={composerFileInputRef}
+              type="file"
+              multiple
+              accept={FORUM_ACCEPTED_EXTENSIONS}
+              onChange={handleComposerFilesSelected}
+              className="hidden"
+              disabled={posting}
+            />
 
-          {postError && (
-            <div className="rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-700">
-              {postError}
-            </div>
-          )}
+            {!isComposerOpen ? (
+              <div className="flex items-center gap-2 p-2.5">
+                <button
+                  type="button"
+                  onClick={() => composerFileInputRef.current?.click()}
+                  disabled={posting}
+                  aria-label="Adjuntar archivos"
+                  title="Adjuntar archivos"
+                  className="rounded-xl p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50 shrink-0 cursor-pointer"
+                >
+                  <PaperClipIcon className="h-4 w-4" aria-hidden="true" />
+                </button>
+                <label htmlFor="new-post-body" className="sr-only">
+                  Agregar mensaje
+                </label>
+                <textarea
+                  id="new-post-body"
+                  rows={1}
+                  maxLength={10000}
+                  value={newPostBody}
+                  onFocus={() => setComposerExpanded(true)}
+                  onChange={(e) => setNewPostBody(e.target.value)}
+                  placeholder="Agregar un mensaje al tema…"
+                  className="flex-1 resize-none rounded-xl border border-gray-200 bg-gray-50/80 px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 focus:border-blue-600 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-600"
+                />
+                <button
+                  type="submit"
+                  disabled={posting || !newPostBody.trim()}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-40 transition-colors shrink-0 cursor-pointer"
+                >
+                  <PaperAirplaneIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>Enviar</span>
+                </button>
+              </div>
+            ) : (
+              <div className="p-3 sm:p-3.5 space-y-2.5">
+                {postError && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs text-red-700">
+                    {postError}
+                  </div>
+                )}
 
-          <textarea
-            id="new-post-body"
-            rows={4}
-            required
-            maxLength={10000}
-            value={newPostBody}
-            onChange={(e) => setNewPostBody(e.target.value)}
-            placeholder="Escribe una idea, comentario o conclusión…"
-            className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
-          />
+                <label htmlFor="new-post-body" className="sr-only">
+                  Agregar mensaje
+                </label>
+                <textarea
+                  id="new-post-body"
+                  rows={3}
+                  autoFocus
+                  required
+                  maxLength={10000}
+                  value={newPostBody}
+                  onChange={(e) => setNewPostBody(e.target.value)}
+                  onKeyDown={(e) => {
+                    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && newPostBody.trim() && !posting) {
+                      e.preventDefault();
+                      void handlePublishPost(e);
+                    }
+                  }}
+                  placeholder="Escribe una idea, comentario o conclusión… (Markdown soportado)"
+                  className="w-full max-h-48 overflow-y-auto rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-600 focus:outline-none focus:ring-1 focus:ring-blue-600"
+                />
 
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={posting || !newPostBody.trim()}
-              className="rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition-colors cursor-pointer"
-            >
-              {posting ? 'Publicando…' : 'Publicar mensaje'}
-            </button>
-          </div>
-        </form>
+                {postFiles.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5">
+                    {postFiles.map((file, idx) => (
+                      <span
+                        key={`${file.name}-${file.size}-${idx}`}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[11px] font-medium text-blue-800"
+                      >
+                        <span className="max-w-[180px] truncate">{file.name}</span>
+                        <span className="text-blue-600/80">({formatFileSize(file.size)})</span>
+                        <button
+                          type="button"
+                          onClick={() => setPostFiles((prev) => prev.filter((_, i) => i !== idx))}
+                          aria-label={`Quitar ${file.name}`}
+                          className="rounded-full p-0.5 text-blue-700 hover:bg-blue-100 cursor-pointer"
+                        >
+                          <XMarkIcon className="h-3 w-3" aria-hidden="true" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => composerFileInputRef.current?.click()}
+                      disabled={posting || postFiles.length >= FORUM_MAX_ATTACHMENTS}
+                      className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 cursor-pointer"
+                    >
+                      <PaperClipIcon className="h-3.5 w-3.5 text-gray-500" aria-hidden="true" />
+                      <span>Adjuntar</span>
+                    </button>
+                    <span className="text-[11px] text-gray-400">
+                      {newPostBody.length} / 10,000
+                    </span>
+                    <span className="hidden sm:inline text-[11px] text-gray-400">
+                      · Ctrl+Enter para enviar
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {!newPostBody.trim() && postFiles.length === 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setComposerExpanded(false);
+                          setPostError(null);
+                        }}
+                        className="rounded-lg px-2.5 py-1 text-xs font-semibold text-gray-500 hover:bg-gray-100 cursor-pointer"
+                      >
+                        Minimizar
+                      </button>
+                    )}
+                    <button
+                      type="submit"
+                      disabled={posting || !newPostBody.trim()}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-blue-700 disabled:opacity-50 transition-colors cursor-pointer"
+                    >
+                      <PaperAirplaneIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                      <span>{posting ? 'Publicando…' : 'Publicar'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </form>
+        </div>
       )}
 
       {/* Modal Editar Tema */}

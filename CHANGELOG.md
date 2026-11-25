@@ -25,6 +25,26 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
     - **Respuesta Inline Contextual**: Al hacer clic en "Responder" en cualquier publicación, se despliega un formulario inline justo debajo del mensaje padre con foco automático (`autoFocus`), indicador de a quién se responde y atajo de teclado rápido `Ctrl+Enter` / `Cmd+Enter` para enviar.
     - El compositor inferior queda reservado exclusivamente para la creación de nuevos mensajes principales sin perder borradores.
     - **Recarga Silenciosa y Automática**: Botón manual "Actualizar" con animación de carga e indicador de última hora de actualización (`Actualizado HH:MM`), junto a un selector "Auto 30s" que actualiza el hilo de discusión en segundo plano cada 30 segundos (con pausa automática al ocultar la pestaña y reactivación inmediata al volver) sin desmontar la pantalla ni borrar el texto que el usuario esté escribiendo.
+- **Soporte de Archivos Adjuntos en Foro y Servidor MCP (`api/`, `web/` & MCP) [SPEC-006]**:
+  - **Persistencia y Modelo de Datos (`api/`)**: Nuevo modelo `ForumAttachment` en [`api/app/models/forum_attachment.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/models/forum_attachment.py) y migración Alembic `f6a7b8c9d0e1_create_forum_attachments.py` para adjuntos vinculados a temas (`thread_id`) o mensajes individuales (`post_id`).
+  - **Almacenamiento Desacoplado y Seguro (`api/`)**: Módulo [`api/app/services/forum/storage.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/services/forum/storage.py) con `LocalForumStorage` y protección estricta contra path traversal (`safe_filename` y normalización de rutas en `FORUM_UPLOADS_DIR`).
+  - **Validación Estricta de Archivos**: Inspección de magic bytes en [`api/app/services/forum/service.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/services/forum/service.py) para tipos permitidos (`.png`, `.jpg`, `.jpeg`, `.webp`, `.pdf`, `.docx`, `.xlsx`, `.csv`, `.txt`, `.md`), límite de 10 MB por archivo y tope de hasta 5 adjuntos por hilo o mensaje.
+  - **Endpoints REST Administrativos (`api/`)**:
+    - `POST /api/admin/forum/threads/{thread_id}/attachments`: Carga multipart con retorno de metadatos del adjunto.
+    - `GET /api/admin/forum/attachments/{attachment_id}/download`: Descarga/visualización inline con cabecera `X-Content-Type-Options: nosniff`.
+    - `DELETE /api/admin/forum/attachments/{attachment_id}`: Eliminación de archivo físico y registro en base de datos.
+  - **Herramienta MCP para Agentes (`api/`)**: Nueva tool `get_attachment` en [`api/app/mcp/server.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/mcp/server.py) para que los bots lean contenido de adjuntos (UTF-8 para texto y base64 para binarios/imágenes) con aislamiento multi-inquilino por empresa.
+  - **Componente y UX de Adjuntos en Frontend (`web/`)**:
+    - Componente [`web/src/components/admin/foro/ForumAttachments.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/components/admin/foro/ForumAttachments.tsx) con selector de archivos, previsualización de imágenes (`Blob` URL), chips de estado y botón de descarga autenticada con token JWT.
+    - Integración en la modal de creación de tema ([`web/src/app/(admin)/admin/foro/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/(admin)/admin/foro/page.tsx)) y en el hilo de discusión ([`web/src/app/(admin)/admin/foro/[id]/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/(admin)/admin/foro/[id]/page.tsx)).
+- **Compositor Sticky Minimalista en Hilo del Foro (`web/`)**:
+  - Barra de composición inferior fijada (`sticky bottom-3 z-20`) con fondo translúcido y desenfoque (`backdrop-blur-md`), diseño minimalista colapsado a 1 sola línea por defecto y expansión a 3 líneas con selector de adjuntos, soporte de atajo `Ctrl+Enter` / `Cmd+Enter` y botón de minimizar para facilitar la lectura en hilos largos.
+
+### Corregido
+
+- **Normalización de Zona Horaria UTC en API y Presentación Local en Frontend (`api/` & `web/`) [SPEC-006]**:
+  - **Serialización UTC Explícita (`api/`)**: Helper `format_utc_iso` en [`api/app/services/forum/service.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/services/forum/service.py) y tipo anotado `UtcDateTime` con `PlainSerializer` en esquemas Pydantic de [`api/app/api/admin_forum.py`](file:///Users/laclavees12345/code/iqissmexico/main/api/app/api/admin_forum.py) y MCP para garantizar el sufijo `Z` en todas las fechas devueltas al cliente.
+  - **Formateo en Hora Local del Navegador (`web/`)**: Utilidad [`web/src/lib/date.ts`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/lib/date.ts) que parsea fechas UTC y las formatea a la zona horaria del cliente vía `Intl.DateTimeFormat`, resolviendo la discrepancia horaria observada en el panel administrativo.
 
 ---
 

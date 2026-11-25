@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import contextvars
 import json
 import logging
@@ -13,10 +14,13 @@ from mcp.server.transport_security import TransportSecuritySettings
 from app.db.database import SessionLocal
 from app.services.bots.tokens import BotActor, BotTokenAuthError, authenticate_bot_token
 from app.services.forum.service import (
+    TEXT_ATTACHMENT_CONTENT_TYPES,
     ForumError,
     check_mcp_rate_limit,
     create_post,
     create_thread as create_forum_thread,
+    format_utc_iso,
+    get_attachment_for_download,
     get_thread_detail,
     list_threads as list_forum_threads,
     list_visible_companies,
@@ -33,8 +37,9 @@ mcp_server = MCPServer(
     instructions=(
         "Servidor del Foro Colaborativo de IQISSMexico. "
         "Usa list_companies para conocer las empresas disponibles, list_threads para explorar temas, "
-        "get_thread para leer la conversación completa de un tema, create_thread para abrir un nuevo tema "
-        "y post_message para aportar ideas o comentarios."
+        "get_thread para leer la conversación completa (con respuestas y metadatos de archivos adjuntos), "
+        "get_attachment para leer o descargar un archivo adjunto por su id, "
+        "create_thread para abrir un nuevo tema y post_message para aportar ideas o comentarios."
     ),
 )
 
@@ -55,7 +60,9 @@ def _log_tool_call(actor: BotActor, tool_name: str, thread_id: Optional[int], ou
 def _serialize_dt(dt: Any) -> Optional[str]:
     if dt is None:
         return None
-    return dt.isoformat() if hasattr(dt, "isoformat") else str(dt)
+    if isinstance(dt, datetime):
+        return format_utc_iso(dt)
+    return str(dt)
 
 
 @mcp_server.tool(
@@ -146,6 +153,16 @@ def list_threads(
         raise ToolError(str(exc))
 
 
+def _serialize_mcp_attachment(att: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": att["id"],
+        "filename": att["filename"],
+        "content_type": att["content_type"],
+        "size_bytes": att["size_bytes"],
+        "created_at": _serialize_dt(att["created_at"]),
+    }
+
+
 def _serialize_mcp_post(p: dict[str, Any], include_replies: bool = False) -> dict[str, Any]:
     item: dict[str, Any] = {
         "id": p["id"],
@@ -154,6 +171,7 @@ def _serialize_mcp_post(p: dict[str, Any], include_replies: bool = False) -> dic
         "author_is_bot": p["author_is_bot"],
         "body": p["body"],
         "created_at": _serialize_dt(p["created_at"]),
+        "attachments": [_serialize_mcp_attachment(a) for a in p.get("attachments", [])],
     }
     if include_replies:
         item["replies"] = [_serialize_mcp_post(r, include_replies=False) for r in p.get("replies", [])]
@@ -163,10 +181,10 @@ def _serialize_mcp_post(p: dict[str, Any], include_replies: bool = False) -> dic
 @mcp_server.tool(
     name="get_thread",
     description=(
-        "Obtiene el detalle de un tema del foro con sus mensajes principales paginados en orden cronológico "
-        "y las respuestas anidadas dentro del arreglo 'replies' de cada mensaje principal, identificando "
-        "al autor de cada publicación. Parámetros: thread_id (entero requerido), page (por defecto 1) y "
-        "page_size (por defecto 50, máximo 100)."
+        "Obtiene el detalle de un tema del foro con sus mensajes principales paginados en orden cronológico, "
+        "las respuestas anidadas dentro del arreglo 'replies' de cada mensaje principal y los metadatos de "
+        "archivos adjuntos ('attachments') del tema y de cada mensaje. Parámetros: thread_id (entero requerido), "
+        "page (por defecto 1) y page_size (por defecto 50, máximo 100)."
     ),
 )
 def get_thread(
@@ -200,6 +218,7 @@ def get_thread(
                 "due_at": _serialize_dt(detail["due_at"]),
                 "author_name": detail["author_name"],
                 "author_is_bot": detail["author_is_bot"],
+                "attachments": [_serialize_mcp_attachment(a) for a in detail.get("attachments", [])],
                 "posts": posts,
                 "posts_total": detail["posts_total"],
                 "total_messages": detail["total_messages"],
@@ -211,6 +230,55 @@ def get_thread(
             db.close()
     except ForumError as exc:
         _log_tool_call(actor, "get_thread", thread_id, f"error:{type(exc).__name__}")
+        raise ToolError(str(exc))
+
+
+@mcp_server.tool(
+    name="get_attachment",
+    description=(
+        "Obtiene el contenido y metadatos de un archivo adjunto del foro por su attachment_id. "
+        "Para archivos de texto (.txt, .md, .csv) devuelve encoding='utf-8' y el texto plano en 'content'; "
+        "para binarios (PDF, imágenes, DOCX, XLSX) devuelve encoding='base64' y el contenido codificado."
+    ),
+)
+def get_attachment(attachment_id: int) -> dict[str, Any]:
+    actor = _require_actor()
+    try:
+        check_mcp_rate_limit(actor.token_id, "read")
+        db = SessionLocal()
+        try:
+            meta, data = get_attachment_for_download(
+                db,
+                attachment_id,
+                scoped_customer_id=actor.customer_id,
+                only_active_customers=True,
+            )
+            if meta["content_type"] in TEXT_ATTACHMENT_CONTENT_TYPES:
+                try:
+                    content = data.decode("utf-8")
+                    encoding = "utf-8"
+                except UnicodeDecodeError:
+                    content = data.decode("latin-1")
+                    encoding = "utf-8"
+            else:
+                content = base64.b64encode(data).decode("ascii")
+                encoding = "base64"
+
+            _log_tool_call(actor, "get_attachment", meta["thread_id"], "ok")
+            return {
+                "id": meta["id"],
+                "thread_id": meta["thread_id"],
+                "post_id": meta["post_id"],
+                "filename": meta["filename"],
+                "content_type": meta["content_type"],
+                "size_bytes": meta["size_bytes"],
+                "encoding": encoding,
+                "content": content,
+            }
+        finally:
+            db.close()
+    except ForumError as exc:
+        _log_tool_call(actor, "get_attachment", None, f"error:{type(exc).__name__}")
         raise ToolError(str(exc))
 
 
