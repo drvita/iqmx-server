@@ -22,6 +22,11 @@ __pycache__/
 .env
 .env*.local
 
+# Configuración y plugins agénticos locales (evitar exposición de credenciales y tokens MCP)
+.agents
+.claude
+.mcp.json
+
 # Archivos del sistema operativo
 .DS_Store
 Thumbs.db

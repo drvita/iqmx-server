@@ -209,6 +209,7 @@ def get_thread_detail(
     only_active_customers: bool = False,
     posts_page: Optional[int] = None,
     posts_page_size: Optional[int] = None,
+    nested: bool = False,
 ) -> dict:
     """Obtiene el detalle del tema y sus mensajes en orden cronológico (con paginación opcional)."""
     row = (
@@ -251,18 +252,35 @@ def get_thread_detail(
             "deleted": is_deleted,
         })
 
-    posts_total = len(posts_payload)
+    total_messages = len(posts_payload)
+
+    if nested:
+        replies_by_parent: dict[int, list[dict]] = {}
+        root_posts: list[dict] = []
+        for item in posts_payload:
+            if item["parent_post_id"] is None:
+                root_posts.append(item)
+            else:
+                replies_by_parent.setdefault(item["parent_post_id"], []).append(item)
+        target_posts = [
+            {**root, "replies": replies_by_parent.get(root["id"], [])}
+            for root in root_posts
+        ]
+    else:
+        target_posts = posts_payload
+
+    posts_total = len(target_posts)
     if posts_page is not None or posts_page_size is not None:
         safe_page = max(1, posts_page or 1)
         safe_size = max(1, min(posts_page_size or 50, 100))
         start = (safe_page - 1) * safe_size
         end = start + safe_size
-        paged_posts = posts_payload[start:end]
+        paged_posts = target_posts[start:end]
         has_more = end < posts_total
     else:
         safe_page = 1
         safe_size = posts_total
-        paged_posts = posts_payload
+        paged_posts = target_posts
         has_more = False
 
     return {
@@ -282,6 +300,7 @@ def get_thread_detail(
         "updated_at": thread.updated_at,
         "posts": paged_posts,
         "posts_total": posts_total,
+        "total_messages": total_messages,
         "posts_page": safe_page,
         "posts_page_size": safe_size,
         "has_more_posts": has_more,

@@ -454,3 +454,95 @@ class TestMCPServer(unittest.TestCase):
                 is_err_dt, msg_dt = self._parse_tool_result(res_bad_dt)
                 self.assertTrue(is_err_dt)
                 self.assertIn("ISO-8601", str(msg_dt))
+
+    def test_mcp_get_thread_returns_nested_replies(self):
+        from app.services.forum.service import create_post as service_create_post
+
+        fake_redis = FakeRedis()
+        with patch("app.services.forum.service.get_redis_client", return_value=fake_redis):
+            with TestClient(app) as client:
+                res_p1 = self._rpc(
+                    client,
+                    self.token_scoped,
+                    "tools/call",
+                    {"name": "post_message", "arguments": {"thread_id": self.thread_a["id"], "body": "Idea principal 1"}},
+                    req_id=301,
+                )
+                is_err, p1 = self._parse_tool_result(res_p1)
+                self.assertFalse(is_err)
+
+                res_p2 = self._rpc(
+                    client,
+                    self.token_scoped,
+                    "tools/call",
+                    {"name": "post_message", "arguments": {"thread_id": self.thread_a["id"], "body": "Idea principal 2"}},
+                    req_id=302,
+                )
+                is_err, p2 = self._parse_tool_result(res_p2)
+                self.assertFalse(is_err)
+
+                res_r1 = self._rpc(
+                    client,
+                    self.token_global,
+                    "tools/call",
+                    {
+                        "name": "post_message",
+                        "arguments": {
+                            "thread_id": self.thread_a["id"],
+                            "body": "Respuesta bot a idea 1",
+                            "reply_to_post_id": p1["id"],
+                        },
+                    },
+                    req_id=303,
+                )
+                is_err, r1 = self._parse_tool_result(res_r1)
+                self.assertFalse(is_err)
+
+                r1_human = service_create_post(
+                    self.db,
+                    thread_id=self.thread_a["id"],
+                    body="Respuesta humana a idea 1",
+                    author_user_id=self.admin.id,
+                    is_bot=False,
+                    parent_post_id=p1["id"],
+                )
+
+                res_page1 = self._rpc(
+                    client,
+                    self.token_global,
+                    "tools/call",
+                    {"name": "get_thread", "arguments": {"thread_id": self.thread_a["id"], "page": 1, "page_size": 1}},
+                    req_id=304,
+                )
+                is_err_g, detail = self._parse_tool_result(res_page1)
+                self.assertFalse(is_err_g)
+                self.assertEqual(detail["posts_total"], 2)
+                self.assertEqual(detail["total_messages"], 4)
+                self.assertEqual(detail["posts_page"], 1)
+                self.assertEqual(detail["posts_page_size"], 1)
+                self.assertTrue(detail["has_more_posts"])
+                self.assertEqual(len(detail["posts"]), 1)
+
+                root = detail["posts"][0]
+                self.assertEqual(root["id"], p1["id"])
+                self.assertEqual(len(root["replies"]), 2)
+                self.assertEqual(root["replies"][0]["id"], r1["id"])
+                self.assertEqual(root["replies"][0]["parent_post_id"], p1["id"])
+                self.assertEqual(root["replies"][0]["author_name"], "Bot Global")
+                self.assertTrue(root["replies"][0]["author_is_bot"])
+                self.assertEqual(root["replies"][1]["id"], r1_human["id"])
+                self.assertEqual(root["replies"][1]["author_name"], "Admin MCP Test")
+                self.assertFalse(root["replies"][1]["author_is_bot"])
+
+                res_page2 = self._rpc(
+                    client,
+                    self.token_global,
+                    "tools/call",
+                    {"name": "get_thread", "arguments": {"thread_id": self.thread_a["id"], "page": 2, "page_size": 1}},
+                    req_id=305,
+                )
+                is_err_g2, detail2 = self._parse_tool_result(res_page2)
+                self.assertFalse(is_err_g2)
+                self.assertFalse(detail2["has_more_posts"])
+                self.assertEqual(detail2["posts"][0]["id"], p2["id"])
+                self.assertEqual(detail2["posts"][0]["replies"], [])

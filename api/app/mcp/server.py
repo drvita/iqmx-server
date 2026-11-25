@@ -146,12 +146,27 @@ def list_threads(
         raise ToolError(str(exc))
 
 
+def _serialize_mcp_post(p: dict[str, Any], include_replies: bool = False) -> dict[str, Any]:
+    item: dict[str, Any] = {
+        "id": p["id"],
+        "parent_post_id": p["parent_post_id"],
+        "author_name": p["author_name"],
+        "author_is_bot": p["author_is_bot"],
+        "body": p["body"],
+        "created_at": _serialize_dt(p["created_at"]),
+    }
+    if include_replies:
+        item["replies"] = [_serialize_mcp_post(r, include_replies=False) for r in p.get("replies", [])]
+    return item
+
+
 @mcp_server.tool(
     name="get_thread",
     description=(
-        "Obtiene el detalle de un tema del foro y sus mensajes paginados en orden cronológico, "
-        "identificando el autor de cada publicación. Parámetros: thread_id (entero requerido), "
-        "page (por defecto 1) y page_size (por defecto 50, máximo 100)."
+        "Obtiene el detalle de un tema del foro con sus mensajes principales paginados en orden cronológico "
+        "y las respuestas anidadas dentro del arreglo 'replies' de cada mensaje principal, identificando "
+        "al autor de cada publicación. Parámetros: thread_id (entero requerido), page (por defecto 1) y "
+        "page_size (por defecto 50, máximo 100)."
     ),
 )
 def get_thread(
@@ -171,18 +186,9 @@ def get_thread(
                 only_active_customers=True,
                 posts_page=page,
                 posts_page_size=page_size,
+                nested=True,
             )
-            posts = [
-                {
-                    "id": p["id"],
-                    "parent_post_id": p["parent_post_id"],
-                    "author_name": p["author_name"],
-                    "author_is_bot": p["author_is_bot"],
-                    "body": p["body"],
-                    "created_at": _serialize_dt(p["created_at"]),
-                }
-                for p in detail["posts"]
-            ]
+            posts = [_serialize_mcp_post(p, include_replies=True) for p in detail["posts"]]
             _log_tool_call(actor, "get_thread", thread_id, "ok")
             return {
                 "id": detail["id"],
@@ -196,6 +202,7 @@ def get_thread(
                 "author_is_bot": detail["author_is_bot"],
                 "posts": posts,
                 "posts_total": detail["posts_total"],
+                "total_messages": detail["total_messages"],
                 "posts_page": detail["posts_page"],
                 "posts_page_size": detail["posts_page_size"],
                 "has_more_posts": detail["has_more_posts"],

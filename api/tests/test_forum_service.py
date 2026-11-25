@@ -221,3 +221,56 @@ class TestForumService(unittest.TestCase):
         soft_delete_thread(self.db, t["id"])
         with self.assertRaises(ForumNotFoundError):
             get_thread_detail(self.db, t["id"])
+
+    def test_get_thread_detail_nested_and_pagination(self):
+        t = create_thread(
+            self.db,
+            customer_id=self.company_a.id,
+            title="Tema anidado",
+            body="Probar replies agrupadas",
+            author_user_id=self.admin.id,
+        )
+        self.created_thread_ids.append(t["id"])
+
+        p1 = create_post(self.db, thread_id=t["id"], body="Principal 1", author_user_id=self.admin.id, is_bot=False)
+        p2 = create_post(self.db, thread_id=t["id"], body="Principal 2", author_user_id=self.bot_user.id, is_bot=True)
+        p3 = create_post(self.db, thread_id=t["id"], body="Principal 3", author_user_id=self.admin.id, is_bot=False)
+
+        r1 = create_post(
+            self.db,
+            thread_id=t["id"],
+            body="Respuesta a 1",
+            author_user_id=self.bot_user.id,
+            is_bot=True,
+            parent_post_id=p1["id"],
+        )
+        r3 = create_post(
+            self.db,
+            thread_id=t["id"],
+            body="Respuesta a 3",
+            author_user_id=self.bot_user.id,
+            is_bot=True,
+            parent_post_id=p3["id"],
+        )
+
+        page1 = get_thread_detail(self.db, t["id"], posts_page=1, posts_page_size=2, nested=True)
+        self.assertEqual(len(page1["posts"]), 2)
+        self.assertEqual(page1["posts_total"], 3)
+        self.assertEqual(page1["total_messages"], 5)
+        self.assertTrue(page1["has_more_posts"])
+        self.assertEqual(page1["posts"][0]["id"], p1["id"])
+        self.assertEqual([r["id"] for r in page1["posts"][0]["replies"]], [r1["id"]])
+        self.assertEqual(page1["posts"][1]["id"], p2["id"])
+        self.assertEqual(page1["posts"][1]["replies"], [])
+
+        page2 = get_thread_detail(self.db, t["id"], posts_page=2, posts_page_size=2, nested=True)
+        self.assertEqual(len(page2["posts"]), 1)
+        self.assertFalse(page2["has_more_posts"])
+        self.assertEqual(page2["posts"][0]["id"], p3["id"])
+        self.assertEqual([r["id"] for r in page2["posts"][0]["replies"]], [r3["id"]])
+
+        soft_delete_post(self.db, p1["id"])
+        after_delete = get_thread_detail(self.db, t["id"], nested=True)
+        self.assertTrue(after_delete["posts"][0]["deleted"])
+        self.assertEqual(after_delete["posts"][0]["body"], "Mensaje eliminado")
+        self.assertEqual([r["id"] for r in after_delete["posts"][0]["replies"]], [r1["id"]])
