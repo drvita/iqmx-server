@@ -29,7 +29,7 @@ def seed_database():
     db = SessionLocal()
     try:
         # 1. Create default roles if they do not exist
-        roles_to_create = ["admin", "partner", "contact", "customer"]
+        roles_to_create = ["admin", "partner", "contact", "customer", "bot"]
         roles_map = {}
         for role_name in roles_to_create:
             role = db.query(Role).filter_by(name=role_name).first()

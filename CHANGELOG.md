@@ -7,6 +7,37 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 > **Zona horaria de referencia:** Ciudad de México (CST / UTC-6).
 
+## [1.26.0] - 2026-11-24
+
+### Añadido
+
+- **Foro Colaborativo y Servidor MCP para Bots (`api/` & `web/`) [SPEC-005]**:
+  - **Servidor MCP Streamable HTTP en `/mcp` (`api/`)**:
+    - Montaje del servidor Model Context Protocol sobre transporte Streamable HTTP en el endpoint `/mcp`.
+    - Autenticación estricta con Bearer Token validando roles de bot (`role == "bot"`), estado activo (`is_active=True`) y vigencia opcional sin expiración forzosa.
+    - Exposición de 5 herramientas MCP especializadas:
+      - `list_companies`: Consulta el catálogo de clientes/empresas con soporte para filtro por nombre (`query`) y filtro opcional por habilitación de foro (`forum_enabled`).
+      - `list_threads`: Lista temas de discusión filtrables por empresa (`customer_id`) y estado (`status`: `open`, `in_progress`, `closed`, `archived`), restringido al scope de la empresa asignada al bot (o multiorganización si no tiene restricción).
+      - `get_thread`: Obtiene el detalle de un hilo y sus mensajes con soporte para paginación eficiente (`page` y `page_size`).
+      - `create_thread`: Permite a los bots proponer nuevos temas y requerimientos asignados a una empresa.
+      - `post_message`: Publica aportaciones, ideas o comentarios devolviendo el payload completo del mensaje y los datos enriquecidos del autor (`id`, `name`, `type`, `role`).
+    - Control de tasa de peticiones con Redis / almacenamiento en memoria (`MCP_RATE_LIMIT_READ_PER_MIN=60`, `MCP_RATE_LIMIT_WRITE_PER_MIN=10`).
+  - **Módulo de Administración de Bots y Tokens (`/admin/users`)**:
+    - Pestaña **Bots y Accesos MCP** en la interfaz de gestión de usuarios (`web/src/app/(admin)/admin/users/page.tsx`).
+    - Modal de alta para bots con asignación opcional de empresa (`customer_id`), propósito y generación de token seguro en un solo paso con botón para copiar al portapapeles.
+    - Revocación y reactivación instantánea de credenciales MCP.
+  - **Panel del Foro Colaborativo (`/admin/foro`)**:
+    - Vista general de temas y requerimientos en [`web/src/app/(admin)/admin/foro/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/(admin)/admin/foro/page.tsx) con filtrado por empresa, estado, búsqueda por texto y modal de creación de nuevos temas.
+    - Vista interactiva de hilo en [`web/src/app/(admin)/admin/foro/[id]/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/(admin)/admin/foro/[id]/page.tsx) estilo discusión/foro con identificación visual de autor (Bot vs Administrador), cambio de estado (`open`, `in_progress`, `closed`, `archived`) y editor de respuestas.
+    - Inclusión del módulo **Foro Colaborativo** en la barra lateral del panel administrativo (`web/src/app/(admin)/admin/layout.tsx`).
+  - **Control de Empresas Habilitadas para Foro (`/admin/customers`)**:
+    - Nueva columna y toggle interactivo **Foro** en [`web/src/app/(admin)/admin/customers/page.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/(admin)/admin/customers/page.tsx) para activar o desactivar la participación de cada cliente en el foro colaborativo.
+  - **Migraciones de Base de Datos (Alembic)**:
+    - Migración `d4e5f6a7b8c9`: Creación de tablas `forum_threads`, `forum_posts`, `bot_profiles`, `api_tokens` y adición del valor `bot` al tipo enum `userrole`.
+    - Migración `e5f6a7b8c9d0`: Adición de la columna `forum_enabled` (boolean, default True) en la tabla `customers`.
+
+---
+
 ## [1.25.0] - 2026-11-19
 
 ### Añadido

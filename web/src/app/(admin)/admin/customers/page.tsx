@@ -24,6 +24,7 @@ type Customer = {
   tax_id: string | null;
   origin: string;
   is_active: boolean;
+  forum_enabled: boolean;
   privacy_accepted_at: string;
   created_at: string;
   whatsapp_numbers_count: number;
@@ -46,6 +47,7 @@ export default function AdminCustomersPage() {
     phone: "",
     tax_id: "",
     is_active: true,
+    forum_enabled: false,
   });
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState<string | null>(null);
@@ -117,6 +119,43 @@ export default function AdminCustomersPage() {
     }
   };
 
+  const handleToggleForumEnabled = async (customer: Customer) => {
+    const token = localStorage.getItem("iqmx_admin_token");
+    if (!token) return;
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || "";
+    setUpdatingId(customer.id);
+    setFeedbackMsg(null);
+
+    try {
+      const res = await fetch(`${apiUrl}/api/admin/customers/${customer.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ forum_enabled: !customer.forum_enabled }),
+      });
+
+      if (res.ok) {
+        const updated = await res.json();
+        setCustomers((prev) =>
+          prev.map((c) => (c.id === updated.id ? updated : c)),
+        );
+        setFeedbackMsg({
+          type: "success",
+          text: `${updated.company_name} ${updated.forum_enabled ? "habilitada" : "deshabilitada"} en el Foro Colaborativo.`,
+        });
+      }
+    } catch {
+      setFeedbackMsg({
+        type: "error",
+        text: "Error al cambiar visibilidad de la empresa en el foro.",
+      });
+    } finally {
+      setUpdatingId(null);
+    }
+  };
+
   const openEditModal = (c: Customer) => {
     setSelectedCustomerForEdit(c);
     setEditForm({
@@ -126,6 +165,7 @@ export default function AdminCustomersPage() {
       phone: c.phone || "",
       tax_id: c.tax_id || "",
       is_active: c.is_active,
+      forum_enabled: Boolean(c.forum_enabled),
     });
     setEditError(null);
   };
@@ -157,6 +197,7 @@ export default function AdminCustomersPage() {
             phone: editForm.phone.trim() || null,
             tax_id: editForm.tax_id.trim() || null,
             is_active: editForm.is_active,
+            forum_enabled: editForm.forum_enabled,
           }),
         },
       );
@@ -244,6 +285,7 @@ export default function AdminCustomersPage() {
               <th className="px-5 py-3.5">Correo y Teléfono</th>
               <th className="px-4 py-3.5">Membresías Activas</th>
               <th className="px-4 py-3.5">Origen</th>
+              <th className="px-4 py-3.5">Foro</th>
               <th className="px-4 py-3.5">Estado</th>
               <th className="px-4 py-3.5 text-center">Acciones</th>
             </tr>
@@ -317,6 +359,22 @@ export default function AdminCustomersPage() {
 
                 <td className="px-4 py-4 whitespace-nowrap">
                   <button
+                    type="button"
+                    onClick={() => handleToggleForumEnabled(c)}
+                    disabled={updatingId === c.id}
+                    title="Clic para habilitar o deshabilitar en el Foro Colaborativo"
+                    className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold border transition-colors cursor-pointer disabled:opacity-50 ${
+                      c.forum_enabled
+                        ? "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                        : "bg-gray-100 text-gray-600 border-gray-200 hover:bg-gray-200"
+                    }`}
+                  >
+                    {c.forum_enabled ? "Habilitada" : "Oculta"}
+                  </button>
+                </td>
+
+                <td className="px-4 py-4 whitespace-nowrap">
+                  <button
                     onClick={() => handleToggleStatus(c)}
                     disabled={updatingId === c.id}
                     title="Clic para cambiar estado"
@@ -354,7 +412,7 @@ export default function AdminCustomersPage() {
 
             {filteredCustomers.length === 0 && !loading && (
               <tr>
-                <td colSpan={6} className="p-8 text-center text-gray-400">
+                <td colSpan={7} className="p-8 text-center text-gray-400">
                   {searchTerm
                     ? "No se encontraron clientes que coincidan con la búsqueda."
                     : "No hay clientes registrados en la plataforma todavía."}
@@ -364,7 +422,7 @@ export default function AdminCustomersPage() {
 
             {loading && (
               <tr>
-                <td colSpan={6} className="p-8 text-center text-gray-400">
+                <td colSpan={7} className="p-8 text-center text-gray-400">
                   Cargando directorio de clientes…
                 </td>
               </tr>
@@ -533,6 +591,28 @@ export default function AdminCustomersPage() {
                   (/portal/login). El cliente puede seguir utilizando el CRM u
                   otros productos de manera independiente.
                 </p>
+              </div>
+
+              {/* Habilitación en Foro Colaborativo */}
+              <div className="rounded-xl border border-blue-100 bg-blue-50/50 p-3.5">
+                <label className="flex items-start gap-2.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={editForm.forum_enabled}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, forum_enabled: e.target.checked })
+                    }
+                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <div>
+                    <span className="block text-xs font-bold text-gray-900">
+                      Habilitada en el Foro Colaborativo
+                    </span>
+                    <span className="block text-[11px] text-gray-600 mt-0.5">
+                      Al activarla, esta empresa aparece en el módulo Foro y en la herramienta de consulta para bots.
+                    </span>
+                  </div>
+                </label>
               </div>
 
               {/* Botones */}

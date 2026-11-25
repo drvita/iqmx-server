@@ -24,3 +24,6 @@ langchain-google-genai>=1.0.0
 httpx>=0.27.0
 slowapi>=0.1.9
 sentry-sdk>=2.0.0
+
+# MCP Server
+mcp>=2.0.0

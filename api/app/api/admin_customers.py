@@ -30,6 +30,7 @@ class AdminCustomerResponse(BaseModel):
     tax_id: Optional[str] = None
     origin: str
     is_active: bool
+    forum_enabled: bool = False
     privacy_accepted_at: datetime
     created_at: datetime
     whatsapp_numbers_count: int = 0
@@ -47,6 +48,7 @@ class AdminUpdateCustomerRequest(BaseModel):
     phone: Optional[str] = Field(None, max_length=50)
     tax_id: Optional[str] = Field(None, max_length=50)
     is_active: Optional[bool] = None
+    forum_enabled: Optional[bool] = None
 
     @field_validator("email")
     @classmethod
@@ -94,6 +96,7 @@ def list_customers(
             tax_id=c.tax_id,
             origin=c.origin or "web_signup",
             is_active=c.is_active,
+            forum_enabled=bool(c.forum_enabled),
             privacy_accepted_at=c.privacy_accepted_at,
             created_at=c.created_at,
             whatsapp_numbers_count=wa_count,
@@ -138,6 +141,7 @@ def get_customer_detail(
         tax_id=c.tax_id,
         origin=c.origin or "web_signup",
         is_active=c.is_active,
+        forum_enabled=bool(c.forum_enabled),
         privacy_accepted_at=c.privacy_accepted_at,
         created_at=c.created_at,
         whatsapp_numbers_count=wa_count,
@@ -254,9 +258,11 @@ def update_customer(
     if payload.tax_id is not None:
         customer.tax_id = payload.tax_id.strip() if payload.tax_id.strip() else None
 
-    # 6. Estado de la cuenta (activo o suspendido)
+    # 6. Estado de la cuenta (activo o suspendido) y habilitación en Foro
     if payload.is_active is not None:
         customer.is_active = payload.is_active
+    if payload.forum_enabled is not None:
+        customer.forum_enabled = payload.forum_enabled
 
     customer.updated_at = datetime.utcnow()
     db.commit()

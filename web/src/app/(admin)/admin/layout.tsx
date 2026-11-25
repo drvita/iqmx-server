@@ -15,6 +15,9 @@ import {
   UserCircleIcon,
   ArrowRightOnRectangleIcon,
   MagnifyingGlassCircleIcon,
+  ChatBubbleLeftRightIcon,
+  Bars3Icon,
+  XMarkIcon,
 } from '@heroicons/react/24/outline';
 import LogoutConfirmationModal from '@/components/LogoutConfirmationModal';
 
@@ -26,6 +29,7 @@ const NAV_ITEMS = [
   { name: 'Suscripciones', href: '/admin/subscriptions', icon: CreditCardIcon },
   { name: 'Gestión CRM', href: '/admin/crm', icon: CpuChipIcon },
   { name: 'Gestión Checador', href: '/admin/checador', icon: IdentificationIcon },
+  { name: 'Foro', href: '/admin/foro', icon: ChatBubbleLeftRightIcon },
   { name: 'Usuarios Sistema', href: '/admin/users', icon: ShieldCheckIcon },
   { name: 'Mi Perfil', href: '/admin/profile', icon: UserCircleIcon },
 ];
@@ -40,6 +44,11 @@ export default function AdminLayout({
   const [adminUser, setAdminUser] = useState<{ name: string; email: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    setMobileMenuOpen(false);
+  }, [pathname]);
 
   const isAuthPage = pathname.startsWith('/admin/login') || pathname.startsWith('/admin/setup');
 
@@ -100,9 +109,52 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="h-screen bg-gray-50 text-gray-900 flex flex-col lg:flex-row font-sans overflow-hidden">
-      {/* Sidebar Lateral Fijo Claro */}
-      <aside className="w-full lg:w-64 lg:h-screen bg-white border-r border-gray-200 flex flex-col shrink-0 shadow-xs z-20">
+    <div className="min-h-screen lg:h-screen bg-gray-50 text-gray-900 flex flex-col lg:flex-row font-sans lg:overflow-hidden">
+      {/* Barra superior compacta en móvil/tablet */}
+      <header className="lg:hidden sticky top-0 z-30 flex h-14 items-center justify-between border-b border-gray-200 bg-white px-4 shadow-2xs">
+        <Link href="/admin/dashboard" className="flex items-center gap-2">
+          <Image
+            src="/logo.png"
+            alt="IQISSMexico Logo"
+            width={108}
+            height={32}
+            className="h-7 w-auto"
+            priority
+          />
+          <span className="rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-bold text-blue-700 uppercase tracking-wider">
+            Admin
+          </span>
+        </Link>
+        <button
+          type="button"
+          onClick={() => setMobileMenuOpen((prev) => !prev)}
+          aria-expanded={mobileMenuOpen}
+          aria-label={mobileMenuOpen ? 'Cerrar menú de navegación' : 'Abrir menú de navegación'}
+          className="inline-flex items-center justify-center rounded-lg border border-gray-200 p-2 text-gray-600 hover:bg-gray-100 cursor-pointer"
+        >
+          {mobileMenuOpen ? (
+            <XMarkIcon className="h-5 w-5" aria-hidden="true" />
+          ) : (
+            <Bars3Icon className="h-5 w-5" aria-hidden="true" />
+          )}
+        </button>
+      </header>
+
+      {/* Backdrop móvil */}
+      {mobileMenuOpen && (
+        <div
+          className="fixed inset-0 z-30 bg-gray-900/40 backdrop-blur-[1px] lg:hidden"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Sidebar Lateral Fijo en Desktop / Drawer en Móvil */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 w-64 bg-white border-r border-gray-200 flex flex-col shrink-0 shadow-lg lg:shadow-xs transition-transform duration-200 lg:static lg:h-screen lg:translate-x-0 ${
+          mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+      >
         <div className="p-4 border-b border-gray-200 flex items-center justify-between">
           <Link href="/admin/dashboard" className="flex items-center gap-2">
             <Image
@@ -117,6 +169,14 @@ export default function AdminLayout({
               Admin
             </span>
           </Link>
+          <button
+            type="button"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Cerrar menú"
+            className="lg:hidden rounded-lg p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 cursor-pointer"
+          >
+            <XMarkIcon className="h-5 w-5" aria-hidden="true" />
+          </button>
         </div>
 
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
@@ -127,6 +187,7 @@ export default function AdminLayout({
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={() => setMobileMenuOpen(false)}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
                   active
                     ? 'bg-blue-50 text-blue-700 font-semibold'
@@ -145,6 +206,7 @@ export default function AdminLayout({
           <div className="flex items-center justify-between px-2 py-1">
             <Link
               href="/admin/profile"
+              onClick={() => setMobileMenuOpen(false)}
               className="truncate flex-1 group hover:opacity-80 transition-opacity"
               title="Ver y editar mi perfil"
             >
@@ -164,8 +226,8 @@ export default function AdminLayout({
         </div>
       </aside>
 
-      {/* Contenido Principal con Scroll Independiente */}
-      <main className="flex-1 h-screen overflow-y-auto min-w-0 p-4 sm:p-6 lg:p-8">
+      {/* Contenido Principal con Scroll Independiente en Desktop y Scroll Natural en Móvil */}
+      <main className="flex-1 lg:h-screen lg:overflow-y-auto min-w-0 p-4 sm:p-6 lg:p-8">
         {children}
       </main>
       {/* Modal de Confirmación de Cierre de Sesión */}

@@ -274,6 +274,12 @@ async def login_customer(
             detail="Correo electrónico o contraseña incorrectos."
         )
 
+    if user.has_role("bot"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Las cuentas de tipo bot no pueden iniciar sesión con contraseña."
+        )
+
     # Validar rol customer
     if not user.has_role("customer"):
         raise HTTPException(
@@ -507,9 +513,9 @@ async def forgot_password(
     )
 
     user = db.query(User).filter(User.email == clean_email).first()
-    if not user:
+    if not user or user.has_role("bot"):
         # Anti-enumeración: log informativo interno y respuesta idéntica
-        logger.info(f"[ForgotPassword] Solicitud para correo no existente: {clean_email}")
+        logger.info(f"[ForgotPassword] Solicitud ignorada o correo no existente: {clean_email}")
         return ForgotPasswordResponse(success=True, message=generic_msg)
 
     # Obtener nombre de contacto y empresa si existe cliente asociado

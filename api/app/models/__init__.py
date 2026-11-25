@@ -20,6 +20,10 @@ from app.models.prospecting import (
     ProspectingBusiness,
     ProspectingSource,
 )
+from app.models.forum_thread import ForumThread
+from app.models.forum_post import ForumPost
+from app.models.bot_profile import BotProfile
+from app.models.api_token import ApiToken
 
 # Exponer todos los modelos para registro centralizado en Base.metadata
 __all__ = [
@@ -43,4 +47,8 @@ __all__ = [
     "ProspectingRun",
     "ProspectingBusiness",
     "ProspectingSource",
+    "ForumThread",
+    "ForumPost",
+    "BotProfile",
+    "ApiToken",
 ]

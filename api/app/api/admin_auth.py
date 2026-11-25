@@ -180,6 +180,12 @@ def login_admin(
             detail="Correo electrónico o contraseña incorrectos."
         )
 
+    if user.has_role("bot"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Las cuentas de tipo bot no pueden iniciar sesión con contraseña."
+        )
+
     if not user.has_role("admin"):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

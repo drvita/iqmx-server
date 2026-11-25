@@ -91,6 +91,11 @@ class Settings(BaseSettings):
     LLM_MODEL: str = "openrouter/free"
     LLM_TEMPERATURE: float = 0.1
 
+    # Foro Colaborativo y Servidor MCP para Bots
+    MCP_RATE_LIMIT_READ_PER_MIN: int = 60
+    MCP_RATE_LIMIT_WRITE_PER_MIN: int = 10
+    FORUM_MAX_BODY_CHARS: int = 10000
+
     @property
     def db_url(self) -> str:
         if self.DATABASE_TYPE == "postgresql":

@@ -1,11 +1,13 @@
 import os
 import sys
 import logging
+from contextlib import asynccontextmanager
 import sentry_sdk
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi.errors import RateLimitExceeded
 from slowapi import _rate_limit_exceeded_handler
+from starlette.routing import Route
 
 # Configurar logging unificado para Docker y Uvicorn
 logging.basicConfig(
@@ -18,7 +20,8 @@ logger = logging.getLogger("uvicorn.error")
 from app.config import settings
 from app.limiter import limiter
 from app.api import events, portal_auth, portal_whatsapp, portal_webhook, public_catalog, portal_subscriptions, portal_crm, portal_checador, internal_products
-from app.api import admin_auth, admin_users, admin_customers, admin_catalog, admin_crm, admin_checador, admin_subscriptions, admin_security, admin_notifications, admin_prospecting
+from app.api import admin_auth, admin_users, admin_customers, admin_catalog, admin_crm, admin_checador, admin_subscriptions, admin_security, admin_notifications, admin_prospecting, admin_bots, admin_forum
+from app.mcp.server import mcp_asgi_app
 from app.api.webhooks import (
     whatsapp_router,
     whatsapp_legacy_router,
@@ -36,11 +39,19 @@ if ENVIRONMENT == "production":
         send_default_pii=True,
     )
 
+@asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    session_manager = mcp_asgi_app.reset_app()
+    async with session_manager.run():
+        yield
+
+
 # Inicializar FastAPI
 app = FastAPI(
     title="IQMX Central API & Gateway",
     description="Servicio central para administración de base de datos, onboarding de WhatsApp y Gateway de Webhooks.",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # Configurar Rate Limiter
@@ -88,10 +99,23 @@ app.include_router(admin_subscriptions.router)
 app.include_router(admin_security.router)
 app.include_router(admin_notifications.router)
 app.include_router(admin_prospecting.router)
+app.include_router(admin_bots.router)
+app.include_router(admin_forum.router)
 
 # Registrar rutas heredadas / internas
 app.include_router(events.router)
 app.include_router(internal_products.router)
+
+# Registrar servidor MCP para bots (/mcp y el legacy /mcp/mcp, sin redirección)
+for mcp_path in ("/mcp", "/mcp/mcp"):
+    app.router.routes.append(
+        Route(
+            mcp_path,
+            endpoint=mcp_asgi_app,
+            methods=["GET", "POST", "DELETE", "OPTIONS"],
+            include_in_schema=False,
+        )
+    )
 
 
 @app.get("/health")

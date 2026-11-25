@@ -40,6 +40,17 @@ body {
   animation: slide-up 0.3s ease-out;
 }
 
+dialog:modal {
+  overscroll-behavior: contain;
+}
+
+dialog::backdrop {
+  overflow: hidden;
+  overscroll-behavior: contain;
+  background-color: rgba(17, 24, 39, 0.45);
+  backdrop-filter: blur(2px);
+}
+
 @media (prefers-reduced-motion: no-preference) {
   @supports ((animation-timeline: view()) and (animation-range: entry)) {
     @keyframes deck-reveal {

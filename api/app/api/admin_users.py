@@ -67,6 +67,16 @@ class UpdateSystemUserRequest(BaseModel):
     partner_id: Optional[int] = None
     telegram_chat_id: Optional[str] = None
 
+    @field_validator("role")
+    @classmethod
+    def validate_update_role(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        clean = v.strip().lower()
+        if clean not in ["admin", "partner", "contact"]:
+            raise ValueError("Rol no válido para usuario de sistema.")
+        return clean
+
 class GrantCustomerRoleRequest(BaseModel):
     company_name: str = Field(..., min_length=2, max_length=150)
     contact_name: str = Field(..., min_length=2, max_length=100)
@@ -174,6 +184,11 @@ def update_system_user(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado.")
+    if user.has_role("bot"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Las cuentas de bot se administran desde el módulo de bots."
+        )
 
     # Verificar que sea un usuario de sistema
     if not any(r in ["admin", "partner", "contact"] for r in user.role_names):
@@ -235,6 +250,11 @@ def grant_customer_role(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado.")
+    if user.has_role("bot"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Las cuentas de bot se administran desde el módulo de bots."
+        )
 
     customer_role = db.query(Role).filter(Role.name == "customer").first()
     if not customer_role:
@@ -301,6 +321,11 @@ def revoke_customer_role(
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Usuario no encontrado.")
+    if user.has_role("bot"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Las cuentas de bot se administran desde el módulo de bots."
+        )
 
     customer_role = db.query(Role).filter(Role.name == "customer").first()
     if customer_role and customer_role in user.roles:

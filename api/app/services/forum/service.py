@@ -1,0 +1,518 @@
+from __future__ import annotations
+
+import logging
+from datetime import datetime
+from typing import Optional
+
+from sqlalchemy import func, or_
+from sqlalchemy.orm import Session
+
+from app.config import settings
+from app.lib.redis_client import get_redis_client
+from app.models.bot_profile import BotProfile
+from app.models.customer import Customer
+from app.models.forum_post import ForumPost
+from app.models.forum_thread import ForumThread
+from app.models.role import Role
+from app.models.user import User
+
+logger = logging.getLogger("uvicorn.error")
+
+VALID_THREAD_STATUSES = ("open", "in_progress", "done", "archived")
+BOT_WRITABLE_STATUSES = ("open", "in_progress")
+
+
+class ForumError(Exception):
+    """Base para errores de dominio del foro."""
+
+
+class ForumNotFoundError(ForumError):
+    pass
+
+
+class ForumValidationError(ForumError):
+    pass
+
+
+class ForumPermissionError(ForumError):
+    pass
+
+
+class ForumRateLimitError(ForumError):
+    pass
+
+
+def _is_bot_user(user: Optional[User]) -> bool:
+    return bool(user and user.has_role("bot"))
+
+
+def _clean_body(body: str, max_chars: Optional[int] = None) -> str:
+    limit = max_chars or settings.FORUM_MAX_BODY_CHARS
+    if body is None:
+        raise ForumValidationError("El contenido no puede estar vacío.")
+    stripped = body.strip()
+    if not stripped:
+        raise ForumValidationError("El contenido no puede estar vacío.")
+    if len(stripped) > limit:
+        raise ForumValidationError(f"El contenido no puede exceder {limit} caracteres.")
+    return stripped
+
+
+def check_mcp_rate_limit(token_id: int, bucket: str) -> None:
+    """Valida el límite de solicitudes por minuto en Redis (ventana fija)."""
+    if bucket == "read":
+        limit = settings.MCP_RATE_LIMIT_READ_PER_MIN
+    elif bucket == "write":
+        limit = settings.MCP_RATE_LIMIT_WRITE_PER_MIN
+    else:
+        raise ValueError(f"Bucket de límite desconocido: {bucket}")
+
+    minute_slot = int(datetime.utcnow().timestamp() // 60)
+    key = f"mcp_rl:{bucket}:{token_id}:{minute_slot}"
+
+    try:
+        r = get_redis_client()
+        count = r.incr(key)
+        if count == 1:
+            r.expire(key, 90)
+        if count > limit:
+            raise ForumRateLimitError("Límite de solicitudes alcanzado, intenta más tarde")
+    except ForumRateLimitError:
+        raise
+    except Exception as exc:
+        logger.warning(f"Redis no disponible para rate limit MCP ({bucket}, token #{token_id}): {exc}")
+
+
+def list_visible_companies(
+    db: Session,
+    scoped_customer_id: Optional[int] = None,
+    query_text: Optional[str] = None,
+    only_forum_enabled: bool = True,
+) -> list[dict]:
+    """Lista clientes activos visibles (y habilitados en el foro por defecto) para el actor."""
+    query = db.query(Customer).filter(Customer.is_active.is_(True))
+    if only_forum_enabled:
+        query = query.filter(Customer.forum_enabled.is_(True))
+    if scoped_customer_id is not None:
+        query = query.filter(Customer.id == scoped_customer_id)
+    if query_text and query_text.strip():
+        query = query.filter(Customer.company_name.ilike(f"%{query_text.strip()}%"))
+    rows = query.order_by(Customer.company_name.asc()).all()
+    return [{"id": c.id, "company_name": c.company_name} for c in rows]
+
+
+def _base_threads_query(
+    db: Session,
+    scoped_customer_id: Optional[int],
+    only_active_customers: bool,
+):
+    query = (
+        db.query(ForumThread, Customer, User)
+        .join(Customer, ForumThread.customer_id == Customer.id)
+        .join(User, ForumThread.author_user_id == User.id)
+        .filter(ForumThread.deleted_at.is_(None))
+    )
+    if only_active_customers:
+        query = query.filter(Customer.is_active.is_(True), Customer.forum_enabled.is_(True))
+    if scoped_customer_id is not None:
+        query = query.filter(ForumThread.customer_id == scoped_customer_id)
+    return query
+
+
+def _post_counts_by_thread(db: Session, thread_ids: list[int]) -> dict[int, int]:
+    if not thread_ids:
+        return {}
+    rows = (
+        db.query(ForumPost.thread_id, func.count(ForumPost.id))
+        .filter(ForumPost.thread_id.in_(thread_ids), ForumPost.deleted_at.is_(None))
+        .group_by(ForumPost.thread_id)
+        .all()
+    )
+    return {tid: count for tid, count in rows}
+
+
+def list_threads(
+    db: Session,
+    *,
+    scoped_customer_id: Optional[int] = None,
+    only_active_customers: bool = False,
+    customer_id: Optional[int] = None,
+    status: Optional[str] = None,
+    query_text: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 20,
+    max_page_size: int = 100,
+) -> dict:
+    """Lista temas paginados y ordenados por actividad reciente."""
+    safe_page = max(1, page)
+    safe_size = max(1, min(page_size, max_page_size))
+
+    if status and status not in VALID_THREAD_STATUSES:
+        raise ForumValidationError("Estado de tema no válido.")
+
+    q = _base_threads_query(db, scoped_customer_id=scoped_customer_id, only_active_customers=only_active_customers)
+
+    if customer_id is not None:
+        if scoped_customer_id is not None and customer_id != scoped_customer_id:
+            return {"items": [], "total": 0, "page": safe_page, "page_size": safe_size}
+        q = q.filter(ForumThread.customer_id == customer_id)
+
+    if status:
+        q = q.filter(ForumThread.status == status)
+
+    if query_text and query_text.strip():
+        pattern = f"%{query_text.strip()}%"
+        q = q.filter(or_(ForumThread.title.ilike(pattern), ForumThread.body.ilike(pattern)))
+
+    total = q.count()
+    rows = (
+        q.order_by(
+            func.coalesce(ForumThread.last_post_at, ForumThread.created_at).desc(),
+            ForumThread.id.desc(),
+        )
+        .offset((safe_page - 1) * safe_size)
+        .limit(safe_size)
+        .all()
+    )
+
+    counts = _post_counts_by_thread(db, [t.id for t, _, _ in rows])
+    items = []
+    for thread, customer, author in rows:
+        items.append({
+            "id": thread.id,
+            "customer_id": thread.customer_id,
+            "company_name": customer.company_name,
+            "title": thread.title,
+            "status": thread.status,
+            "period_label": thread.period_label,
+            "due_at": thread.due_at,
+            "author_name": author.name,
+            "author_is_bot": _is_bot_user(author),
+            "posts_count": counts.get(thread.id, 0),
+            "last_post_at": thread.last_post_at,
+            "created_at": thread.created_at,
+        })
+
+    return {
+        "items": items,
+        "total": total,
+        "page": safe_page,
+        "page_size": safe_size,
+    }
+
+
+def get_thread_detail(
+    db: Session,
+    thread_id: int,
+    *,
+    scoped_customer_id: Optional[int] = None,
+    only_active_customers: bool = False,
+    posts_page: Optional[int] = None,
+    posts_page_size: Optional[int] = None,
+) -> dict:
+    """Obtiene el detalle del tema y sus mensajes en orden cronológico (con paginación opcional)."""
+    row = (
+        _base_threads_query(db, scoped_customer_id=scoped_customer_id, only_active_customers=only_active_customers)
+        .filter(ForumThread.id == thread_id)
+        .first()
+    )
+    if not row:
+        raise ForumNotFoundError("Tema no encontrado.")
+
+    thread, customer, author = row
+    post_rows = (
+        db.query(ForumPost, User)
+        .join(User, ForumPost.author_user_id == User.id)
+        .filter(ForumPost.thread_id == thread.id)
+        .order_by(ForumPost.created_at.asc(), ForumPost.id.asc())
+        .all()
+    )
+
+    active_reply_parents = {
+        p.parent_post_id
+        for p, _ in post_rows
+        if p.parent_post_id is not None and p.deleted_at is None
+    }
+
+    posts_payload = []
+    for post, post_author in post_rows:
+        is_deleted = post.deleted_at is not None
+        if is_deleted and post.id not in active_reply_parents:
+            continue
+        posts_payload.append({
+            "id": post.id,
+            "parent_post_id": post.parent_post_id,
+            "body": "Mensaje eliminado" if is_deleted else post.body,
+            "author_user_id": post.author_user_id,
+            "author_name": post_author.name,
+            "author_is_bot": _is_bot_user(post_author),
+            "created_at": post.created_at,
+            "updated_at": post.updated_at,
+            "deleted": is_deleted,
+        })
+
+    posts_total = len(posts_payload)
+    if posts_page is not None or posts_page_size is not None:
+        safe_page = max(1, posts_page or 1)
+        safe_size = max(1, min(posts_page_size or 50, 100))
+        start = (safe_page - 1) * safe_size
+        end = start + safe_size
+        paged_posts = posts_payload[start:end]
+        has_more = end < posts_total
+    else:
+        safe_page = 1
+        safe_size = posts_total
+        paged_posts = posts_payload
+        has_more = False
+
+    return {
+        "id": thread.id,
+        "customer_id": thread.customer_id,
+        "company_name": customer.company_name,
+        "title": thread.title,
+        "body": thread.body,
+        "status": thread.status,
+        "period_label": thread.period_label,
+        "due_at": thread.due_at,
+        "author_user_id": thread.author_user_id,
+        "author_name": author.name,
+        "author_is_bot": _is_bot_user(author),
+        "last_post_at": thread.last_post_at,
+        "created_at": thread.created_at,
+        "updated_at": thread.updated_at,
+        "posts": paged_posts,
+        "posts_total": posts_total,
+        "posts_page": safe_page,
+        "posts_page_size": safe_size,
+        "has_more_posts": has_more,
+    }
+
+
+def create_thread(
+    db: Session,
+    *,
+    customer_id: int,
+    title: str,
+    body: str,
+    author_user_id: int,
+    period_label: Optional[str] = None,
+    due_at: Optional[datetime] = None,
+) -> dict:
+    """Crea un nuevo tema en el foro asignado a una empresa habilitada."""
+    customer = (
+        db.query(Customer)
+        .filter(
+            Customer.id == customer_id,
+            Customer.is_active.is_(True),
+            Customer.forum_enabled.is_(True),
+        )
+        .first()
+    )
+    if not customer:
+        raise ForumNotFoundError("Empresa no encontrada o no habilitada en el foro.")
+
+    clean_title = (title or "").strip()
+    if len(clean_title) < 3 or len(clean_title) > 200:
+        raise ForumValidationError("El título debe tener entre 3 y 200 caracteres.")
+
+    clean_body = _clean_body(body)
+    clean_period = period_label.strip() if period_label and period_label.strip() else None
+    if clean_period and len(clean_period) > 50:
+        raise ForumValidationError("El periodo no puede exceder 50 caracteres.")
+
+    now = datetime.utcnow()
+    thread = ForumThread(
+        customer_id=customer.id,
+        title=clean_title,
+        body=clean_body,
+        status="open",
+        period_label=clean_period,
+        due_at=due_at,
+        author_user_id=author_user_id,
+        last_post_at=now,
+        created_at=now,
+        updated_at=now,
+    )
+    db.add(thread)
+    db.commit()
+    db.refresh(thread)
+    return get_thread_detail(db, thread.id)
+
+
+def update_thread(
+    db: Session,
+    thread_id: int,
+    *,
+    title: Optional[str] = None,
+    body: Optional[str] = None,
+    status: Optional[str] = None,
+    period_label: Optional[str] = None,
+    due_at: Optional[datetime] = None,
+    fields_set: Optional[set[str]] = None,
+) -> dict:
+    """Actualiza un tema existente o cambia su estado."""
+    thread = db.query(ForumThread).filter(ForumThread.id == thread_id, ForumThread.deleted_at.is_(None)).first()
+    if not thread:
+        raise ForumNotFoundError("Tema no encontrado.")
+
+    fields = fields_set if fields_set is not None else set()
+
+    if title is not None:
+        clean_title = title.strip()
+        if len(clean_title) < 3 or len(clean_title) > 200:
+            raise ForumValidationError("El título debe tener entre 3 y 200 caracteres.")
+        thread.title = clean_title
+
+    if body is not None:
+        thread.body = _clean_body(body)
+
+    if status is not None:
+        if status not in VALID_THREAD_STATUSES:
+            raise ForumValidationError("Estado de tema no válido.")
+        thread.status = status
+
+    if "period_label" in fields or period_label is not None:
+        clean_period = period_label.strip() if period_label and period_label.strip() else None
+        if clean_period and len(clean_period) > 50:
+            raise ForumValidationError("El periodo no puede exceder 50 caracteres.")
+        thread.period_label = clean_period
+
+    if "due_at" in fields or due_at is not None:
+        thread.due_at = due_at
+
+    thread.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(thread)
+    return get_thread_detail(db, thread.id)
+
+
+def soft_delete_thread(db: Session, thread_id: int) -> None:
+    """Marca un tema como eliminado (borrado lógico)."""
+    thread = db.query(ForumThread).filter(ForumThread.id == thread_id, ForumThread.deleted_at.is_(None)).first()
+    if not thread:
+        raise ForumNotFoundError("Tema no encontrado.")
+    thread.deleted_at = datetime.utcnow()
+    db.commit()
+
+
+def create_post(
+    db: Session,
+    *,
+    thread_id: int,
+    body: str,
+    author_user_id: int,
+    is_bot: bool,
+    scoped_customer_id: Optional[int] = None,
+    parent_post_id: Optional[int] = None,
+) -> dict:
+    """Publica un mensaje o respuesta en un tema del foro."""
+    query = (
+        db.query(ForumThread, Customer)
+        .join(Customer, ForumThread.customer_id == Customer.id)
+        .filter(ForumThread.id == thread_id, ForumThread.deleted_at.is_(None))
+    )
+    if is_bot:
+        query = query.filter(Customer.is_active.is_(True), Customer.forum_enabled.is_(True))
+    if scoped_customer_id is not None:
+        query = query.filter(ForumThread.customer_id == scoped_customer_id)
+
+    row = query.first()
+    if not row:
+        raise ForumNotFoundError("Tema no encontrado.")
+
+    thread, _ = row
+
+    if is_bot:
+        if thread.status not in BOT_WRITABLE_STATUSES:
+            raise ForumValidationError("Solo es posible comentar en temas abiertos o en curso.")
+    else:
+        if thread.status == "archived":
+            raise ForumValidationError("No se pueden agregar mensajes a un tema archivado.")
+
+    clean_body = _clean_body(body)
+
+    if parent_post_id is not None:
+        parent = (
+            db.query(ForumPost)
+            .filter(
+                ForumPost.id == parent_post_id,
+                ForumPost.thread_id == thread.id,
+                ForumPost.deleted_at.is_(None),
+            )
+            .first()
+        )
+        if not parent:
+            raise ForumValidationError("El mensaje al que intentas responder no existe en este tema.")
+        if parent.parent_post_id is not None:
+            raise ForumValidationError("Solo se permite un nivel de respuesta en los mensajes.")
+
+    now = datetime.utcnow()
+    post = ForumPost(
+        thread_id=thread.id,
+        parent_post_id=parent_post_id,
+        body=clean_body,
+        author_user_id=author_user_id,
+        created_at=now,
+        updated_at=now,
+    )
+    thread.last_post_at = now
+    thread.updated_at = now
+    db.add(post)
+    db.commit()
+    db.refresh(post)
+
+    author = db.query(User).filter(User.id == author_user_id).first()
+    return {
+        "id": post.id,
+        "thread_id": post.thread_id,
+        "parent_post_id": post.parent_post_id,
+        "body": post.body,
+        "author_user_id": post.author_user_id,
+        "author_name": author.name if author else "Usuario",
+        "author_is_bot": _is_bot_user(author),
+        "created_at": post.created_at,
+        "updated_at": post.updated_at,
+        "deleted": False,
+    }
+
+
+def update_post(
+    db: Session,
+    *,
+    post_id: int,
+    body: str,
+    editor_user_id: int,
+) -> dict:
+    """Edita un mensaje (solo permitido para el autor humano administrador)."""
+    post = db.query(ForumPost).filter(ForumPost.id == post_id, ForumPost.deleted_at.is_(None)).first()
+    if not post:
+        raise ForumNotFoundError("Mensaje no encontrado.")
+    if post.author_user_id != editor_user_id:
+        raise ForumPermissionError("Solo puedes editar tus propios mensajes.")
+
+    post.body = _clean_body(body)
+    post.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(post)
+
+    author = db.query(User).filter(User.id == post.author_user_id).first()
+    return {
+        "id": post.id,
+        "parent_post_id": post.parent_post_id,
+        "body": post.body,
+        "author_user_id": post.author_user_id,
+        "author_name": author.name if author else "Usuario",
+        "author_is_bot": _is_bot_user(author),
+        "created_at": post.created_at,
+        "updated_at": post.updated_at,
+        "deleted": False,
+    }
+
+
+def soft_delete_post(db: Session, post_id: int) -> None:
+    """Borrado lógico de un mensaje por un administrador."""
+    post = db.query(ForumPost).filter(ForumPost.id == post_id, ForumPost.deleted_at.is_(None)).first()
+    if not post:
+        raise ForumNotFoundError("Mensaje no encontrado.")
+    post.deleted_at = datetime.utcnow()
+    db.commit()

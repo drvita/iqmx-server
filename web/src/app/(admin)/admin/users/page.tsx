@@ -10,7 +10,9 @@ import {
   ArrowTopRightOnSquareIcon,
   CheckCircleIcon,
   XMarkIcon,
+  CpuChipIcon,
 } from '@heroicons/react/24/outline';
+import BotsSection from '@/components/admin/bots/BotsSection';
 
 type SystemUser = {
   id: number;
@@ -25,6 +27,8 @@ type SystemUser = {
 };
 
 export default function AdminUsersPage() {
+  const [activeTab, setActiveTab] = useState<'users' | 'bots'>('users');
+  const [openBotCreateTrigger, setOpenBotCreateTrigger] = useState(0);
   const [users, setUsers] = useState<SystemUser[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -305,24 +309,69 @@ export default function AdminUsersPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Usuarios del Sistema</h1>
+          <h1 className="text-2xl font-bold text-gray-900 tracking-tight">Usuarios del Sistema y Bots MCP</h1>
           <p className="text-sm text-gray-600 mt-1">
-            Administra los operadores internos y administradores. Puedes otorgar o revocar acceso al Portal de Clientes con las mismas credenciales.
+            Administra operadores internos, administradores y cuentas de bot con tokens de acceso para el foro colaborativo.
           </p>
         </div>
+        {activeTab === 'users' ? (
+          <button
+            onClick={() => {
+              setCreateErrorMsg(null);
+              setIsCreateModalOpen(true);
+            }}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 shadow-xs transition-colors shrink-0 cursor-pointer"
+          >
+            <UserPlusIcon className="h-4 w-4" />
+            <span>Nuevo Usuario Interno</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setOpenBotCreateTrigger((n) => n + 1)}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 shadow-xs transition-colors shrink-0 cursor-pointer"
+          >
+            <CpuChipIcon className="h-4 w-4" />
+            <span>Nuevo Bot</span>
+          </button>
+        )}
+      </div>
+
+      {/* Navegación por pestañas */}
+      <div className="flex items-center gap-2 border-b border-gray-200">
         <button
-          onClick={() => {
-            setCreateErrorMsg(null);
-            setIsCreateModalOpen(true);
-          }}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700 shadow-xs transition-colors shrink-0 cursor-pointer"
+          type="button"
+          onClick={() => setActiveTab('users')}
+          className={`inline-flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-semibold transition-colors cursor-pointer ${
+            activeTab === 'users'
+              ? 'border-blue-600 text-blue-700'
+              : 'border-transparent text-gray-500 hover:text-gray-800'
+          }`}
         >
-          <UserPlusIcon className="h-4 w-4" />
-          <span>Nuevo Usuario Interno</span>
+          <ShieldCheckIcon className="h-4 w-4" />
+          <span>Usuarios del Sistema</span>
+          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-bold text-gray-600">
+            {users.length}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab('bots')}
+          className={`inline-flex items-center gap-2 border-b-2 px-4 py-2.5 text-xs font-semibold transition-colors cursor-pointer ${
+            activeTab === 'bots'
+              ? 'border-blue-600 text-blue-700'
+              : 'border-transparent text-gray-500 hover:text-gray-800'
+          }`}
+        >
+          <CpuChipIcon className="h-4 w-4" />
+          <span>Bots y Accesos MCP</span>
         </button>
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white shadow-xs overflow-hidden">
+      {activeTab === 'bots' ? (
+        <BotsSection openCreateTrigger={openBotCreateTrigger} />
+      ) : (
+        <div className="rounded-xl border border-gray-200 bg-white shadow-xs overflow-x-auto">
         <table className="w-full text-left text-xs text-gray-700">
           <thead className="bg-gray-50 border-b border-gray-200 text-[11px] uppercase tracking-wider text-gray-500 font-semibold">
             <tr>
@@ -407,6 +456,7 @@ export default function AdminUsersPage() {
           </tbody>
         </table>
       </div>
+      )}
 
       {/* Modal Crear Usuario Interno */}
       {isCreateModalOpen && (
