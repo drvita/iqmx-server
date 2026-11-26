@@ -88,14 +88,19 @@ describe("resolución de incidencias RH y exportación detalle GPS", () => {
           codigoInterno: "V-01",
           nombreCompleto: "Carlos Mendoza",
           puesto: "Vendedor",
+          tipoJornada: "diurna",
           workedMinutes: 2400,
           workedHours: 40,
+          ordinaryHours: 40,
+          doubleOvertimeHours: 0,
+          tripleOvertimeHours: 0,
           maxHours: 46,
           daysComplete: 5,
           daysRequireCorrection: 0,
           hasInProgressToday: false,
           tardies: 0,
           weeklyStatus: "normal",
+          alertaJornada: 0,
         },
       ],
       [
@@ -121,7 +126,7 @@ describe("resolución de incidencias RH y exportación detalle GPS", () => {
       "America/Mexico_City"
     );
 
-    expect(unified.startsWith("\uFEFFSemana,Código,Colaborador")).toBe(true);
+    expect(unified.startsWith("\uFEFFPeriodo,Código,Colaborador")).toBe(true);
     expect(unified).toContain("Carlos Mendoza");
     expect(unified).toContain("Google Maps");
     expect(unified).toContain("https://www.google.com/maps?q=20.6767,-103.3475");

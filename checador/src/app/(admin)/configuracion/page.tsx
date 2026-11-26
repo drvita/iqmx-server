@@ -33,6 +33,12 @@ export default async function ConfiguracionPage() {
           colorSecundario: overview.org.colorSecundario,
           mensajeBienvenida: overview.org.mensajeBienvenida ?? "Bienvenido",
           horasSemanalesMax: overview.org.horasSemanalesMax,
+          horasSemanalesMixta: overview.org.horasSemanalesMixta,
+          horasSemanalesNocturna: overview.org.horasSemanalesNocturna,
+          razonSocial: overview.org.razonSocial,
+          rfc: overview.org.rfc,
+          registroPatronalImss: overview.org.registroPatronalImss,
+          periodicidadReporte: overview.org.periodicidadReporte,
           hasAuditPin: Boolean(overview.org.pinAuditoriaHash),
         }}
         canEdit={isOrgAdmin}

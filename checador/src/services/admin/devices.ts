@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { and, count, desc, eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { getRedis } from "@/lib/redis";
+import { evaluateDeviceCreationLimit } from "@/services/admin/device-limits";
 import type { DeviceType } from "@/services/sync/gps-incidence";
 
 export const PAIRING_PIN_TTL_SECONDS = 600; // 10 minutos
@@ -111,28 +112,15 @@ export async function createDeviceWithPin(
       : "kiosco_sucursal";
 
   const [org] = await db
-    .select({ maxDispositivos: schema.organizaciones.maxDispositivos })
+    .select({
+      maxDispositivos: schema.organizaciones.maxDispositivos,
+      maxEmpleados: schema.organizaciones.maxEmpleados,
+    })
     .from(schema.organizaciones)
     .where(eq(schema.organizaciones.id, orgId))
     .limit(1);
 
   if (!org) throw new Error("Organización no encontrada.");
-
-  const [cnt] = await db
-    .select({ value: count() })
-    .from(schema.dispositivos)
-    .where(
-      and(
-        eq(schema.dispositivos.orgId, orgId),
-        eq(schema.dispositivos.activo, true)
-      )
-    );
-
-  if ((cnt?.value ?? 0) >= org.maxDispositivos) {
-    throw new Error(
-      `PLAN_LIMIT_DEVICES: Alcanzaste el límite de ${org.maxDispositivos} dispositivo(s) de tu plan.`
-    );
-  }
 
   let resolvedSucursalId: string | null = null;
   let resolvedNombre = (input.nombre ?? "").trim();
@@ -164,11 +152,80 @@ export async function createDeviceWithPin(
         "El colaborador seleccionado no existe o no está activo en tu organización."
       );
     }
+
+    const [existingPersonal] = await db
+      .select({ id: schema.dispositivos.id })
+      .from(schema.dispositivos)
+      .where(
+        and(
+          eq(schema.dispositivos.orgId, orgId),
+          eq(schema.dispositivos.tipo, "dispositivo_personal_movil"),
+          eq(schema.dispositivos.empleadoId, emp.id),
+          eq(schema.dispositivos.activo, true)
+        )
+      )
+      .limit(1);
+
+    if (existingPersonal) {
+      throw new Error(
+        "Este colaborador ya tiene un dispositivo móvil personal asignado."
+      );
+    }
+
+    const [mobileCnt] = await db
+      .select({ value: count() })
+      .from(schema.dispositivos)
+      .innerJoin(
+        schema.empleados,
+        eq(schema.dispositivos.empleadoId, schema.empleados.id)
+      )
+      .where(
+        and(
+          eq(schema.dispositivos.orgId, orgId),
+          eq(schema.dispositivos.activo, true),
+          eq(schema.dispositivos.tipo, "dispositivo_personal_movil"),
+          eq(schema.empleados.activo, true)
+        )
+      );
+
+    const limit = evaluateDeviceCreationLimit({
+      deviceType,
+      activeKioskCount: 0,
+      activePersonalMobileCount: mobileCnt?.value ?? 0,
+      maxDispositivos: org.maxDispositivos,
+      maxEmpleados: org.maxEmpleados,
+    });
+    if (!limit.allowed) {
+      throw new Error(limit.error);
+    }
+
     assignedEmpleadoId = emp.id;
     if (!resolvedNombre) {
       resolvedNombre = buildPersonalMobileDeviceName(emp.nombreCompleto);
     }
   } else {
+    const [kioskCnt] = await db
+      .select({ value: count() })
+      .from(schema.dispositivos)
+      .where(
+        and(
+          eq(schema.dispositivos.orgId, orgId),
+          eq(schema.dispositivos.activo, true),
+          eq(schema.dispositivos.tipo, "kiosco_sucursal")
+        )
+      );
+
+    const limit = evaluateDeviceCreationLimit({
+      deviceType,
+      activeKioskCount: kioskCnt?.value ?? 0,
+      activePersonalMobileCount: 0,
+      maxDispositivos: org.maxDispositivos,
+      maxEmpleados: org.maxEmpleados,
+    });
+    if (!limit.allowed) {
+      throw new Error(limit.error);
+    }
+
     if (!input.sucursalId) {
       throw new Error("Selecciona una sucursal para la terminal quiosco.");
     }
@@ -520,4 +577,102 @@ export async function updateDeviceName(
   });
 
   return updated;
+}
+
+export async function deactivatePersonalDevicesForEmployee(
+  orgId: string,
+  actorUserId: string,
+  empleadoId: string,
+  motivo = "Baja del colaborador"
+): Promise<{ count: number }> {
+  const db = getDb();
+  const linkedDevices = await db
+    .select({
+      id: schema.dispositivos.id,
+      nombre: schema.dispositivos.nombre,
+      tokenHash: schema.dispositivos.tokenHash,
+      pairingCode: schema.dispositivos.pairingCode,
+    })
+    .from(schema.dispositivos)
+    .where(
+      and(
+        eq(schema.dispositivos.orgId, orgId),
+        eq(schema.dispositivos.empleadoId, empleadoId),
+        eq(schema.dispositivos.tipo, "dispositivo_personal_movil"),
+        eq(schema.dispositivos.activo, true)
+      )
+    );
+
+  if (linkedDevices.length === 0) {
+    return { count: 0 };
+  }
+
+  const now = new Date();
+  const redis = getRedis();
+  if (redis.status === "wait") await redis.connect();
+
+  for (const dev of linkedDevices) {
+    if (dev.tokenHash) {
+      await redis.set(deviceBlacklistKey(dev.tokenHash), now.toISOString());
+    }
+    if (dev.pairingCode) {
+      await redis.del(pairingPinKey(dev.pairingCode));
+    }
+
+    const [usage] = await db
+      .select({ value: count() })
+      .from(schema.checadas)
+      .where(
+        and(
+          eq(schema.checadas.orgId, orgId),
+          eq(schema.checadas.dispositivoId, dev.id)
+        )
+      );
+
+    const hardDeleted = (usage?.value ?? 0) === 0;
+    if (hardDeleted) {
+      await db
+        .delete(schema.dispositivos)
+        .where(
+          and(
+            eq(schema.dispositivos.id, dev.id),
+            eq(schema.dispositivos.orgId, orgId)
+          )
+        );
+    } else {
+      await db
+        .update(schema.dispositivos)
+        .set({
+          activo: false,
+          tokenHash: null,
+          revocadoAt: now,
+          motivoRevocacion: motivo,
+          pairingCode: null,
+          pairingExpiresAt: null,
+          updatedAt: now,
+        })
+        .where(
+          and(
+            eq(schema.dispositivos.id, dev.id),
+            eq(schema.dispositivos.orgId, orgId)
+          )
+        );
+    }
+
+    await db.insert(schema.auditLogs).values({
+      orgId,
+      usuarioId: actorUserId,
+      accion: "DISPOSITIVO_REVOCADO_BAJA_EMPLEADO",
+      entidad: "dispositivos",
+      entidadId: dev.id,
+      detalle: {
+        empleadoId,
+        nombre: dev.nombre,
+        motivo,
+        hardDeleted,
+      },
+    });
+  }
+
+  return { count: linkedDevices.length };
 }

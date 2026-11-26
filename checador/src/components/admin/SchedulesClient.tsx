@@ -17,7 +17,15 @@ interface ScheduleRow {
   toleranciaMin: number;
   minutosComida: number;
   diasLaborales: number[];
+  tipoJornada: string;
+  horasSemanalesLimite: string | null;
 }
+
+const JORNADA_LABELS: Record<string, string> = {
+  diurna: "Diurna",
+  mixta: "Mixta",
+  nocturna: "Nocturna",
+};
 
 const DAY_LABELS: Record<number, string> = {
   1: "Lun",
@@ -29,7 +37,13 @@ const DAY_LABELS: Record<number, string> = {
   7: "Dom",
 };
 
-export function SchedulesClient({ schedules }: { schedules: ScheduleRow[] }) {
+export function SchedulesClient({
+  schedules,
+  orgWeeklyLimits,
+}: {
+  schedules: ScheduleRow[];
+  orgWeeklyLimits: { diurna: number; mixta: number; nocturna: number };
+}) {
   const router = useRouter();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [nombre, setNombre] = useState("");
@@ -38,6 +52,10 @@ export function SchedulesClient({ schedules }: { schedules: ScheduleRow[] }) {
   const [toleranciaMin, setToleranciaMin] = useState(10);
   const [minutosComida, setMinutosComida] = useState(60);
   const [dias, setDias] = useState<number[]>([1, 2, 3, 4, 5]);
+  const [tipoJornada, setTipoJornada] = useState<
+    "diurna" | "mixta" | "nocturna"
+  >("diurna");
+  const [horasSemanalesLimite, setHorasSemanalesLimite] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -57,6 +75,8 @@ export function SchedulesClient({ schedules }: { schedules: ScheduleRow[] }) {
     setToleranciaMin(10);
     setMinutosComida(60);
     setDias([1, 2, 3, 4, 5]);
+    setTipoJornada("diurna");
+    setHorasSemanalesLimite("");
     setError(null);
   };
 
@@ -68,6 +88,14 @@ export function SchedulesClient({ schedules }: { schedules: ScheduleRow[] }) {
     setToleranciaMin(s.toleranciaMin);
     setMinutosComida(s.minutosComida);
     setDias(Array.isArray(s.diasLaborales) ? s.diasLaborales : [1, 2, 3, 4, 5]);
+    setTipoJornada(
+      s.tipoJornada === "mixta" || s.tipoJornada === "nocturna"
+        ? s.tipoJornada
+        : "diurna"
+    );
+    setHorasSemanalesLimite(
+      s.horasSemanalesLimite ? String(Number(s.horasSemanalesLimite)) : ""
+    );
     setError(null);
   };
 
@@ -88,6 +116,9 @@ export function SchedulesClient({ schedules }: { schedules: ScheduleRow[] }) {
     e.preventDefault();
     setBusy(true);
     setError(null);
+    const parsedLimit = horasSemanalesLimite.trim()
+      ? Number(horasSemanalesLimite)
+      : null;
     const payload = {
       nombre,
       horaEntrada,
@@ -95,6 +126,8 @@ export function SchedulesClient({ schedules }: { schedules: ScheduleRow[] }) {
       toleranciaMin,
       minutosComida,
       diasLaborales: dias,
+      tipoJornada,
+      horasSemanalesLimite: parsedLimit,
     };
     const res = editingId
       ? await updateScheduleAction(editingId, payload)
@@ -183,6 +216,44 @@ export function SchedulesClient({ schedules }: { schedules: ScheduleRow[] }) {
               />
             </label>
           </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <label className="space-y-1">
+              <span className="text-slate-600">Tipo de Jornada (LFT Art. 60)</span>
+              <select
+                value={tipoJornada}
+                onChange={(e) =>
+                  setTipoJornada(
+                    e.target.value as "diurna" | "mixta" | "nocturna"
+                  )
+                }
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900"
+              >
+                <option value="diurna">Diurna (06:00–20:00)</option>
+                <option value="mixta">Mixta (&lt; 3.5h nocturnas)</option>
+                <option value="nocturna">Nocturna (20:00–06:00)</option>
+              </select>
+            </label>
+            <label className="space-y-1">
+              <span className="text-slate-600">Límite semanal (opcional)</span>
+              <input
+                type="number"
+                min={20}
+                max={72}
+                step="0.5"
+                value={horasSemanalesLimite}
+                onChange={(e) => setHorasSemanalesLimite(e.target.value)}
+                placeholder={`Por defecto: ${orgWeeklyLimits[tipoJornada]} h`}
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900"
+              />
+            </label>
+          </div>
+          <p className="rounded-xl bg-slate-50 px-3 py-2 text-[11px] text-slate-500">
+            De acuerdo con los Arts. 60 y 61 de la LFT, el límite semanal por
+            defecto de tu organización para jornada{" "}
+            <strong>{JORNADA_LABELS[tipoJornada]}</strong> es de{" "}
+            <strong>{orgWeeklyLimits[tipoJornada]} h</strong>. Déjalo vacío para
+            heredar ese valor.
+          </p>
           <div>
             <span className="text-slate-600">Días laborales</span>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -237,7 +308,21 @@ export function SchedulesClient({ schedules }: { schedules: ScheduleRow[] }) {
               className="flex flex-col gap-3 rounded-xl border border-slate-200 p-3.5 text-xs sm:flex-row sm:items-center sm:justify-between"
             >
               <div>
-                <p className="font-semibold text-slate-900">{s.nombre}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="font-semibold text-slate-900">{s.nombre}</p>
+                  <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-[#4f46e5]">
+                    {JORNADA_LABELS[s.tipoJornada] ?? "Diurna"} ·{" "}
+                    {s.horasSemanalesLimite
+                      ? Number(s.horasSemanalesLimite)
+                      : orgWeeklyLimits[
+                          (s.tipoJornada === "mixta" ||
+                          s.tipoJornada === "nocturna"
+                            ? s.tipoJornada
+                            : "diurna")
+                        ]}{" "}
+                    h/sem
+                  </span>
+                </div>
                 <p className="tnum mt-0.5 text-slate-500">
                   {String(s.horaEntrada).slice(0, 5)} –{" "}
                   {String(s.horaSalida).slice(0, 5)} · Tolerancia:{" "}

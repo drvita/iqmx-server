@@ -30,6 +30,7 @@
     "lucide-react": "^0.469.0",
     "next": "^16.0.7",
     "onnxruntime-web": "^1.20.1",
+    "pdf-lib": "^1.17.1",
     "postgres": "^4.1.1",
     "qrcode": "^1.5.4",
     "react": "19.2.0",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -19,7 +19,11 @@ import {
   X,
 } from "lucide-react";
 import { resolveIncidentAction } from "@/actions/admin";
-import type { WeeklyEmployeeCompliance } from "@/services/reports/attendance-compliance";
+import {
+  resolveReportDateRange,
+  type ReportPeriodType,
+  type WeeklyEmployeeCompliance,
+} from "@/services/reports/attendance-compliance";
 import { buildGoogleMapsUrl } from "@/services/sync/gps-incidence";
 
 export interface RecentCheckInRow {
@@ -65,6 +69,8 @@ interface Props {
   };
   cloudEvidencesEnabled: boolean;
   horasSemanalesMax: number;
+  defaultReportPeriod: "semanal" | "catorcenal" | "quincenal" | "mensual";
+  branches: { id: string; nombre: string }[];
   zonaHoraria: string;
 }
 
@@ -92,12 +98,30 @@ export default function DashboardAttendanceClient({
   todayKpis: initialKpis,
   cloudEvidencesEnabled,
   horasSemanalesMax,
+  defaultReportPeriod,
+  branches,
   zonaHoraria,
 }: Props) {
   const [weekStart, setWeekStart] = useState(initialWeekStart);
   const [syncedAt, setSyncedAt] = useState(initialSyncedAt);
   const [compliance, setCompliance] = useState(initialCompliance);
   const [compliancePage, setCompliancePage] = useState(1);
+  const [onlyAlerts, setOnlyAlerts] = useState(false);
+
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<"csv" | "pdf">("csv");
+  const [exportSucursalId, setExportSucursalId] = useState("");
+  const [exportPeriod, setExportPeriod] =
+    useState<ReportPeriodType>(defaultReportPeriod);
+  const [exportAnchorDate, setExportAnchorDate] = useState(initialWeekStart);
+  const [exportMonth, setExportMonth] = useState(initialWeekStart.slice(0, 7));
+  const [exportHalf, setExportHalf] = useState<"1" | "2">(
+    Number(initialWeekStart.slice(8, 10)) <= 15 ? "1" : "2"
+  );
+  const [exportStartDate, setExportStartDate] = useState(initialWeekStart);
+  const [exportEndDate, setExportEndDate] = useState(initialWeekStart);
+  const [includeSummary, setIncludeSummary] = useState(true);
+  const [includeDetail, setIncludeDetail] = useState(true);
 
   const [todayKpis, setTodayKpis] = useState(initialKpis);
   const [checkInsPage, setCheckInsPage] = useState(initialCheckIns);
@@ -121,15 +145,79 @@ export default function DashboardAttendanceClient({
   const [resolveBusy, setResolveBusy] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
 
+  const alertRows = compliance.filter((row) => row.alertaJornada === 1);
+  const exceededCount = compliance.filter(
+    (row) => row.weeklyStatus === "excedido"
+  ).length;
+  const preventiveCount = compliance.filter(
+    (row) => row.weeklyStatus === "alerta_preventiva"
+  ).length;
+  const displayedCompliance = onlyAlerts ? alertRows : compliance;
+
   const complianceTotalPages = Math.max(
     1,
-    Math.ceil(compliance.length / COMPLIANCE_PAGE_SIZE)
+    Math.ceil(displayedCompliance.length / COMPLIANCE_PAGE_SIZE)
   );
   const safeCompliancePage = Math.min(compliancePage, complianceTotalPages);
-  const pagedCompliance = compliance.slice(
+  const pagedCompliance = displayedCompliance.slice(
     (safeCompliancePage - 1) * COMPLIANCE_PAGE_SIZE,
     safeCompliancePage * COMPLIANCE_PAGE_SIZE
   );
+
+  useEffect(() => {
+    if (!exportOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setExportOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [exportOpen]);
+
+  const effectiveAnchorForExport =
+    exportPeriod === "quincenal"
+      ? `${exportMonth}-${exportHalf === "1" ? "01" : "16"}`
+      : exportPeriod === "mensual"
+        ? `${exportMonth}-01`
+        : exportAnchorDate;
+
+  const exportRangePreview = resolveReportDateRange({
+    period: exportPeriod,
+    anchorDate: effectiveAnchorForExport,
+    startDate: exportStartDate,
+    endDate: exportEndDate,
+    timeZone: zonaHoraria,
+  });
+
+  const handleOpenExportModal = () => {
+    setExportPeriod(defaultReportPeriod);
+    setExportAnchorDate(weekStart);
+    setExportMonth(weekStart.slice(0, 7));
+    setExportHalf(Number(weekStart.slice(8, 10)) <= 15 ? "1" : "2");
+    setExportStartDate(weekStart);
+    setExportEndDate(exportRangePreview.endDateKey || weekStart);
+    setExportOpen(true);
+  };
+
+  const handleDownloadExport = () => {
+    if (!includeSummary && !includeDetail) return;
+    const params = new URLSearchParams({
+      format: exportFormat,
+      period: exportPeriod,
+      includeSummary: String(includeSummary),
+      includeDetail: String(includeDetail),
+    });
+    if (exportSucursalId) {
+      params.set("sucursalId", exportSucursalId);
+    }
+    if (exportPeriod === "personalizado") {
+      params.set("startDate", exportStartDate);
+      params.set("endDate", exportEndDate);
+    } else {
+      params.set("anchorDate", effectiveAnchorForExport);
+    }
+    window.location.href = `/api/admin/reports/attendance?${params.toString()}`;
+    setExportOpen(false);
+  };
 
   const handleManualRefresh = async () => {
     setRefreshing(true);
@@ -324,15 +412,53 @@ export default function DashboardAttendanceClient({
                 className="rounded-xl border border-slate-300 px-2.5 py-1.5 text-xs text-slate-900"
               />
             </label>
-            <a
-              href={`/api/admin/reports/attendance?weekStart=${encodeURIComponent(weekStart)}&format=csv`}
+            <button
+              type="button"
+              onClick={handleOpenExportModal}
               className="inline-flex items-center gap-1.5 rounded-xl bg-[#4f46e5] px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-indigo-700"
             >
               <Download className="h-3.5 w-3.5" />
-              Exportar CSV
-            </a>
+              Exportar Reporte
+            </button>
           </div>
         </div>
+
+        {alertRows.length > 0 && (
+          <div
+            className={`mt-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5 text-xs ${
+              exceededCount > 0
+                ? "border-red-200 bg-red-50/80 text-red-900"
+                : "border-amber-200 bg-amber-50/80 text-amber-900"
+            }`}
+          >
+            <div className="flex items-center gap-2">
+              <AlertTriangle
+                className={`h-4 w-4 shrink-0 ${
+                  exceededCount > 0 ? "text-red-600" : "text-amber-600"
+                }`}
+              />
+              <span>
+                <strong>
+                  {alertRows.length} colaborador(es) en alerta de jornada:
+                </strong>{" "}
+                {exceededCount > 0 && `${exceededCount} excedido(s)`}
+                {exceededCount > 0 && preventiveCount > 0 && " · "}
+                {preventiveCount > 0 &&
+                  `${preventiveCount} próximo(s) al límite (≥ 90%)`}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setOnlyAlerts((prev) => !prev);
+                setCompliancePage(1);
+              }}
+              className="rounded-lg border border-current/25 bg-white/80 px-2.5 py-1 text-[11px] font-semibold transition hover:bg-white"
+            >
+              {onlyAlerts ? "Ver todos" : "Ver solo alertas"}
+            </button>
+          </div>
+        )}
 
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-left text-xs">
@@ -374,7 +500,21 @@ export default function DashboardAttendanceClient({
                     </td>
                     <td className="px-3 py-2.5 text-slate-600">{row.puesto}</td>
                     <td className="tnum px-3 py-2.5 font-semibold text-slate-900">
-                      {row.workedHours.toFixed(2)} h / {row.maxHours} h
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span>
+                          {row.ordinaryHours.toFixed(2)} h / {row.maxHours} h
+                        </span>
+                        {row.doubleOvertimeHours > 0 && (
+                          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                            +{row.doubleOvertimeHours.toFixed(2)} h dobles
+                          </span>
+                        )}
+                        {row.tripleOvertimeHours > 0 && (
+                          <span className="rounded-full bg-red-50 px-2 py-0.5 text-[11px] font-semibold text-red-700">
+                            +{row.tripleOvertimeHours.toFixed(2)} h triples
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="tnum px-3 py-2.5 text-slate-700">
                       <span>{row.daysComplete}</span>
@@ -415,12 +555,12 @@ export default function DashboardAttendanceClient({
           </table>
         </div>
 
-        {compliance.length > COMPLIANCE_PAGE_SIZE && (
+        {displayedCompliance.length > COMPLIANCE_PAGE_SIZE && (
           <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
             <span className="tnum">
-              Mostrando {pagedCompliance.length} de {compliance.length}{" "}
-              colaboradores · Página {safeCompliancePage} de{" "}
-              {complianceTotalPages}
+              Mostrando {pagedCompliance.length} de{" "}
+              {displayedCompliance.length} colaboradores · Página{" "}
+              {safeCompliancePage} de {complianceTotalPages}
             </span>
             <div className="flex items-center gap-1.5">
               <button
@@ -835,6 +975,250 @@ export default function DashboardAttendanceClient({
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {exportOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="export-report-title"
+            className="w-full max-w-md rounded-2xl bg-white p-5 shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div>
+                <h3
+                  id="export-report-title"
+                  className="text-sm font-bold text-slate-900"
+                >
+                  Exportar Reporte de Asistencia
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Elige formato, sucursal, temporalidad y secciones a incluir
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setExportOpen(false)}
+                className="rounded-lg p-1 text-slate-500 hover:bg-slate-100"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="mb-1 block font-semibold text-slate-700">
+                    Formato
+                  </label>
+                  <select
+                    value={exportFormat}
+                    onChange={(e) =>
+                      setExportFormat(e.target.value as "csv" | "pdf")
+                    }
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900"
+                  >
+                    <option value="csv">CSV (Prenómina / Excel)</option>
+                    <option value="pdf">PDF Oficial (STPS)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block font-semibold text-slate-700">
+                    Sucursal / Centro
+                  </label>
+                  <select
+                    value={exportSucursalId}
+                    onChange={(e) => setExportSucursalId(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900"
+                  >
+                    <option value="">Todas las sucursales</option>
+                    {branches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.nombre}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block font-semibold text-slate-700">
+                  Temporalidad del reporte
+                </label>
+                <select
+                  value={exportPeriod}
+                  onChange={(e) =>
+                    setExportPeriod(e.target.value as ReportPeriodType)
+                  }
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900"
+                >
+                  <option value="semanal">Semanal (lunes a domingo)</option>
+                  <option value="catorcenal">Catorcenal (14 días)</option>
+                  <option value="quincenal">Quincenal (1-15 o 16-fin)</option>
+                  <option value="mensual">Mensual (mes calendario)</option>
+                  <option value="personalizado">Rango personalizado</option>
+                </select>
+              </div>
+
+              {(exportPeriod === "semanal" || exportPeriod === "catorcenal") && (
+                <div>
+                  <label className="mb-1 block font-semibold text-slate-700">
+                    {exportPeriod === "semanal"
+                      ? "Semana que contiene el día"
+                      : "Fecha de inicio (14 días)"}
+                  </label>
+                  <input
+                    type="date"
+                    value={exportAnchorDate}
+                    onChange={(e) => setExportAnchorDate(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900"
+                  />
+                </div>
+              )}
+
+              {exportPeriod === "quincenal" && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="mb-1 block font-semibold text-slate-700">
+                      Mes
+                    </label>
+                    <input
+                      type="month"
+                      value={exportMonth}
+                      onChange={(e) => setExportMonth(e.target.value)}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block font-semibold text-slate-700">
+                      Quincena
+                    </label>
+                    <select
+                      value={exportHalf}
+                      onChange={(e) =>
+                        setExportHalf(e.target.value as "1" | "2")
+                      }
+                      className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900"
+                    >
+                      <option value="1">1ª quincena (1–15)</option>
+                      <option value="2">2ª quincena (16–fin)</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+
+              {exportPeriod === "mensual" && (
+                <div>
+                  <label className="mb-1 block font-semibold text-slate-700">
+                    Mes
+                  </label>
+                  <input
+                    type="month"
+                    value={exportMonth}
+                    onChange={(e) => setExportMonth(e.target.value)}
+                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900"
+                  />
+                </div>
+              )}
+
+              {exportPeriod === "personalizado" && (
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="mb-1 block font-semibold text-slate-700">
+                      Desde
+                    </label>
+                    <input
+                      type="date"
+                      value={exportStartDate}
+                      onChange={(e) => setExportStartDate(e.target.value)}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1 block font-semibold text-slate-700">
+                      Hasta
+                    </label>
+                    <input
+                      type="date"
+                      value={exportEndDate}
+                      onChange={(e) => setExportEndDate(e.target.value)}
+                      className="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 px-3 py-2 text-[11px] text-slate-700">
+                Rango a exportar:{" "}
+                <strong className="tnum text-[#1e1b4b]">
+                  Del {exportRangePreview.startDateKey} al{" "}
+                  {exportRangePreview.endDateKey}
+                </strong>{" "}
+                ({exportRangePreview.daysCount} días)
+              </div>
+
+              <div className="space-y-2">
+                <span className="block font-semibold text-slate-700">
+                  Información a incluir
+                </span>
+                <label className="flex items-start gap-2 rounded-xl border border-slate-200 p-2.5">
+                  <input
+                    type="checkbox"
+                    checked={includeSummary}
+                    onChange={(e) => setIncludeSummary(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#4f46e5]"
+                  />
+                  <span>
+                    <strong className="block text-slate-900">
+                      Resumen de prenómina por colaborador
+                    </strong>
+                    <span className="text-[11px] text-slate-500">
+                      Horas ordinarias, extras dobles/triples, retardos y
+                      bandera de alerta (1 / 0)
+                    </span>
+                  </span>
+                </label>
+                <label className="flex items-start gap-2 rounded-xl border border-slate-200 p-2.5">
+                  <input
+                    type="checkbox"
+                    checked={includeDetail}
+                    onChange={(e) => setIncludeDetail(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-slate-300 text-[#4f46e5]"
+                  />
+                  <span>
+                    <strong className="block text-slate-900">
+                      Detalle cronológico de checadas
+                    </strong>
+                    <span className="text-[11px] text-slate-500">
+                      Movimientos con ubicación GPS, incidencias y enlaces a
+                      Google Maps
+                    </span>
+                  </span>
+                </label>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setExportOpen(false)}
+                  className="rounded-xl border border-slate-200 px-3.5 py-2 font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  disabled={!includeSummary && !includeDetail}
+                  onClick={handleDownloadExport}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#4f46e5] px-4 py-2 font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  {exportFormat === "pdf" ? "Descargar PDF STPS" : "Descargar CSV"}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

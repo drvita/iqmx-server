@@ -27,7 +27,29 @@ export async function getOrganizationOverview(orgId: string) {
   const [devCount] = await db
     .select({ value: count() })
     .from(schema.dispositivos)
-    .where(and(eq(schema.dispositivos.orgId, orgId), eq(schema.dispositivos.activo, true)));
+    .where(
+      and(
+        eq(schema.dispositivos.orgId, orgId),
+        eq(schema.dispositivos.activo, true),
+        eq(schema.dispositivos.tipo, "kiosco_sucursal")
+      )
+    );
+
+  const [personalDevCount] = await db
+    .select({ value: count() })
+    .from(schema.dispositivos)
+    .innerJoin(
+      schema.empleados,
+      eq(schema.dispositivos.empleadoId, schema.empleados.id)
+    )
+    .where(
+      and(
+        eq(schema.dispositivos.orgId, orgId),
+        eq(schema.dispositivos.activo, true),
+        eq(schema.dispositivos.tipo, "dispositivo_personal_movil"),
+        eq(schema.empleados.activo, true)
+      )
+    );
 
   return {
     org,
@@ -35,9 +57,16 @@ export async function getOrganizationOverview(orgId: string) {
       empleados: empCount?.value ?? 0,
       sucursales: sucCount?.value ?? 0,
       dispositivos: devCount?.value ?? 0,
+      dispositivosPersonales: personalDevCount?.value ?? 0,
     },
   };
 }
+
+export type DefaultReportPeriod =
+  | "semanal"
+  | "catorcenal"
+  | "quincenal"
+  | "mensual";
 
 export async function updateBranding(
   orgId: string,
@@ -48,6 +77,12 @@ export async function updateBranding(
     colorSecundario: string;
     mensajeBienvenida: string;
     horasSemanalesMax: number;
+    horasSemanalesMixta?: number;
+    horasSemanalesNocturna?: number;
+    razonSocial?: string | null;
+    rfc?: string | null;
+    registroPatronalImss?: string | null;
+    periodicidadReporte?: DefaultReportPeriod;
     pinAuditoria?: string;
   }
 ) {
@@ -62,6 +97,25 @@ export async function updateBranding(
     brandingUpdatedAt: now,
     updatedAt: now,
   };
+  if (typeof input.horasSemanalesMixta === "number") {
+    updateSet.horasSemanalesMixta = input.horasSemanalesMixta.toFixed(1);
+  }
+  if (typeof input.horasSemanalesNocturna === "number") {
+    updateSet.horasSemanalesNocturna = input.horasSemanalesNocturna.toFixed(1);
+  }
+  if (input.razonSocial !== undefined) {
+    updateSet.razonSocial = input.razonSocial?.trim() || null;
+  }
+  if (input.rfc !== undefined) {
+    updateSet.rfc = input.rfc?.trim().toUpperCase() || null;
+  }
+  if (input.registroPatronalImss !== undefined) {
+    updateSet.registroPatronalImss =
+      input.registroPatronalImss?.trim().toUpperCase() || null;
+  }
+  if (input.periodicidadReporte) {
+    updateSet.periodicidadReporte = input.periodicidadReporte;
+  }
   if (input.pinAuditoria && /^\d{6}$/.test(input.pinAuditoria.trim())) {
     updateSet.pinAuditoriaHash = hashAuditPinServer(orgId, input.pinAuditoria);
   }
@@ -82,6 +136,9 @@ export async function updateBranding(
       detalle: {
         colorPrimario: input.colorPrimario,
         horasSemanalesMax: input.horasSemanalesMax,
+        horasSemanalesMixta: input.horasSemanalesMixta,
+        horasSemanalesNocturna: input.horasSemanalesNocturna,
+        periodicidadReporte: input.periodicidadReporte,
         pinAuditoriaActualizado: Boolean(input.pinAuditoria),
       },
     });

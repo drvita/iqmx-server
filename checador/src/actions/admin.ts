@@ -103,6 +103,7 @@ export async function toggleEmployeeActiveAction(
     const id = z.string().uuid().parse(empleadoId);
     await toggleEmployeeActive(session.orgId, session.userId, id, activo);
     revalidatePath("/empleados");
+    revalidatePath("/dispositivos");
     revalidatePath("/dashboard");
     return { ok: true };
   } catch (err) {
@@ -153,6 +154,8 @@ const createScheduleSchema = z.object({
   toleranciaMin: z.number().int().min(0).max(120),
   minutosComida: z.number().int().min(0).max(180),
   diasLaborales: z.array(z.number().int().min(1).max(7)).min(1),
+  tipoJornada: z.enum(["diurna", "mixta", "nocturna"]).default("diurna"),
+  horasSemanalesLimite: z.number().min(20).max(72).nullable().optional(),
 });
 
 export async function createScheduleAction(
@@ -307,6 +310,14 @@ const updateBrandingSchema = z.object({
   colorSecundario: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   mensajeBienvenida: z.string().trim().min(2).max(150),
   horasSemanalesMax: z.number().min(20).max(72),
+  horasSemanalesMixta: z.number().min(20).max(72).optional(),
+  horasSemanalesNocturna: z.number().min(20).max(72).optional(),
+  razonSocial: z.string().trim().max(200).nullable().optional(),
+  rfc: z.string().trim().max(13).nullable().optional(),
+  registroPatronalImss: z.string().trim().max(30).nullable().optional(),
+  periodicidadReporte: z
+    .enum(["semanal", "catorcenal", "quincenal", "mensual"])
+    .optional(),
   pinAuditoria: z
     .string()
     .trim()

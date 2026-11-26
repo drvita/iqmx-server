@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ImagePlus, KeyRound, Palette, Upload } from "lucide-react";
+import { Building2, ImagePlus, KeyRound, Palette, Upload } from "lucide-react";
 import {
   changeOwnPasswordAction,
   updateBrandingAction,
@@ -15,6 +15,12 @@ interface ConfiguracionClientProps {
     colorSecundario: string;
     mensajeBienvenida: string;
     horasSemanalesMax: string;
+    horasSemanalesMixta: string;
+    horasSemanalesNocturna: string;
+    razonSocial: string | null;
+    rfc: string | null;
+    registroPatronalImss: string | null;
+    periodicidadReporte: string;
     hasAuditPin: boolean;
   };
   canEdit: boolean;
@@ -34,6 +40,26 @@ export function ConfiguracionClient({
   );
   const [horasSemanalesMax, setHorasSemanalesMax] = useState(
     Number(org.horasSemanalesMax)
+  );
+  const [horasSemanalesMixta, setHorasSemanalesMixta] = useState(
+    Number(org.horasSemanalesMixta)
+  );
+  const [horasSemanalesNocturna, setHorasSemanalesNocturna] = useState(
+    Number(org.horasSemanalesNocturna)
+  );
+  const [razonSocial, setRazonSocial] = useState(org.razonSocial ?? "");
+  const [rfc, setRfc] = useState(org.rfc ?? "");
+  const [registroPatronalImss, setRegistroPatronalImss] = useState(
+    org.registroPatronalImss ?? ""
+  );
+  const [periodicidadReporte, setPeriodicidadReporte] = useState<
+    "semanal" | "catorcenal" | "quincenal" | "mensual"
+  >(
+    org.periodicidadReporte === "catorcenal" ||
+      org.periodicidadReporte === "quincenal" ||
+      org.periodicidadReporte === "mensual"
+      ? org.periodicidadReporte
+      : "semanal"
   );
   const [pinAuditoria, setPinAuditoria] = useState("");
   const [pinConfigured, setPinConfigured] = useState(org.hasAuditPin);
@@ -103,6 +129,12 @@ export function ConfiguracionClient({
       colorSecundario,
       mensajeBienvenida,
       horasSemanalesMax,
+      horasSemanalesMixta,
+      horasSemanalesNocturna,
+      razonSocial: razonSocial || null,
+      rfc: rfc || null,
+      registroPatronalImss: registroPatronalImss || null,
+      periodicidadReporte,
       ...(cleanPin ? { pinAuditoria: cleanPin } : {}),
     });
     setBusy(false);
@@ -121,14 +153,12 @@ export function ConfiguracionClient({
   return (
     <div className="max-w-2xl space-y-6">
     {canEdit && (
-    <form
-      onSubmit={handleSave}
-      className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs"
-    >
+    <form onSubmit={handleSave} className="space-y-6">
+      <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">
       <div className="flex items-center gap-2">
         <Palette className="h-4 w-4 text-[#4f46e5]" />
         <h2 className="text-sm font-bold text-slate-900">
-          Marca Blanca y Jornada Laboral
+          Marca Blanca y Seguridad de Quioscos
         </h2>
       </div>
 
@@ -221,20 +251,6 @@ export function ConfiguracionClient({
           />
         </label>
 
-        <label className="block space-y-1">
-          <span className="text-slate-600">Límite Semanal de Horas</span>
-          <input
-            type="number"
-            min={20}
-            max={72}
-            step="0.5"
-            disabled={!canEdit}
-            value={horasSemanalesMax}
-            onChange={(e) => setHorasSemanalesMax(Number(e.target.value))}
-            className="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900 disabled:bg-slate-50"
-          />
-        </label>
-
         <div className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs">
           <div className="flex items-center justify-between gap-2">
             <span className="font-semibold text-slate-700">
@@ -271,6 +287,139 @@ export function ConfiguracionClient({
             quiosco sin internet. Si lo cambias, los quioscos vinculados cerrarán
             sesión automáticamente al reconectarse.
           </p>
+        </div>
+      </div>
+      </div>
+
+      <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-xs text-xs">
+        <div className="flex items-center gap-2">
+          <Building2 className="h-4 w-4 text-[#4f46e5]" />
+          <h2 className="text-sm font-bold text-slate-900">
+            Jornada Laboral (LFT), Reportes y Datos Fiscales STPS
+          </h2>
+        </div>
+
+        <p className="rounded-xl border border-indigo-100 bg-indigo-50/70 px-3 py-2 text-[11px] leading-relaxed text-slate-700">
+          De acuerdo con los <strong>Arts. 60, 61 y 69 de la LFT</strong>, la
+          jornada máxima legal de referencia es de <strong>48 h diurna</strong>{" "}
+          (8 h/día), <strong>45 h mixta</strong> (7.5 h/día) y{" "}
+          <strong>42 h nocturna</strong> (7 h/día). Puedes ajustar estos
+          valores libremente según las políticas de tu organización.
+        </p>
+
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <label className="block space-y-1">
+            <span className="text-slate-600">Límite Diurna (h/sem)</span>
+            <input
+              type="number"
+              min={20}
+              max={72}
+              step="0.5"
+              disabled={!canEdit}
+              value={horasSemanalesMax}
+              onChange={(e) => setHorasSemanalesMax(Number(e.target.value))}
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900 disabled:bg-slate-50"
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-slate-600">Límite Mixta (h/sem)</span>
+            <input
+              type="number"
+              min={20}
+              max={72}
+              step="0.5"
+              disabled={!canEdit}
+              value={horasSemanalesMixta}
+              onChange={(e) => setHorasSemanalesMixta(Number(e.target.value))}
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900 disabled:bg-slate-50"
+            />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-slate-600">Límite Nocturna (h/sem)</span>
+            <input
+              type="number"
+              min={20}
+              max={72}
+              step="0.5"
+              disabled={!canEdit}
+              value={horasSemanalesNocturna}
+              onChange={(e) =>
+                setHorasSemanalesNocturna(Number(e.target.value))
+              }
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900 disabled:bg-slate-50"
+            />
+          </label>
+        </div>
+
+        <label className="block space-y-1">
+          <span className="text-slate-600">
+            Periodicidad Predeterminada de Reporte
+          </span>
+          <select
+            disabled={!canEdit}
+            value={periodicidadReporte}
+            onChange={(e) =>
+              setPeriodicidadReporte(
+                e.target.value as
+                  | "semanal"
+                  | "catorcenal"
+                  | "quincenal"
+                  | "mensual"
+              )
+            }
+            className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900 disabled:bg-slate-50"
+          >
+            <option value="semanal">Semanal</option>
+            <option value="catorcenal">Catorcenal</option>
+            <option value="quincenal">Quincenal</option>
+            <option value="mensual">Mensual</option>
+          </select>
+        </label>
+
+        <div className="space-y-3 border-t border-slate-100 pt-3">
+          <p className="text-[11px] font-semibold text-slate-600">
+            Datos para cabecera de reportes oficiales STPS (opcionales)
+          </p>
+          <label className="block space-y-1">
+            <span className="text-slate-600">Razón Social</span>
+            <input
+              type="text"
+              maxLength={200}
+              disabled={!canEdit}
+              value={razonSocial}
+              onChange={(e) => setRazonSocial(e.target.value)}
+              placeholder="Ej. Ferretería Lugo S.A. de C.V."
+              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900 disabled:bg-slate-50"
+            />
+          </label>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <label className="block space-y-1">
+              <span className="text-slate-600">RFC</span>
+              <input
+                type="text"
+                maxLength={13}
+                disabled={!canEdit}
+                value={rfc}
+                onChange={(e) => setRfc(e.target.value.toUpperCase())}
+                placeholder="Ej. FLU010101AAA"
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 font-mono uppercase text-slate-900 disabled:bg-slate-50"
+              />
+            </label>
+            <label className="block space-y-1">
+              <span className="text-slate-600">Registro Patronal IMSS</span>
+              <input
+                type="text"
+                maxLength={30}
+                disabled={!canEdit}
+                value={registroPatronalImss}
+                onChange={(e) =>
+                  setRegistroPatronalImss(e.target.value.toUpperCase())
+                }
+                placeholder="Ej. Y68-12345-10-1"
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 font-mono uppercase text-slate-900 disabled:bg-slate-50"
+              />
+            </label>
+          </div>
         </div>
       </div>
 

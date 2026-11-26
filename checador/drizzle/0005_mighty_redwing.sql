@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "uq_dispositivos_personal_empleado_activo" ON "checador"."dispositivos" USING btree ("org_id","empleado_id") WHERE "checador"."dispositivos"."tipo" = 'dispositivo_personal_movil' AND "checador"."dispositivos"."activo" = true AND "checador"."dispositivos"."empleado_id" IS NOT NULL;

@@ -12,6 +12,7 @@ import {
   formatDateKeyInTz,
   type CheckInEvent,
   type EmployeeScheduleInfo,
+  type JornadaType,
 } from "@/services/reports/attendance-compliance";
 
 export const dynamic = "force-dynamic";
@@ -42,7 +43,7 @@ export default async function DashboardPage() {
   const initialWeekStart = weekStartDate.toISOString().slice(0, 10);
 
   const db = getDb();
-  const [empRows, schedRows, weekCheckIns, recentCountRes, recentRows] =
+  const [empRows, schedRows, weekCheckIns, recentCountRes, recentRows, branchRows] =
     await Promise.all([
     db
       .select({
@@ -66,6 +67,8 @@ export default async function DashboardPage() {
         horaSalida: schema.horarios.horaSalida,
         toleranciaMin: schema.horarios.toleranciaMin,
         minutosComida: schema.horarios.minutosComida,
+        tipoJornada: schema.horarios.tipoJornada,
+        horasSemanalesLimite: schema.horarios.horasSemanalesLimite,
       })
       .from(schema.horarios)
       .where(eq(schema.horarios.orgId, session.orgId)),
@@ -127,6 +130,18 @@ export default async function DashboardPage() {
       .where(eq(schema.checadas.orgId, session.orgId))
       .orderBy(desc(schema.checadas.timestampLocal))
       .limit(10),
+    db
+      .select({
+        id: schema.sucursales.id,
+        nombre: schema.sucursales.nombre,
+      })
+      .from(schema.sucursales)
+      .where(
+        and(
+          eq(schema.sucursales.orgId, session.orgId),
+          eq(schema.sucursales.activo, true)
+        )
+      ),
   ]);
 
   const schedulesById = new Map<string, EmployeeScheduleInfo>();
@@ -136,6 +151,12 @@ export default async function DashboardPage() {
       horaSalida: String(s.horaSalida),
       toleranciaMin: s.toleranciaMin,
       minutosComida: s.minutosComida,
+      tipoJornada: (s.tipoJornada === "mixta" || s.tipoJornada === "nocturna"
+        ? s.tipoJornada
+        : "diurna") as JornadaType,
+      horasSemanalesLimite: s.horasSemanalesLimite
+        ? Number(s.horasSemanalesLimite)
+        : null,
     });
   }
 
@@ -144,6 +165,11 @@ export default async function DashboardPage() {
     checkIns: weekCheckIns as CheckInEvent[],
     schedulesById,
     horasSemanalesMax: Number(org.horasSemanalesMax),
+    orgWeeklyLimits: {
+      diurna: Number(org.horasSemanalesMax),
+      mixta: Number(org.horasSemanalesMixta),
+      nocturna: Number(org.horasSemanalesNocturna),
+    },
     timeZone: org.zonaHoraria,
   });
 
@@ -320,6 +346,14 @@ export default async function DashboardPage() {
         }}
         cloudEvidencesEnabled={org.cloudEvidencesEnabled}
         horasSemanalesMax={Number(org.horasSemanalesMax)}
+        defaultReportPeriod={
+          org.periodicidadReporte === "catorcenal" ||
+          org.periodicidadReporte === "quincenal" ||
+          org.periodicidadReporte === "mensual"
+            ? org.periodicidadReporte
+            : "semanal"
+        }
+        branches={branchRows}
         zonaHoraria={org.zonaHoraria}
       />
 

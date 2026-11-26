@@ -43,6 +43,7 @@ export default async function DispositivosPage() {
             codigoInterno: e.codigoInterno,
           }))}
         maxDispositivos={overview.org.maxDispositivos}
+        maxEmpleados={overview.org.maxEmpleados}
       />
     </div>
   );

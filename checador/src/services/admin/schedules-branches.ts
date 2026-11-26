@@ -154,9 +154,12 @@ export async function createSchedule(
     toleranciaMin: number;
     minutosComida: number;
     diasLaborales: number[];
+    tipoJornada?: "diurna" | "mixta" | "nocturna";
+    horasSemanalesLimite?: number | null;
   }
 ) {
   const db = getDb();
+  const tipoJornada = input.tipoJornada ?? "diurna";
   const [created] = await db
     .insert(schema.horarios)
     .values({
@@ -167,6 +170,11 @@ export async function createSchedule(
       toleranciaMin: input.toleranciaMin,
       minutosComida: input.minutosComida,
       diasLaborales: input.diasLaborales,
+      tipoJornada,
+      horasSemanalesLimite:
+        typeof input.horasSemanalesLimite === "number"
+          ? input.horasSemanalesLimite.toFixed(1)
+          : null,
     })
     .returning();
 
@@ -177,7 +185,11 @@ export async function createSchedule(
       accion: "HORARIO_CREADO",
       entidad: "horarios",
       entidadId: created.id,
-      detalle: { nombre: created.nombre },
+      detalle: {
+        nombre: created.nombre,
+        tipoJornada,
+        horasSemanalesLimite: input.horasSemanalesLimite ?? null,
+      },
     });
   }
 
@@ -195,9 +207,12 @@ export async function updateSchedule(
     toleranciaMin: number;
     minutosComida: number;
     diasLaborales: number[];
+    tipoJornada?: "diurna" | "mixta" | "nocturna";
+    horasSemanalesLimite?: number | null;
   }
 ) {
   const db = getDb();
+  const tipoJornada = input.tipoJornada ?? "diurna";
   const [updated] = await db
     .update(schema.horarios)
     .set({
@@ -207,6 +222,11 @@ export async function updateSchedule(
       toleranciaMin: input.toleranciaMin,
       minutosComida: input.minutosComida,
       diasLaborales: input.diasLaborales,
+      tipoJornada,
+      horasSemanalesLimite:
+        typeof input.horasSemanalesLimite === "number"
+          ? input.horasSemanalesLimite.toFixed(1)
+          : null,
       updatedAt: new Date(),
     })
     .where(and(eq(schema.horarios.id, horarioId), eq(schema.horarios.orgId, orgId)))

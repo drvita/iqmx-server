@@ -1,5 +1,6 @@
 import { and, count, desc, eq, ne, sql } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
+import { deactivatePersonalDevicesForEmployee } from "./devices";
 
 const DUPLICATE_SIMILARITY_THRESHOLD = 0.78;
 
@@ -238,6 +239,9 @@ export async function toggleEmployeeActive(
     .returning();
 
   if (updated) {
+    if (!activo) {
+      await deactivatePersonalDevicesForEmployee(orgId, actorUserId, empleadoId);
+    }
     await db.insert(schema.auditLogs).values({
       orgId,
       usuarioId: actorUserId,

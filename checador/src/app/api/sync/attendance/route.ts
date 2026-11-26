@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
+import { computeCheckInIntegrityHash } from "@/lib/security/integrity-seal";
 import { saveCloudEvidenceJpeg } from "@/lib/storage/media";
 import { requireSyncDevice } from "@/services/sync/device-auth";
 import { classifyGpsIncidence } from "@/services/sync/gps-incidence";
@@ -128,6 +129,20 @@ export async function POST(req: Request) {
         desfaseRelojSeg,
       });
 
+      const timestampLocalDate = new Date(r.timestampLocal);
+      const selloIntegridadSha256 = computeCheckInIntegrityHash({
+        id: r.id,
+        orgId: auth.org.id,
+        dispositivoId: auth.device.id,
+        empleadoId: safeEmpleadoId,
+        tipo: r.tipo,
+        estado: r.estado,
+        timestampLocalIso: timestampLocalDate.toISOString(),
+        timestampServidorIso: serverNow.toISOString(),
+        latitud: gps.latitud,
+        longitud: gps.longitud,
+      });
+
       return {
         id: r.id,
         orgId: auth.org.id,
@@ -136,7 +151,7 @@ export async function POST(req: Request) {
         empleadoId: safeEmpleadoId,
         tipo: r.tipo,
         estado: r.estado,
-        timestampLocal: new Date(r.timestampLocal),
+        timestampLocal: timestampLocalDate,
         timestampServidor: serverNow,
         desfaseRelojSeg,
         livenessScore: r.livenessScore ?? null,
@@ -148,6 +163,7 @@ export async function POST(req: Request) {
         isMockLocation: gps.isMockLocation,
         incidenciaUbicacion: gps.incidenciaUbicacion,
         incidenciaEstado: gps.incidenciaEstado,
+        selloIntegridadSha256,
       };
     })
   );

@@ -1,0 +1,2 @@
+ALTER TABLE "checador"."organizaciones" ADD COLUMN "periodicidad_reporte" varchar(20) DEFAULT 'semanal' NOT NULL;--> statement-breakpoint
+ALTER TABLE "checador"."organizaciones" ADD CONSTRAINT "chk_organizaciones_periodicidad_reporte" CHECK ("checador"."organizaciones"."periodicidad_reporte" IN ('semanal', 'catorcenal', 'quincenal', 'mensual'));

@@ -21,6 +21,7 @@ import {
   updateDeviceNameAction,
 } from "@/actions/admin";
 import { DevicePairingQr } from "@/components/admin/DevicePairingQr";
+import { filterAvailableEmployeesForPersonalMobile } from "@/services/admin/device-limits";
 
 interface DeviceRow {
   id: string;
@@ -53,11 +54,13 @@ export function DevicesClient({
   branches,
   employees,
   maxDispositivos,
+  maxEmpleados,
 }: {
   devices: DeviceRow[];
   branches: BranchOption[];
   employees: EmployeeOption[];
   maxDispositivos: number;
+  maxEmpleados: number;
 }) {
   const router = useRouter();
   const [nombre, setNombre] = useState("");
@@ -65,7 +68,16 @@ export function DevicesClient({
   const [tipo, setTipo] = useState<"kiosco_sucursal" | "dispositivo_personal_movil">(
     "kiosco_sucursal"
   );
-  const [empleadoId, setEmpleadoId] = useState(employees[0]?.id ?? "");
+  const availableEmployees = filterAvailableEmployeesForPersonalMobile(
+    employees,
+    devices
+  );
+  const [empleadoId, setEmpleadoId] = useState(availableEmployees[0]?.id ?? "");
+  const effectiveEmpleadoId = availableEmployees.some(
+    (emp) => emp.id === empleadoId
+  )
+    ? empleadoId
+    : (availableEmployees[0]?.id ?? "");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [busy, setBusy] = useState(false);
@@ -80,7 +92,7 @@ export function DevicesClient({
       sucursalId: isPersonalMobile ? null : sucursalId || null,
       nombre: isPersonalMobile ? "" : nombre,
       tipo,
-      empleadoId: isPersonalMobile ? empleadoId || null : null,
+      empleadoId: isPersonalMobile ? effectiveEmpleadoId || null : null,
     });
     setBusy(false);
     if (!res.ok) {
@@ -91,7 +103,9 @@ export function DevicesClient({
     router.refresh();
   };
 
-  const selectedEmployee = employees.find((emp) => emp.id === empleadoId);
+  const selectedEmployee = availableEmployees.find(
+    (emp) => emp.id === effectiveEmpleadoId
+  );
   const autoMobilePreview = selectedEmployee
     ? `dispositivo_${
         selectedEmployee.nombreCompleto
@@ -153,8 +167,16 @@ export function DevicesClient({
     router.refresh();
   };
 
-  const activeCount = devices.filter((d) => d.activo).length;
-  const limitReached = activeCount >= maxDispositivos;
+  const activeKioskCount = devices.filter(
+    (d) => d.activo && d.tipo === "kiosco_sucursal"
+  ).length;
+  const activePersonalCount = devices.filter(
+    (d) => d.activo && d.tipo === "dispositivo_personal_movil"
+  ).length;
+  const limitReached =
+    tipo === "kiosco_sucursal"
+      ? activeKioskCount >= maxDispositivos
+      : activePersonalCount >= maxEmpleados;
 
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
@@ -231,14 +253,18 @@ export function DevicesClient({
                 </label>
                 <select
                   required
-                  value={empleadoId}
+                  value={effectiveEmpleadoId}
                   onChange={(e) => setEmpleadoId(e.target.value)}
                   className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900"
                 >
-                  {employees.length === 0 && (
-                    <option value="">No hay colaboradores activos</option>
+                  {availableEmployees.length === 0 && (
+                    <option value="">
+                      {employees.length > 0
+                        ? "Todos los colaboradores activos ya tienen dispositivo asignado"
+                        : "No hay colaboradores activos"}
+                    </option>
                   )}
-                  {employees.map((emp) => (
+                  {availableEmployees.map((emp) => (
                     <option key={emp.id} value={emp.id}>
                       {emp.nombreCompleto}
                       {emp.codigoInterno ? ` (${emp.codigoInterno})` : ""}
@@ -271,7 +297,8 @@ export function DevicesClient({
           type="submit"
           disabled={
             busy ||
-            (tipo === "kiosco_sucursal" ? !sucursalId : !empleadoId)
+            limitReached ||
+            (tipo === "kiosco_sucursal" ? !sucursalId : !effectiveEmpleadoId)
           }
           className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#4f46e5] px-4 py-2.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
         >

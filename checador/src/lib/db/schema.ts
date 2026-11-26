@@ -18,6 +18,7 @@ import {
   time,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
   varchar,
   vector,
@@ -54,6 +55,22 @@ export const organizaciones = checadorSchema.table(
     })
       .notNull()
       .default("48.0"),
+    horasSemanalesMixta: numeric("horas_semanales_mixta", {
+      precision: 4,
+      scale: 1,
+    })
+      .notNull()
+      .default("45.0"),
+    horasSemanalesNocturna: numeric("horas_semanales_nocturna", {
+      precision: 4,
+      scale: 1,
+    })
+      .notNull()
+      .default("42.0"),
+    registroPatronalImss: varchar("registro_patronal_imss", { length: 30 }),
+    periodicidadReporte: varchar("periodicidad_reporte", { length: 20 })
+      .notNull()
+      .default("semanal"),
     logoUrl: text("logo_url"),
     colorPrimario: varchar("color_primario", { length: 7 })
       .notNull()
@@ -80,6 +97,10 @@ export const organizaciones = checadorSchema.table(
     check(
       "chk_organizaciones_estado",
       sql`${table.estado} IN ('activo', 'suspendido', 'cancelado', 'prueba')`
+    ),
+    check(
+      "chk_organizaciones_periodicidad_reporte",
+      sql`${table.periodicidadReporte} IN ('semanal', 'catorcenal', 'quincenal', 'mensual')`
     ),
   ]
 );
@@ -166,6 +187,13 @@ export const horarios = checadorSchema.table(
       .array()
       .notNull()
       .default(sql`'{1,2,3,4,5}'`),
+    tipoJornada: varchar("tipo_jornada", { length: 20 })
+      .notNull()
+      .default("diurna"),
+    horasSemanalesLimite: numeric("horas_semanales_limite", {
+      precision: 4,
+      scale: 1,
+    }),
     activo: boolean("activo").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -174,7 +202,13 @@ export const horarios = checadorSchema.table(
       .notNull()
       .defaultNow(),
   },
-  (table) => [index("idx_horarios_org").on(table.orgId)]
+  (table) => [
+    index("idx_horarios_org").on(table.orgId),
+    check(
+      "chk_horarios_tipo_jornada",
+      sql`${table.tipoJornada} IN ('diurna', 'mixta', 'nocturna')`
+    ),
+  ]
 );
 
 export const empleados = checadorSchema.table(
@@ -280,6 +314,11 @@ export const dispositivos = checadorSchema.table(
   (table) => [
     index("idx_dispositivos_org").on(table.orgId),
     index("idx_dispositivos_org_tipo").on(table.orgId, table.tipo),
+    uniqueIndex("uq_dispositivos_personal_empleado_activo")
+      .on(table.orgId, table.empleadoId)
+      .where(
+        sql`${table.tipo} = 'dispositivo_personal_movil' AND ${table.activo} = true AND ${table.empleadoId} IS NOT NULL`
+      ),
     check(
       "chk_dispositivos_tipo",
       sql`${table.tipo} IN ('kiosco_sucursal', 'dispositivo_personal_movil')`
@@ -329,6 +368,7 @@ export const checadas = checadorSchema.table(
     incidenciaResueltaAt: timestamp("incidencia_resuelta_at", {
       withTimezone: true,
     }),
+    selloIntegridadSha256: varchar("sello_integridad_sha256", { length: 64 }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
