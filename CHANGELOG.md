@@ -7,6 +7,47 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 > **Zona horaria de referencia:** Ciudad de México (CST / UTC-6).
 
+## [1.28.0] - 2026-11-25
+
+### Añadido
+
+- **Dispositivo Móvil Personal 1:1 y Registro GPS No Bloqueante (`checador/`) [Sprint 1 - P0]**:
+  - Soporte de dispositivos móviles asignados a colaboradores específicos (`tipo = "movil_personal"`, `empleadoId NOT NULL`, `sucursalId = NULL`) en [`checador/src/lib/db/schema.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/lib/db/schema.ts).
+  - Migración Drizzle [`0003_lazy_charles_xavier.sql`](file:///Users/laclavees12345/code/iqissmexico/main/checador/drizzle/0003_lazy_charles_xavier.sql) y [`0004_sad_mentallo.sql`](file:///Users/laclavees12345/code/iqissmexico/main/checador/drizzle/0004_sad_mentallo.sql).
+  - Captura de geolocalización GPS puntual no bloqueante en el quiosco móvil (`latitud`, `longitud`, `precisionGps`, `isMockLocation`) sin rastreo continuo de fondo ni vulneración de batería/privacidad.
+  - Minimización de datos biométricos conforme a LFPDPPP: el dispositivo móvil personal únicamente sincroniza y retiene los vectores biométricos del colaborador asignado.
+  - Aviso de privacidad biométrica y confirmación obligatoria en el primer ingreso al quiosco en dispositivos móviles personales.
+  - Alta rápida en `/dispositivos`: al seleccionar un colaborador, el nombre se autogenera (`dispositivo_[nombre]_[4_digitos]`) y se omite la selección obligatoria de sucursal.
+- **Resolución de Incidencias Operativas y Auditoría en RH (`checador/`) [Sprint 2 - P1]**:
+  - Clasificación automática de registros GPS fuera de radio o imprecisos como incidencias no bloqueantes en [`checador/src/services/sync/gps-incidence.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/services/sync/gps-incidence.ts).
+  - Gestión y justificación de incidencias en [`checador/src/services/admin/incidents.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/services/admin/incidents.ts) con registro inmutable en `audit_logs` y motivo obligatorio de resolución.
+  - Enlaces directos a Google Maps para verificación de coordenadas geográficas en el tablero de incidencias.
+- **Respaldo Documental Opcional por Colaborador (`checador/`)**:
+  - Nueva tabla `empleadoDocumentos` y servicio en [`checador/src/services/admin/employee-documents.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/services/admin/employee-documents.ts) para adjuntar documentos del colaborador (PDF, JPG, PNG ≤ 5 MB) sin bloquear el alta.
+- **Soporte de Imágenes HEIC/HEIF de iPhone y Carga Múltiple (`checador/`)**:
+  - Integración de biblioteca de decodificación y normalización de imágenes HEIC a canvas/JPEG vía [`heic-to`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/lib/pwa-ml/image-loader.ts).
+  - Selección simultánea de hasta 3 fotos de rostro en un solo paso con barra de progreso interactiva en tiempo real y reporte descriptivo de errores.
+
+### Cambiado
+
+- **Experiencia del Quiosco para Dispositivos Personales (`checador/`)**:
+  - Eliminación de la solicitud de PIN de administrador en dispositivos de tipo móvil personal; el colaborador cuenta con acceso directo a su historial de checadas (`History`) y opción de desvincular el dispositivo de manera autónoma.
+- **Reportes de Asistencia Unificados (`checador/`)**:
+  - Unificación de botones en la cabecera del tablero: un solo botón de "Exportar CSV" que entrega en un único archivo tanto el resumen semanal como el detalle cronológico completo con coordenadas GPS y enlace cartográfico.
+- **Separación de Filtros en Monitoreo (`checador/`)**:
+  - Filtro estricto e independiente entre "Rechazados" (rechazos biométricos / spoofing) e "Incidencias" (asistencias válidas con anomalía de ubicación GPS o turno).
+- **Indicador de Enrolamiento Facial en Directorio (`checador/`)**:
+  - Reemplazo del ícono de reloj por el ícono de escaneo facial (`ScanFace`) en la columna Rostros de `/empleados`, mostrando con precisión el número exacto de fotos procesadas (1, 2 o 3).
+
+### Corregido
+
+- **Conteo de Vectores Biométricos por Colaborador (`checador/`)**:
+  - Corrección en [`listEmployees`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/services/admin/employees.ts) que arrojaba `0` rostros debido a la ejecución de subconsultas correlacionadas en PostgreSQL; ahora se utiliza agregación `groupBy` con `Promise.all` y mapeo en memoria.
+- **Manejo de Errores Silenciosos en Enrolamiento Facial (`checador/`)**:
+  - Detección y despliegue amigable en pantalla de fallos al cargar o procesar imágenes corruptas o no soportadas en el cliente.
+
+---
+
 ## [1.27.1] - 2026-11-25
 
 ### Añadido

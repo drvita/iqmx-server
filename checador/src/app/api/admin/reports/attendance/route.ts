@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
-import { and, count, desc, eq, gte, lte, ne } from "drizzle-orm";
+import { and, count, desc, eq, gte, isNotNull, lte, ne, or } from "drizzle-orm";
 import { getSessionOrNull } from "@/lib/auth/session";
 import { getDb, schema } from "@/lib/db";
 import {
-  buildWeeklyComplianceCsv,
+  buildUnifiedAttendanceCsv,
   computeWeeklyCompliance,
   evaluateDailyWork,
   formatDateKeyInTz,
   type CheckInEvent,
   type EmployeeScheduleInfo,
 } from "@/services/reports/attendance-compliance";
+import { buildGoogleMapsUrl } from "@/services/sync/gps-incidence";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +51,13 @@ async function queryPaginatedCheckIns(
     conditions.push(eq(schema.checadas.estado, "valido"));
   } else if (estadoFilter === "rechazado") {
     conditions.push(ne(schema.checadas.estado, "valido"));
+  } else if (estadoFilter === "incidencia") {
+    conditions.push(eq(schema.checadas.estado, "valido"));
+    const incCond = or(
+      isNotNull(schema.checadas.incidenciaEstado),
+      isNotNull(schema.checadas.incidenciaUbicacion)
+    );
+    if (incCond) conditions.push(incCond);
   }
 
   const offset = (page - 1) * pageSize;
@@ -65,14 +73,23 @@ async function queryPaginatedCheckIns(
         codigoInterno: schema.empleados.codigoInterno,
         sucursalNombre: schema.sucursales.nombre,
         dispositivoNombre: schema.dispositivos.nombre,
+        dispositivoTipo: schema.dispositivos.tipo,
         tipo: schema.checadas.tipo,
         estado: schema.checadas.estado,
         timestampLocal: schema.checadas.timestampLocal,
         desfaseRelojSeg: schema.checadas.desfaseRelojSeg,
         fotoEvidenciaKey: schema.checadas.fotoEvidenciaKey,
+        latitud: schema.checadas.latitud,
+        longitud: schema.checadas.longitud,
+        precisionGps: schema.checadas.precisionGps,
+        isMockLocation: schema.checadas.isMockLocation,
+        incidenciaUbicacion: schema.checadas.incidenciaUbicacion,
+        incidenciaEstado: schema.checadas.incidenciaEstado,
+        incidenciaMotivo: schema.checadas.incidenciaMotivo,
+        incidenciaResueltaAt: schema.checadas.incidenciaResueltaAt,
       })
       .from(schema.checadas)
-      .innerJoin(
+      .leftJoin(
         schema.sucursales,
         eq(schema.checadas.sucursalId, schema.sucursales.id)
       )
@@ -100,13 +117,24 @@ async function queryPaginatedCheckIns(
       id: r.id,
       empleadoNombre: r.empleadoNombre,
       codigoInterno: r.codigoInterno,
-      sucursalNombre: r.sucursalNombre,
+      sucursalNombre: r.sucursalNombre ?? "En campo",
       dispositivoNombre: r.dispositivoNombre,
+      dispositivoTipo: r.dispositivoTipo,
       tipo: r.tipo,
       estado: r.estado,
       timestampLocalIso: r.timestampLocal.toISOString(),
       desfaseRelojSeg: r.desfaseRelojSeg,
       fotoEvidenciaKey: r.fotoEvidenciaKey,
+      latitud: r.latitud,
+      longitud: r.longitud,
+      precisionGps: r.precisionGps,
+      isMockLocation: r.isMockLocation,
+      incidenciaUbicacion: r.incidenciaUbicacion,
+      incidenciaEstado: r.incidenciaEstado,
+      incidenciaMotivo: r.incidenciaMotivo,
+      incidenciaResueltaAtIso: r.incidenciaResueltaAt
+        ? r.incidenciaResueltaAt.toISOString()
+        : null,
     })),
   };
 }
@@ -227,7 +255,67 @@ export async function GET(req: Request) {
   });
 
   if (format === "csv") {
-    const csv = buildWeeklyComplianceCsv(compliance, label);
+    const detailRows = await db
+      .select({
+        timestampLocal: schema.checadas.timestampLocal,
+        codigoInterno: schema.empleados.codigoInterno,
+        empleadoNombre: schema.empleados.nombreCompleto,
+        sucursalNombre: schema.sucursales.nombre,
+        dispositivoNombre: schema.dispositivos.nombre,
+        dispositivoTipo: schema.dispositivos.tipo,
+        tipo: schema.checadas.tipo,
+        estado: schema.checadas.estado,
+        latitud: schema.checadas.latitud,
+        longitud: schema.checadas.longitud,
+        precisionGps: schema.checadas.precisionGps,
+        incidenciaUbicacion: schema.checadas.incidenciaUbicacion,
+        incidenciaEstado: schema.checadas.incidenciaEstado,
+        incidenciaMotivo: schema.checadas.incidenciaMotivo,
+      })
+      .from(schema.checadas)
+      .leftJoin(
+        schema.sucursales,
+        eq(schema.checadas.sucursalId, schema.sucursales.id)
+      )
+      .innerJoin(
+        schema.dispositivos,
+        eq(schema.checadas.dispositivoId, schema.dispositivos.id)
+      )
+      .leftJoin(
+        schema.empleados,
+        eq(schema.checadas.empleadoId, schema.empleados.id)
+      )
+      .where(
+        and(
+          eq(schema.checadas.orgId, session.orgId),
+          gte(schema.checadas.timestampLocal, start),
+          lte(schema.checadas.timestampLocal, end)
+        )
+      )
+      .orderBy(desc(schema.checadas.timestampLocal));
+
+    const csv = buildUnifiedAttendanceCsv(
+      compliance,
+      detailRows.map((r) => ({
+        timestampLocalIso: r.timestampLocal.toISOString(),
+        codigoInterno: r.codigoInterno,
+        empleadoNombre: r.empleadoNombre,
+        sucursalNombre: r.sucursalNombre ?? "En campo",
+        dispositivoNombre: r.dispositivoNombre,
+        dispositivoTipo: r.dispositivoTipo,
+        tipo: r.tipo,
+        estado: r.estado,
+        latitud: r.latitud,
+        longitud: r.longitud,
+        precisionGps: r.precisionGps,
+        incidenciaUbicacion: r.incidenciaUbicacion,
+        incidenciaEstado: r.incidenciaEstado,
+        incidenciaMotivo: r.incidenciaMotivo,
+        googleMapsUrl: buildGoogleMapsUrl(r.latitud, r.longitud),
+      })),
+      label,
+      org.zonaHoraria
+    );
     return new NextResponse(csv, {
       status: 200,
       headers: {

@@ -298,3 +298,102 @@ export function buildWeeklyComplianceCsv(
 
   return `\uFEFF${lines.join("\r\n")}`;
 }
+
+export interface CheckInDetailCsvRow {
+  timestampLocalIso: string;
+  codigoInterno: string | null;
+  empleadoNombre: string | null;
+  sucursalNombre: string;
+  dispositivoNombre: string;
+  dispositivoTipo: string;
+  tipo: string;
+  estado: string;
+  latitud: string | null;
+  longitud: string | null;
+  precisionGps: number | null;
+  incidenciaUbicacion: string | null;
+  incidenciaEstado: string | null;
+  incidenciaMotivo: string | null;
+  googleMapsUrl: string | null;
+}
+
+export function buildCheckInsDetailCsv(
+  rows: CheckInDetailCsvRow[],
+  timeZone: string
+): string {
+  const header = [
+    "Fecha y Hora",
+    "Código",
+    "Colaborador",
+    "Sucursal",
+    "Terminal",
+    "Modalidad",
+    "Movimiento",
+    "Estado",
+    "Latitud",
+    "Longitud",
+    "Precisión GPS (m)",
+    "Incidencia GPS",
+    "Estado Incidencia",
+    "Motivo Resolución",
+    "Google Maps",
+  ];
+
+  const lines = [
+    header.map(escapeCsvCell).join(","),
+    ...rows.map((r) => {
+      const formattedDate = new Date(r.timestampLocalIso).toLocaleString("es-MX", {
+        timeZone,
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      });
+      const modalidad =
+        r.dispositivoTipo === "dispositivo_personal_movil"
+          ? "Móvil Personal"
+          : "Quiosco Sucursal";
+
+      return [
+        formattedDate,
+        r.codigoInterno ?? "-",
+        r.empleadoNombre ?? "Persona no identificada",
+        r.sucursalNombre,
+        r.dispositivoNombre,
+        modalidad,
+        r.tipo,
+        r.estado,
+        r.latitud ?? "",
+        r.longitud ?? "",
+        r.precisionGps !== null ? Math.round(r.precisionGps) : "",
+        r.incidenciaUbicacion ?? "",
+        r.incidenciaEstado ?? "",
+        r.incidenciaMotivo ?? "",
+        r.googleMapsUrl ?? "",
+      ]
+        .map(escapeCsvCell)
+        .join(",");
+    }),
+  ];
+
+  return `\uFEFF${lines.join("\r\n")}`;
+}
+
+export function buildUnifiedAttendanceCsv(
+  complianceRows: WeeklyEmployeeCompliance[],
+  detailRows: CheckInDetailCsvRow[],
+  weekLabel: string,
+  timeZone: string
+): string {
+  const summaryCsv = buildWeeklyComplianceCsv(complianceRows, weekLabel).replace(
+    /^\uFEFF/,
+    ""
+  );
+  const detailCsv = buildCheckInsDetailCsv(detailRows, timeZone).replace(
+    /^\uFEFF/,
+    ""
+  );
+  return `\uFEFF${summaryCsv}\r\n\r\n${detailCsv}`;
+}

@@ -4,8 +4,9 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Camera,
-  CheckCircle2,
+  FileText,
   Pencil,
+  ScanFace,
   Trash2,
   Upload,
   UserPlus,
@@ -18,6 +19,10 @@ import {
   updateEmployeeAction,
 } from "@/actions/admin";
 import { extractEmbeddingFromRgba } from "@/lib/pwa-ml/biometric-pipeline";
+import {
+  decodeImageFileToCanvas,
+  selectFilesWithinLimit,
+} from "@/lib/pwa-ml/image-loader";
 
 interface EmployeeRow {
   id: string;
@@ -30,6 +35,17 @@ interface EmployeeRow {
   consentimientoBiometrico: boolean;
   activo: boolean;
   vectoresCount: number;
+  documentosCount: number;
+}
+
+interface EmployeeDocItem {
+  id: string;
+  nombreArchivo: string;
+  tipoDocumento: string;
+  mimeType: string;
+  tamanoBytes: number;
+  subidoPorNombre: string | null;
+  createdAt: string;
 }
 
 interface OptionItem {
@@ -66,10 +82,23 @@ export function EmployeesClient({
   const [vectors, setVectors] = useState<number[][]>([]);
   const [cameraOn, setCameraOn] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [feedback, setFeedback] = useState<{
-    type: "ok" | "error";
-    text: string;
+  const [uploadProgress, setUploadProgress] = useState<{
+    current: number;
+    total: number;
+    percent: number;
+    label: string;
   } | null>(null);
+  const [feedback, setFeedback] = useState<{
+    type: "ok" | "warn" | "error";
+    text: string;
+    details?: string[];
+  } | null>(null);
+  const [docsEmployee, setDocsEmployee] = useState<EmployeeRow | null>(null);
+  const [docsList, setDocsList] = useState<EmployeeDocItem[]>([]);
+  const [docsLoading, setDocsLoading] = useState(false);
+  const [docType, setDocType] = useState("acuerdo_interno");
+  const [docError, setDocError] = useState<string | null>(null);
+  const docFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const stopCamera = () => {
     if (videoRef.current) {
@@ -171,21 +200,129 @@ export function EmployeesClient({
     await extractFromCanvas(canvas);
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = async () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth || 480;
-      canvas.height = img.naturalHeight || 480;
-      canvas.getContext("2d")?.drawImage(img, 0, 0);
-      URL.revokeObjectURL(url);
-      await extractFromCanvas(canvas);
-    };
-    img.src = url;
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawFiles = Array.from(e.target.files ?? []);
     e.target.value = "";
+    if (rawFiles.length === 0) return;
+
+    const { selected, ignoredCount } = selectFilesWithinLimit(
+      rawFiles,
+      vectors.length,
+      3
+    );
+
+    if (selected.length === 0) {
+      setFeedback({
+        type: "error",
+        text: "Ya completaste el máximo de 3 capturas de rostro para este colaborador.",
+      });
+      return;
+    }
+
+    setBusy(true);
+    setFeedback(null);
+
+    const addedVectors: number[][] = [];
+    const fileErrors: string[] = [];
+    const total = selected.length;
+
+    try {
+      for (let i = 0; i < total; i++) {
+        const file = selected[i]!;
+        const stepBase = i / total;
+        const stepSpan = 1 / total;
+
+        setUploadProgress({
+          current: i + 1,
+          total,
+          percent: Math.round((stepBase + stepSpan * 0.1) * 100),
+          label: `Procesando ${i + 1} de ${total}: ${file.name}`,
+        });
+
+        try {
+          const canvas = await decodeImageFileToCanvas(file, (stage) => {
+            setUploadProgress({
+              current: i + 1,
+              total,
+              percent: Math.round(
+                (stepBase + stepSpan * (stage === "converting_heic" ? 0.35 : 0.6)) *
+                  100
+              ),
+              label:
+                stage === "converting_heic"
+                  ? `Convirtiendo foto HEIC (${i + 1} de ${total}): ${file.name}`
+                  : `Preparando imagen (${i + 1} de ${total}): ${file.name}`,
+            });
+          });
+
+          setUploadProgress({
+            current: i + 1,
+            total,
+            percent: Math.round((stepBase + stepSpan * 0.85) * 100),
+            label: `Analizando rostro (${i + 1} de ${total}): ${file.name}`,
+          });
+
+          const ctx = canvas.getContext("2d");
+          if (!ctx) {
+            fileErrors.push(`${file.name}: No se pudo leer el contenido de la imagen.`);
+            continue;
+          }
+          const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+          const res = await extractEmbeddingFromRgba(
+            imgData.data,
+            canvas.width,
+            canvas.height
+          );
+          if (!res.ok || !res.embedding) {
+            fileErrors.push(
+              `${file.name}: ${res.reason ?? "No se detectó un rostro frontal claro."}`
+            );
+            continue;
+          }
+          addedVectors.push(Array.from(res.embedding));
+        } catch (err) {
+          fileErrors.push(
+            `${file.name}: ${err instanceof Error ? err.message : "No se pudo procesar el archivo."}`
+          );
+        }
+      }
+
+      if (addedVectors.length > 0) {
+        setVectors((prev) => [...prev, ...addedVectors].slice(0, 3));
+      }
+
+      const details = [...fileErrors];
+      if (ignoredCount > 0) {
+        details.push(
+          `Se omitieron ${ignoredCount} archivo(s) adicional(es) porque el máximo es de 3 fotos.`
+        );
+      }
+
+      if (addedVectors.length > 0 && details.length === 0) {
+        setFeedback({
+          type: "ok",
+          text:
+            addedVectors.length === 1
+              ? "1 rostro procesado correctamente. La fotografía no se guarda por privacidad."
+              : `${addedVectors.length} rostros procesados correctamente. Las fotografías no se guardan por privacidad.`,
+        });
+      } else if (addedVectors.length > 0) {
+        setFeedback({
+          type: "warn",
+          text: `Se procesaron ${addedVectors.length} de ${total} foto(s) seleccionada(s).`,
+          details,
+        });
+      } else {
+        setFeedback({
+          type: "error",
+          text: "No se pudo registrar ningún rostro de las imágenes seleccionadas.",
+          details,
+        });
+      }
+    } finally {
+      setUploadProgress(null);
+      setBusy(false);
+    }
   };
 
   const resetForm = () => {
@@ -218,6 +355,13 @@ export function EmployeesClient({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!editingId && vectors.length < 1) {
+      setFeedback({
+        type: "error",
+        text: "Captura o sube al menos 1 fotografía frontal del colaborador antes de guardar.",
+      });
+      return;
+    }
     setBusy(true);
     setFeedback(null);
     try {
@@ -262,6 +406,68 @@ export function EmployeesClient({
     await toggleEmployeeActiveAction(id, nextActivo);
     setBusy(false);
     router.refresh();
+  };
+
+  const openDocsModal = async (emp: EmployeeRow) => {
+    setDocsEmployee(emp);
+    setDocsLoading(true);
+    setDocError(null);
+    try {
+      const res = await fetch(`/api/admin/employees/${emp.id}/documents`);
+      if (res.ok) {
+        const data = (await res.json()) as { documents?: EmployeeDocItem[] };
+        setDocsList(data.documents ?? []);
+      }
+    } finally {
+      setDocsLoading(false);
+    }
+  };
+
+  const handleUploadDoc = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !docsEmployee) return;
+    setDocsLoading(true);
+    setDocError(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("tipoDocumento", docType);
+      const res = await fetch(
+        `/api/admin/employees/${docsEmployee.id}/documents`,
+        { method: "POST", body: fd }
+      );
+      const data = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: string;
+      } | null;
+      if (!res.ok || !data?.ok) {
+        setDocError(data?.error ?? "No se pudo subir el documento.");
+      } else {
+        await openDocsModal(docsEmployee);
+        router.refresh();
+      }
+    } finally {
+      setDocsLoading(false);
+    }
+  };
+
+  const handleDeleteDoc = async (docId: string) => {
+    if (!docsEmployee) return;
+    setDocsLoading(true);
+    setDocError(null);
+    try {
+      const res = await fetch(
+        `/api/admin/employees/${docsEmployee.id}/documents/${docId}`,
+        { method: "DELETE" }
+      );
+      if (res.ok) {
+        await openDocsModal(docsEmployee);
+        router.refresh();
+      }
+    } finally {
+      setDocsLoading(false);
+    }
   };
 
   return (
@@ -406,16 +612,44 @@ export function EmployeesClient({
               className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-300 bg-white px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50"
             >
               <Upload className="h-3.5 w-3.5" />
-              Subir Foto
+              Subir Fotos
             </button>
             <input
               ref={fileInputRef}
               type="file"
-              accept="image/*"
-              onChange={handleFileUpload}
+              multiple
+              accept="image/*,.heic,.heif"
+              onChange={(e) => void handleFileUpload(e)}
               className="hidden"
             />
           </div>
+
+          <p className="text-[11px] text-slate-500">
+            Puedes seleccionar hasta 3 fotos a la vez (JPG, PNG, WebP o HEIC de iPhone).
+          </p>
+
+          {uploadProgress && (
+            <div className="space-y-1.5 rounded-lg border border-indigo-200 bg-white p-2.5">
+              <div className="flex items-center justify-between gap-2 text-[11px] font-medium text-slate-700">
+                <span className="truncate">{uploadProgress.label}</span>
+                <span className="tnum shrink-0 font-semibold text-[#4f46e5]">
+                  {uploadProgress.percent}%
+                </span>
+              </div>
+              <div
+                role="progressbar"
+                aria-valuenow={uploadProgress.percent}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                className="h-2 w-full overflow-hidden rounded-full bg-slate-100"
+              >
+                <div
+                  className="h-full rounded-full bg-[#4f46e5] transition-all duration-200"
+                  style={{ width: `${uploadProgress.percent}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         <label className="flex items-start gap-2 text-[11px] text-slate-600">
@@ -434,19 +668,29 @@ export function EmployeesClient({
 
         {feedback && (
           <div
+            role="status"
             className={`rounded-xl border px-3 py-2 text-xs ${
               feedback.type === "ok"
                 ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                : "border-red-200 bg-red-50 text-red-700"
+                : feedback.type === "warn"
+                  ? "border-amber-200 bg-amber-50 text-amber-900"
+                  : "border-red-200 bg-red-50 text-red-700"
             }`}
           >
-            {feedback.text}
+            <p className="font-medium">{feedback.text}</p>
+            {feedback.details && feedback.details.length > 0 && (
+              <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-[11px]">
+                {feedback.details.map((detail, idx) => (
+                  <li key={idx}>{detail}</li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
 
         <button
           type="submit"
-          disabled={busy}
+          disabled={busy || (!editingId && vectors.length === 0)}
           className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#4f46e5] px-4 py-2.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
         >
           <UserPlus className="h-4 w-4" />
@@ -492,8 +736,8 @@ export function EmployeesClient({
                   </td>
                   <td className="tnum py-2.5 pr-3">
                     <span className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-medium text-[#4f46e5]">
-                      <CheckCircle2 className="h-3 w-3" />
-                      {emp.vectoresCount} / 3
+                      <ScanFace className="h-3.5 w-3.5" />
+                      {emp.vectoresCount}
                     </span>
                   </td>
                   <td className="py-2.5 pr-3">
@@ -509,6 +753,17 @@ export function EmployeesClient({
                   </td>
                   <td className="py-2.5 text-right">
                     <div className="inline-flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => void openDocsModal(emp)}
+                        className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-2.5 py-1 text-[11px] font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        <FileText className="h-3 w-3" />
+                        {emp.documentosCount > 0
+                          ? `Docs (${emp.documentosCount})`
+                          : "Docs"}
+                      </button>
                       <button
                         type="button"
                         disabled={busy}
@@ -542,6 +797,109 @@ export function EmployeesClient({
           </table>
         </div>
       </div>
+
+      {docsEmployee && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">
+                  Documentos de {docsEmployee.nombreCompleto}
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Resguardo digital opcional (PDF, JPG o PNG, máx. 5 MB).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDocsEmployee(null)}
+                className="rounded-lg p-1 text-slate-500 hover:bg-slate-100"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-xs">
+              <select
+                value={docType}
+                onChange={(e) => setDocType(e.target.value)}
+                className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900"
+              >
+                <option value="acuerdo_interno">Acuerdo / Consentimiento</option>
+                <option value="contrato">Contrato / Anexo</option>
+                <option value="identificacion">Identificación</option>
+                <option value="otro">Otro documento</option>
+              </select>
+              <button
+                type="button"
+                disabled={docsLoading}
+                onClick={() => docFileInputRef.current?.click()}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#4f46e5] px-3.5 py-2 font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
+              >
+                <Upload className="h-3.5 w-3.5" />
+                Subir Archivo
+              </button>
+              <input
+                ref={docFileInputRef}
+                type="file"
+                accept="application/pdf,image/jpeg,image/png"
+                onChange={handleUploadDoc}
+                className="hidden"
+              />
+            </div>
+
+            {docError && (
+              <p className="mt-2 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700">
+                {docError}
+              </p>
+            )}
+
+            <div className="mt-4 max-h-64 space-y-2 overflow-y-auto text-xs">
+              {docsLoading && (
+                <p className="py-4 text-center text-slate-400">Cargando...</p>
+              )}
+              {!docsLoading && docsList.length === 0 && (
+                <p className="rounded-xl bg-slate-50 py-5 text-center text-slate-500">
+                  Sin documento adjunto en plataforma.
+                </p>
+              )}
+              {!docsLoading &&
+                docsList.map((doc) => (
+                  <div
+                    key={doc.id}
+                    className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 p-3"
+                  >
+                    <div className="min-w-0">
+                      <a
+                        href={`/api/admin/employees/${docsEmployee.id}/documents/${doc.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block truncate font-semibold text-[#4f46e5] hover:underline"
+                      >
+                        {doc.nombreArchivo}
+                      </a>
+                      <p className="text-[11px] text-slate-500">
+                        {new Date(doc.createdAt).toLocaleDateString("es-MX")}
+                        {doc.subidoPorNombre
+                          ? ` · Por ${doc.subidoPorNombre}`
+                          : ""}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={docsLoading}
+                      onClick={() => void handleDeleteDoc(doc.id)}
+                      className="rounded-lg border border-red-200 p-1.5 text-red-700 hover:bg-red-50"
+                      title="Eliminar documento"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
 import { saveCloudEvidenceJpeg } from "@/lib/storage/media";
 import { requireSyncDevice } from "@/services/sync/device-auth";
+import { classifyGpsIncidence } from "@/services/sync/gps-incidence";
 
 const attendanceRecordSchema = z.object({
   id: z.string().uuid(),
@@ -15,6 +16,19 @@ const attendanceRecordSchema = z.object({
   matchConfidence: z.number().finite().nullable().optional(),
   relojAlterado: z.boolean().optional(),
   evidenciaBase64: z.string().max(700_000).nullable().optional(),
+  latitud: z.number().finite().min(-90).max(90).nullable().optional(),
+  longitud: z.number().finite().min(-180).max(180).nullable().optional(),
+  precisionGps: z.number().finite().min(0).nullable().optional(),
+  isMockLocation: z.boolean().optional(),
+  incidenciaUbicacion: z
+    .enum([
+      "sin_gps",
+      "precision_baja",
+      "ubicacion_pendiente",
+      "fuera_geocerca",
+    ])
+    .nullable()
+    .optional(),
 });
 
 const batchSchema = z.object({
@@ -91,8 +105,28 @@ export async function POST(req: Request) {
       } else if (r.relojAlterado && Math.abs(desfaseRelojSeg) <= 120) {
         desfaseRelojSeg = -9999;
       }
-      const safeEmpleadoId =
+      let safeEmpleadoId =
         r.empleadoId && validEmpIds.has(r.empleadoId) ? r.empleadoId : null;
+      if (
+        auth.device.tipo === "dispositivo_personal_movil" &&
+        auth.device.empleadoId &&
+        safeEmpleadoId !== auth.device.empleadoId
+      ) {
+        safeEmpleadoId = validEmpIds.has(auth.device.empleadoId)
+          ? auth.device.empleadoId
+          : null;
+      }
+
+      const gps = classifyGpsIncidence({
+        deviceType: auth.device.tipo,
+        estado: r.estado,
+        latitud: r.latitud,
+        longitud: r.longitud,
+        precisionGps: r.precisionGps,
+        isMockLocation: r.isMockLocation,
+        clientIncidence: r.incidenciaUbicacion ?? null,
+        desfaseRelojSeg,
+      });
 
       return {
         id: r.id,
@@ -108,6 +142,12 @@ export async function POST(req: Request) {
         livenessScore: r.livenessScore ?? null,
         matchConfidence: r.matchConfidence ?? null,
         fotoEvidenciaKey,
+        latitud: gps.latitud,
+        longitud: gps.longitud,
+        precisionGps: gps.precisionGps,
+        isMockLocation: gps.isMockLocation,
+        incidenciaUbicacion: gps.incidenciaUbicacion,
+        incidenciaEstado: gps.incidenciaEstado,
       };
     })
   );
@@ -116,6 +156,24 @@ export async function POST(req: Request) {
     .insert(schema.checadas)
     .values(rowsToInsert)
     .onConflictDoNothing({ target: schema.checadas.id });
+
+  const mockRows = rowsToInsert.filter((row) => row.isMockLocation);
+  if (mockRows.length > 0) {
+    await db.insert(schema.auditLogs).values(
+      mockRows.map((row) => ({
+        orgId: auth.org.id,
+        accion: "UBICACION_SIMULADA_DETECTADA",
+        entidad: "checadas",
+        entidadId: row.id,
+        detalle: {
+          dispositivoId: auth.device.id,
+          empleadoId: row.empleadoId,
+          latitud: row.latitud,
+          longitud: row.longitud,
+        },
+      }))
+    );
+  }
 
   await db
     .update(schema.dispositivos)

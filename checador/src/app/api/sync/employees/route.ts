@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { and, eq, gt, inArray } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { requireSyncDevice } from "@/services/sync/device-auth";
+import { filterEmployeesForDevice } from "@/services/sync/gps-incidence";
 
 export const dynamic = "force-dynamic";
 
@@ -40,8 +41,11 @@ export async function GET(req: Request) {
     .where(eq(schema.organizaciones.id, orgId))
     .limit(1);
 
+  const isPersonalMobile = auth.device.tipo === "dispositivo_personal_movil";
   const empConditions = [eq(schema.empleados.orgId, orgId)];
-  if (sinceDate) {
+  if (isPersonalMobile && auth.device.empleadoId) {
+    empConditions.push(eq(schema.empleados.id, auth.device.empleadoId));
+  } else if (sinceDate) {
     empConditions.push(gt(schema.empleados.updatedAt, sinceDate));
   }
 
@@ -57,10 +61,8 @@ export async function GET(req: Request) {
     .from(schema.empleados)
     .where(and(...empConditions));
 
-  const activeEmployees = changedEmployees.filter((e) => e.activo);
-  const deletedIds = changedEmployees
-    .filter((e) => !e.activo)
-    .map((e) => e.id);
+  const { activeEmployees, deletedIds, isAssignedActive } =
+    filterEmployeesForDevice(auth.device, changedEmployees);
 
   // Siempre incluir bajas totales si no hay since, o las bajas desde `since`
   const activeIds = activeEmployees.map((e) => e.id);
@@ -89,7 +91,8 @@ export async function GET(req: Request) {
 
   return NextResponse.json({
     ok: true,
-    fullSync: sinceDate === null,
+    fullSync: isPersonalMobile ? true : sinceDate === null,
+    isAssignedActive,
     serverTime: new Date().toISOString(),
     organization: orgRow ?? null,
     employees: activeEmployees,

@@ -7,6 +7,7 @@ import {
   KeyRound,
   Pencil,
   RefreshCw,
+  Smartphone,
   TabletSmartphone,
   Trash2,
   Unlink,
@@ -23,7 +24,10 @@ import { DevicePairingQr } from "@/components/admin/DevicePairingQr";
 
 interface DeviceRow {
   id: string;
-  sucursalNombre: string;
+  sucursalNombre: string | null;
+  tipo: string;
+  empleadoId: string | null;
+  empleadoNombre: string | null;
   nombre: string;
   pairingCode: string | null;
   pairingExpiresAt: Date | null;
@@ -38,18 +42,30 @@ interface BranchOption {
   nombre: string;
 }
 
+interface EmployeeOption {
+  id: string;
+  nombreCompleto: string;
+  codigoInterno: string | null;
+}
+
 export function DevicesClient({
   devices,
   branches,
+  employees,
   maxDispositivos,
 }: {
   devices: DeviceRow[];
   branches: BranchOption[];
+  employees: EmployeeOption[];
   maxDispositivos: number;
 }) {
   const router = useRouter();
   const [nombre, setNombre] = useState("");
   const [sucursalId, setSucursalId] = useState(branches[0]?.id ?? "");
+  const [tipo, setTipo] = useState<"kiosco_sucursal" | "dispositivo_personal_movil">(
+    "kiosco_sucursal"
+  );
+  const [empleadoId, setEmpleadoId] = useState(employees[0]?.id ?? "");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [busy, setBusy] = useState(false);
@@ -59,7 +75,13 @@ export function DevicesClient({
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const res = await createDeviceAction({ sucursalId, nombre });
+    const isPersonalMobile = tipo === "dispositivo_personal_movil";
+    const res = await createDeviceAction({
+      sucursalId: isPersonalMobile ? null : sucursalId || null,
+      nombre: isPersonalMobile ? "" : nombre,
+      tipo,
+      empleadoId: isPersonalMobile ? empleadoId || null : null,
+    });
     setBusy(false);
     if (!res.ok) {
       setError(res.error ?? "No se pudo registrar el dispositivo.");
@@ -68,6 +90,19 @@ export function DevicesClient({
     setNombre("");
     router.refresh();
   };
+
+  const selectedEmployee = employees.find((emp) => emp.id === empleadoId);
+  const autoMobilePreview = selectedEmployee
+    ? `dispositivo_${
+        selectedEmployee.nombreCompleto
+          .trim()
+          .split(/\s+/)[0]
+          ?.normalize("NFD")
+          .replace(/[\u0300-\u036f]/g, "")
+          .toLowerCase()
+          .replace(/[^a-z0-9]/g, "") || "colaborador"
+      }_XXXX`
+    : "dispositivo_colaborador_XXXX";
 
   const handleSaveRename = async (id: string) => {
     setBusy(true);
@@ -139,25 +174,91 @@ export function DevicesClient({
         </div>
 
         <div className="space-y-3 text-xs">
-          <input
-            type="text"
-            required
-            value={nombre}
-            onChange={(e) => setNombre(e.target.value)}
-            placeholder="Nombre de la terminal"
-            className="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900"
-          />
-          <select
-            value={sucursalId}
-            onChange={(e) => setSucursalId(e.target.value)}
-            className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900"
-          >
-            {branches.map((b) => (
-              <option key={b.id} value={b.id}>
-                {b.nombre}
-              </option>
-            ))}
-          </select>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              onClick={() => setTipo("kiosco_sucursal")}
+              className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 font-semibold transition ${
+                tipo === "kiosco_sucursal"
+                  ? "border-[#4f46e5] bg-indigo-50 text-[#4f46e5]"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <TabletSmartphone className="h-3.5 w-3.5" />
+              Kiosco Fijo
+            </button>
+            <button
+              type="button"
+              onClick={() => setTipo("dispositivo_personal_movil")}
+              className={`flex items-center justify-center gap-1.5 rounded-xl border px-3 py-2 font-semibold transition ${
+                tipo === "dispositivo_personal_movil"
+                  ? "border-[#4f46e5] bg-indigo-50 text-[#4f46e5]"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              <Smartphone className="h-3.5 w-3.5" />
+              Móvil Personal
+            </button>
+          </div>
+
+          {tipo === "kiosco_sucursal" ? (
+            <>
+              <input
+                type="text"
+                required
+                value={nombre}
+                onChange={(e) => setNombre(e.target.value)}
+                placeholder="Nombre de la terminal"
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900"
+              />
+              <select
+                value={sucursalId}
+                onChange={(e) => setSucursalId(e.target.value)}
+                className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900"
+              >
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.nombre}
+                  </option>
+                ))}
+              </select>
+            </>
+          ) : (
+            <div className="space-y-2.5">
+              <div className="space-y-1">
+                <label className="block font-medium text-slate-600">
+                  Colaborador en ruta / campo
+                </label>
+                <select
+                  required
+                  value={empleadoId}
+                  onChange={(e) => setEmpleadoId(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-slate-900"
+                >
+                  {employees.length === 0 && (
+                    <option value="">No hay colaboradores activos</option>
+                  )}
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.nombreCompleto}
+                      {emp.codigoInterno ? ` (${emp.codigoInterno})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 px-3 py-2 text-[11px] text-slate-600">
+                <p>
+                  Nombre automático:{" "}
+                  <strong className="font-mono text-[#1e1b4b]">
+                    {autoMobilePreview}
+                  </strong>
+                </p>
+                <p className="mt-0.5 text-slate-500">
+                  Sin sucursal fija: valida ubicación mediante GPS al checar.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         {error && (
@@ -168,7 +269,10 @@ export function DevicesClient({
 
         <button
           type="submit"
-          disabled={busy || !sucursalId}
+          disabled={
+            busy ||
+            (tipo === "kiosco_sucursal" ? !sucursalId : !empleadoId)
+          }
           className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#4f46e5] px-4 py-2.5 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
         >
           <KeyRound className="h-4 w-4" />
@@ -221,8 +325,23 @@ export function DevicesClient({
                   </div>
                 ) : (
                   <div className="flex flex-wrap items-center gap-2">
-                    <TabletSmartphone className="h-4 w-4 text-[#4f46e5]" />
+                    {d.tipo === "dispositivo_personal_movil" ? (
+                      <Smartphone className="h-4 w-4 text-[#059669]" />
+                    ) : (
+                      <TabletSmartphone className="h-4 w-4 text-[#4f46e5]" />
+                    )}
                     <span className="font-bold text-slate-900">{d.nombre}</span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                        d.tipo === "dispositivo_personal_movil"
+                          ? "bg-indigo-50 text-[#4f46e5]"
+                          : "bg-slate-100 text-slate-600"
+                      }`}
+                    >
+                      {d.tipo === "dispositivo_personal_movil"
+                        ? "Móvil Personal"
+                        : "Kiosco Sucursal"}
+                    </span>
                     <span
                       className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
                         !d.activo
@@ -246,7 +365,11 @@ export function DevicesClient({
                   </div>
                 )}
 
-                <p className="text-slate-500">Sucursal: {d.sucursalNombre}</p>
+                <p className="text-slate-500">
+                  {d.tipo === "dispositivo_personal_movil"
+                    ? `En campo (GPS)${d.empleadoNombre ? ` · Asignado a: ${d.empleadoNombre}` : ""}`
+                    : `Sucursal: ${d.sucursalNombre ?? "Sin sucursal"}`}
+                </p>
                 {d.activo && !d.vinculado && d.pairingCode && (
                   <>
                     <p className="tnum inline-flex items-center gap-2 rounded-lg bg-indigo-50 px-2.5 py-1 font-mono text-sm font-bold tracking-widest text-[#1e1b4b]">

@@ -63,11 +63,13 @@ export async function POST(req: Request) {
           orgId: schema.dispositivos.orgId,
           sucursalId: schema.dispositivos.sucursalId,
           nombre: schema.dispositivos.nombre,
+          tipo: schema.dispositivos.tipo,
+          empleadoId: schema.dispositivos.empleadoId,
           activo: schema.dispositivos.activo,
           sucursalNombre: schema.sucursales.nombre,
         })
         .from(schema.dispositivos)
-        .innerJoin(
+        .leftJoin(
           schema.sucursales,
           eq(schema.dispositivos.sucursalId, schema.sucursales.id)
         )
@@ -84,11 +86,13 @@ export async function POST(req: Request) {
           orgId: schema.dispositivos.orgId,
           sucursalId: schema.dispositivos.sucursalId,
           nombre: schema.dispositivos.nombre,
+          tipo: schema.dispositivos.tipo,
+          empleadoId: schema.dispositivos.empleadoId,
           activo: schema.dispositivos.activo,
           sucursalNombre: schema.sucursales.nombre,
         })
         .from(schema.dispositivos)
-        .innerJoin(
+        .leftJoin(
           schema.sucursales,
           eq(schema.dispositivos.sucursalId, schema.sucursales.id)
         )
@@ -151,7 +155,19 @@ export async function POST(req: Request) {
     detalle: { plataforma, appVersion },
   });
 
-  // Descarga inicial de empleados y vectores activos para operación offline inmediata
+  const isPersonalMobile = deviceRow.tipo === "dispositivo_personal_movil";
+
+  if (isPersonalMobile && !deviceRow.empleadoId) {
+    return Response.json(
+      {
+        ok: false,
+        error: "Este dispositivo personal no tiene un colaborador asignado.",
+      },
+      { status: 409 }
+    );
+  }
+
+  // Descarga inicial de empleados y vectores activos (minimización 1:1 si es móvil personal)
   const [employees, vectors] = await Promise.all([
     db
       .select({
@@ -166,7 +182,10 @@ export async function POST(req: Request) {
       .where(
         and(
           eq(schema.empleados.orgId, org.id),
-          eq(schema.empleados.activo, true)
+          eq(schema.empleados.activo, true),
+          ...(isPersonalMobile && deviceRow.empleadoId
+            ? [eq(schema.empleados.id, deviceRow.empleadoId)]
+            : [])
         )
       ),
     db
@@ -179,10 +198,25 @@ export async function POST(req: Request) {
       .where(
         and(
           eq(schema.empleadoVectores.orgId, org.id),
-          eq(schema.empleadoVectores.activo, true)
+          eq(schema.empleadoVectores.activo, true),
+          ...(isPersonalMobile && deviceRow.empleadoId
+            ? [eq(schema.empleadoVectores.empleadoId, deviceRow.empleadoId)]
+            : [])
         )
       ),
   ]);
+
+  if (isPersonalMobile && employees.length === 0) {
+    return Response.json(
+      {
+        ok: false,
+        error: "El colaborador asignado a este dispositivo ya no está activo.",
+      },
+      { status: 409 }
+    );
+  }
+
+  const assignedEmployee = isPersonalMobile ? employees[0] ?? null : null;
 
   return Response.json({
     ok: true,
@@ -190,10 +224,20 @@ export async function POST(req: Request) {
     device: {
       id: deviceRow.id,
       nombre: deviceRow.nombre,
-      sucursalId: deviceRow.sucursalId,
-      sucursalNombre: deviceRow.sucursalNombre,
+      sucursalId: deviceRow.sucursalId ?? null,
+      sucursalNombre: deviceRow.sucursalNombre ?? "En campo",
+      tipo: deviceRow.tipo,
+      empleadoId: deviceRow.empleadoId ?? null,
       plataforma,
     },
+    assignedEmployee: assignedEmployee
+      ? {
+          id: assignedEmployee.id,
+          nombreCompleto: assignedEmployee.nombreCompleto,
+          codigoInterno: assignedEmployee.codigoInterno,
+          puesto: assignedEmployee.puesto,
+        }
+      : null,
     organization: {
       id: org.id,
       nombre: org.nombre,

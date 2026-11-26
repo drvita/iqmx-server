@@ -1,4 +1,4 @@
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const DEFAULT_DOCKER_MEDIA_DIR = "/data/media";
@@ -54,5 +54,74 @@ export async function readCloudEvidenceJpeg(
     return await readFile(filePath);
   } catch {
     return null;
+  }
+}
+
+const ALLOWED_DOC_EXTS = new Set(["pdf", "jpg", "jpeg", "png"]);
+export const MAX_EMPLOYEE_DOC_BYTES = 5 * 1024 * 1024; // 5 MB
+
+export async function saveEmployeeDocument(
+  orgId: string,
+  empleadoId: string,
+  docId: string,
+  ext: string,
+  buffer: Buffer
+): Promise<string | null> {
+  const cleanOrg = sanitizeSegment(orgId);
+  const cleanEmp = sanitizeSegment(empleadoId);
+  const cleanDoc = sanitizeSegment(docId);
+  const cleanExt = sanitizeSegment(ext).toLowerCase();
+
+  if (
+    !cleanOrg ||
+    !cleanEmp ||
+    !cleanDoc ||
+    !ALLOWED_DOC_EXTS.has(cleanExt) ||
+    buffer.length === 0 ||
+    buffer.length > MAX_EMPLOYEE_DOC_BYTES
+  ) {
+    return null;
+  }
+
+  const relativeKey = `${cleanOrg}/docs/${cleanEmp}/${cleanDoc}.${cleanExt}`;
+  const targetDir = path.join(getMediaStorageDir(), cleanOrg, "docs", cleanEmp);
+  await mkdir(targetDir, { recursive: true });
+  await writeFile(path.join(targetDir, `${cleanDoc}.${cleanExt}`), buffer);
+  return relativeKey;
+}
+
+export async function readEmployeeDocument(
+  orgId: string,
+  relativeKey: string
+): Promise<Buffer | null> {
+  const cleanOrg = sanitizeSegment(orgId);
+  const parts = relativeKey.split("/").map(sanitizeSegment).filter(Boolean);
+  const [orgSeg, docsSeg, empSeg, fileSeg] = parts;
+  if (!orgSeg || docsSeg !== "docs" || !empSeg || !fileSeg || orgSeg !== cleanOrg) {
+    return null;
+  }
+  try {
+    const filePath = path.join(getMediaStorageDir(), orgSeg, "docs", empSeg, fileSeg);
+    return await readFile(filePath);
+  } catch {
+    return null;
+  }
+}
+
+export async function deleteEmployeeDocumentFile(
+  orgId: string,
+  relativeKey: string
+): Promise<void> {
+  const cleanOrg = sanitizeSegment(orgId);
+  const parts = relativeKey.split("/").map(sanitizeSegment).filter(Boolean);
+  const [orgSeg, docsSeg, empSeg, fileSeg] = parts;
+  if (!orgSeg || docsSeg !== "docs" || !empSeg || !fileSeg || orgSeg !== cleanOrg) {
+    return;
+  }
+  try {
+    const filePath = path.join(getMediaStorageDir(), orgSeg, "docs", empSeg, fileSeg);
+    await unlink(filePath);
+  } catch {
+    // Ignorar si ya no existe en disco
   }
 }

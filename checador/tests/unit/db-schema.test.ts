@@ -5,7 +5,7 @@ import { BASE_ROLES, INITIAL_PYME_ROLE_CODES } from "@/lib/db/seed";
 import { getEnv } from "@/lib/env";
 
 describe("esquema Drizzle checador (Fase 1)", () => {
-  it("define las 11 tablas requeridas dentro del schema checador", () => {
+  it("define las 12 tablas requeridas dentro del schema checador", () => {
     const tables = [
       schema.organizaciones,
       schema.sucursales,
@@ -18,6 +18,7 @@ describe("esquema Drizzle checador (Fase 1)", () => {
       schema.dispositivos,
       schema.checadas,
       schema.auditLogs,
+      schema.empleadoDocumentos,
     ];
 
     const names = tables.map((t) => {
@@ -38,6 +39,7 @@ describe("esquema Drizzle checador (Fase 1)", () => {
       "dispositivos",
       "checadas",
       "audit_logs",
+      "empleado_documentos",
     ]);
   });
 

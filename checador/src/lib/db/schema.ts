@@ -249,9 +249,15 @@ export const dispositivos = checadorSchema.table(
     orgId: uuid("org_id")
       .notNull()
       .references(() => organizaciones.id, { onDelete: "cascade" }),
-    sucursalId: uuid("sucursal_id")
+    sucursalId: uuid("sucursal_id").references(() => sucursales.id, {
+      onDelete: "set null",
+    }),
+    tipo: varchar("tipo", { length: 30 })
       .notNull()
-      .references(() => sucursales.id, { onDelete: "cascade" }),
+      .default("kiosco_sucursal"),
+    empleadoId: uuid("empleado_id").references(() => empleados.id, {
+      onDelete: "set null",
+    }),
     nombre: varchar("nombre", { length: 100 }).notNull(),
     tokenHash: varchar("token_hash", { length: 64 }).unique(),
     pairingCode: varchar("pairing_code", { length: 12 }),
@@ -271,7 +277,14 @@ export const dispositivos = checadorSchema.table(
       .notNull()
       .defaultNow(),
   },
-  (table) => [index("idx_dispositivos_org").on(table.orgId)]
+  (table) => [
+    index("idx_dispositivos_org").on(table.orgId),
+    index("idx_dispositivos_org_tipo").on(table.orgId, table.tipo),
+    check(
+      "chk_dispositivos_tipo",
+      sql`${table.tipo} IN ('kiosco_sucursal', 'dispositivo_personal_movil')`
+    ),
+  ]
 );
 
 export const checadas = checadorSchema.table(
@@ -281,9 +294,9 @@ export const checadas = checadorSchema.table(
     orgId: uuid("org_id")
       .notNull()
       .references(() => organizaciones.id, { onDelete: "cascade" }),
-    sucursalId: uuid("sucursal_id")
-      .notNull()
-      .references(() => sucursales.id),
+    sucursalId: uuid("sucursal_id").references(() => sucursales.id, {
+      onDelete: "set null",
+    }),
     dispositivoId: uuid("dispositivo_id")
       .notNull()
       .references(() => dispositivos.id),
@@ -302,6 +315,20 @@ export const checadas = checadorSchema.table(
     livenessScore: real("liveness_score"),
     matchConfidence: real("match_confidence"),
     fotoEvidenciaKey: text("foto_evidencia_key"),
+    latitud: numeric("latitud", { precision: 10, scale: 7 }),
+    longitud: numeric("longitud", { precision: 10, scale: 7 }),
+    precisionGps: real("precision_gps"),
+    isMockLocation: boolean("is_mock_location").notNull().default(false),
+    incidenciaUbicacion: varchar("incidencia_ubicacion", { length: 30 }),
+    incidenciaEstado: varchar("incidencia_estado", { length: 20 }),
+    incidenciaMotivo: text("incidencia_motivo"),
+    incidenciaResueltaPor: uuid("incidencia_resuelta_por").references(
+      () => usuarios.id,
+      { onDelete: "set null" }
+    ),
+    incidenciaResueltaAt: timestamp("incidencia_resuelta_at", {
+      withTimezone: true,
+    }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -311,6 +338,10 @@ export const checadas = checadorSchema.table(
     index("idx_checadas_empleado_fecha").on(
       table.empleadoId,
       table.timestampLocal
+    ),
+    index("idx_checadas_org_incidencia").on(
+      table.orgId,
+      table.incidenciaEstado
     ),
     check(
       "chk_checadas_tipo",
@@ -343,4 +374,31 @@ export const auditLogs = checadorSchema.table(
       .defaultNow(),
   },
   (table) => [index("idx_audit_org_fecha").on(table.orgId, table.createdAt)]
+);
+
+export const empleadoDocumentos = checadorSchema.table(
+  "empleado_documentos",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizaciones.id, { onDelete: "cascade" }),
+    empleadoId: uuid("empleado_id")
+      .notNull()
+      .references(() => empleados.id, { onDelete: "cascade" }),
+    nombreArchivo: varchar("nombre_archivo", { length: 200 }).notNull(),
+    tipoDocumento: varchar("tipo_documento", { length: 60 })
+      .notNull()
+      .default("otro"),
+    mimeType: varchar("mime_type", { length: 100 }).notNull(),
+    tamanoBytes: integer("tamano_bytes").notNull(),
+    storageKey: text("storage_key").notNull(),
+    subidoPor: uuid("subido_por").references(() => usuarios.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("idx_emp_docs_org_emp").on(table.orgId, table.empleadoId)]
 );

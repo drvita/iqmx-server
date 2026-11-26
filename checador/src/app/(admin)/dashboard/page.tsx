@@ -96,14 +96,23 @@ export default async function DashboardPage() {
         codigoInterno: schema.empleados.codigoInterno,
         sucursalNombre: schema.sucursales.nombre,
         dispositivoNombre: schema.dispositivos.nombre,
+        dispositivoTipo: schema.dispositivos.tipo,
         tipo: schema.checadas.tipo,
         estado: schema.checadas.estado,
         timestampLocal: schema.checadas.timestampLocal,
         desfaseRelojSeg: schema.checadas.desfaseRelojSeg,
         fotoEvidenciaKey: schema.checadas.fotoEvidenciaKey,
+        latitud: schema.checadas.latitud,
+        longitud: schema.checadas.longitud,
+        precisionGps: schema.checadas.precisionGps,
+        isMockLocation: schema.checadas.isMockLocation,
+        incidenciaUbicacion: schema.checadas.incidenciaUbicacion,
+        incidenciaEstado: schema.checadas.incidenciaEstado,
+        incidenciaMotivo: schema.checadas.incidenciaMotivo,
+        incidenciaResueltaAt: schema.checadas.incidenciaResueltaAt,
       })
       .from(schema.checadas)
-      .innerJoin(
+      .leftJoin(
         schema.sucursales,
         eq(schema.checadas.sucursalId, schema.sucursales.id)
       )
@@ -182,13 +191,24 @@ export default async function DashboardPage() {
       id: r.id,
       empleadoNombre: r.empleadoNombre,
       codigoInterno: r.codigoInterno,
-      sucursalNombre: r.sucursalNombre,
+      sucursalNombre: r.sucursalNombre ?? "En campo",
       dispositivoNombre: r.dispositivoNombre,
+      dispositivoTipo: r.dispositivoTipo,
       tipo: r.tipo,
       estado: r.estado,
       timestampLocalIso: r.timestampLocal.toISOString(),
       desfaseRelojSeg: r.desfaseRelojSeg,
       fotoEvidenciaKey: r.fotoEvidenciaKey,
+      latitud: r.latitud,
+      longitud: r.longitud,
+      precisionGps: r.precisionGps,
+      isMockLocation: r.isMockLocation,
+      incidenciaUbicacion: r.incidenciaUbicacion,
+      incidenciaEstado: r.incidenciaEstado,
+      incidenciaMotivo: r.incidenciaMotivo,
+      incidenciaResueltaAtIso: r.incidenciaResueltaAt
+        ? r.incidenciaResueltaAt.toISOString()
+        : null,
     })),
   };
 

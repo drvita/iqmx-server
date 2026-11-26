@@ -1,5 +1,6 @@
 import Dexie, { type Table } from "dexie";
 import type { CheckInStatus, CheckInType } from "@/lib/pwa-ml/biometric-pipeline";
+import type { DeviceType, GpsIncidenceType } from "@/services/sync/gps-incidence";
 
 export const LOCAL_THUMBNAIL_RETENTION_DAYS = 15;
 export const SYNCED_META_RETENTION_DAYS = 7;
@@ -26,9 +27,14 @@ export interface KioskDeviceConfig {
   deviceToken: string;
   deviceId: string;
   deviceName: string;
+  deviceTipo?: DeviceType;
+  empleadoId?: string | null;
+  empleadoNombre?: string | null;
+  empleadoCodigo?: string | null;
+  privacyAcceptedAt?: string | null;
   orgId: string;
   orgNombre: string;
-  sucursalId: string;
+  sucursalId: string | null;
   sucursalNombre: string;
   plataforma: "android" | "ios" | "web";
   logoUrl: string | null;
@@ -69,6 +75,11 @@ export interface LocalAttendanceRecord {
   evidenciaBlob: Blob | null;
   timestampLocal: number;
   relojAlterado: boolean;
+  latitud?: number | null;
+  longitud?: number | null;
+  precisionGps?: number | null;
+  isMockLocation?: boolean;
+  incidenciaUbicacion?: GpsIncidenceType | null;
   sincronizado: 0 | 1;
 }
 

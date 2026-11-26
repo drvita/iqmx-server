@@ -2,11 +2,31 @@ import crypto from "node:crypto";
 import { and, count, desc, eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { getRedis } from "@/lib/redis";
+import type { DeviceType } from "@/services/sync/gps-incidence";
 
 export const PAIRING_PIN_TTL_SECONDS = 600; // 10 minutos
 
 export function generateSixDigitPin(): string {
   return String(crypto.randomInt(100000, 1000000));
+}
+
+/**
+ * Genera el nombre automático para un dispositivo personal móvil:
+ * `dispositivo_<primer_nombre>_<4_digitos>`.
+ */
+export function buildPersonalMobileDeviceName(
+  nombreCompleto: string,
+  randomDigits?: string
+): string {
+  const rawFirst = nombreCompleto.trim().split(/\s+/)[0] ?? "";
+  const normalizedFirst = rawFirst
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+  const safeFirst = normalizedFirst || "colaborador";
+  const digits = randomDigits ?? String(crypto.randomInt(1000, 10000));
+  return `dispositivo_${safeFirst}_${digits}`;
 }
 
 export function deviceBlacklistKey(tokenHash: string): string {
@@ -24,6 +44,9 @@ export async function listDevices(orgId: string) {
       id: schema.dispositivos.id,
       sucursalId: schema.dispositivos.sucursalId,
       sucursalNombre: schema.sucursales.nombre,
+      tipo: schema.dispositivos.tipo,
+      empleadoId: schema.dispositivos.empleadoId,
+      empleadoNombre: schema.empleados.nombreCompleto,
       nombre: schema.dispositivos.nombre,
       pairingCode: schema.dispositivos.pairingCode,
       pairingExpiresAt: schema.dispositivos.pairingExpiresAt,
@@ -38,9 +61,13 @@ export async function listDevices(orgId: string) {
       createdAt: schema.dispositivos.createdAt,
     })
     .from(schema.dispositivos)
-    .innerJoin(
+    .leftJoin(
       schema.sucursales,
       eq(schema.dispositivos.sucursalId, schema.sucursales.id)
+    )
+    .leftJoin(
+      schema.empleados,
+      eq(schema.dispositivos.empleadoId, schema.empleados.id)
     )
     .where(
       and(
@@ -53,7 +80,7 @@ export async function listDevices(orgId: string) {
 
 async function storePairingPinInRedis(
   pin: string,
-  payload: { orgId: string; dispositivoId: string; sucursalId: string }
+  payload: { orgId: string; dispositivoId: string; sucursalId: string | null }
 ): Promise<void> {
   const redis = getRedis();
   if (redis.status === "wait") {
@@ -70,9 +97,18 @@ async function storePairingPinInRedis(
 export async function createDeviceWithPin(
   orgId: string,
   actorUserId: string,
-  input: { sucursalId: string; nombre: string }
+  input: {
+    sucursalId?: string | null;
+    nombre?: string;
+    tipo?: DeviceType;
+    empleadoId?: string | null;
+  }
 ) {
   const db = getDb();
+  const deviceType: DeviceType =
+    input.tipo === "dispositivo_personal_movil"
+      ? "dispositivo_personal_movil"
+      : "kiosco_sucursal";
 
   const [org] = await db
     .select({ maxDispositivos: schema.organizaciones.maxDispositivos })
@@ -98,19 +134,62 @@ export async function createDeviceWithPin(
     );
   }
 
-  const [sucursal] = await db
-    .select({ id: schema.sucursales.id })
-    .from(schema.sucursales)
-    .where(
-      and(
-        eq(schema.sucursales.id, input.sucursalId),
-        eq(schema.sucursales.orgId, orgId)
-      )
-    )
-    .limit(1);
+  let resolvedSucursalId: string | null = null;
+  let resolvedNombre = (input.nombre ?? "").trim();
+  let assignedEmpleadoId: string | null = null;
 
-  if (!sucursal) {
-    throw new Error("La sucursal seleccionada no pertenece a tu organización.");
+  if (deviceType === "dispositivo_personal_movil") {
+    if (!input.empleadoId) {
+      throw new Error(
+        "Un dispositivo personal móvil debe vincularse a un colaborador."
+      );
+    }
+    const [emp] = await db
+      .select({
+        id: schema.empleados.id,
+        activo: schema.empleados.activo,
+        nombreCompleto: schema.empleados.nombreCompleto,
+      })
+      .from(schema.empleados)
+      .where(
+        and(
+          eq(schema.empleados.id, input.empleadoId),
+          eq(schema.empleados.orgId, orgId)
+        )
+      )
+      .limit(1);
+
+    if (!emp || !emp.activo) {
+      throw new Error(
+        "El colaborador seleccionado no existe o no está activo en tu organización."
+      );
+    }
+    assignedEmpleadoId = emp.id;
+    if (!resolvedNombre) {
+      resolvedNombre = buildPersonalMobileDeviceName(emp.nombreCompleto);
+    }
+  } else {
+    if (!input.sucursalId) {
+      throw new Error("Selecciona una sucursal para la terminal quiosco.");
+    }
+    const [sucursal] = await db
+      .select({ id: schema.sucursales.id })
+      .from(schema.sucursales)
+      .where(
+        and(
+          eq(schema.sucursales.id, input.sucursalId),
+          eq(schema.sucursales.orgId, orgId)
+        )
+      )
+      .limit(1);
+
+    if (!sucursal) {
+      throw new Error("La sucursal seleccionada no pertenece a tu organización.");
+    }
+    resolvedSucursalId = sucursal.id;
+    if (resolvedNombre.length < 2) {
+      throw new Error("Ingresa un nombre válido para la terminal.");
+    }
   }
 
   const pin = generateSixDigitPin();
@@ -120,8 +199,10 @@ export async function createDeviceWithPin(
     .insert(schema.dispositivos)
     .values({
       orgId,
-      sucursalId: sucursal.id,
-      nombre: input.nombre.trim(),
+      sucursalId: resolvedSucursalId,
+      tipo: deviceType,
+      empleadoId: assignedEmpleadoId,
+      nombre: resolvedNombre,
       pairingCode: pin,
       pairingExpiresAt: expiresAt,
     })
@@ -132,7 +213,7 @@ export async function createDeviceWithPin(
   await storePairingPinInRedis(pin, {
     orgId,
     dispositivoId: created.id,
-    sucursalId: sucursal.id,
+    sucursalId: resolvedSucursalId,
   });
 
   await db.insert(schema.auditLogs).values({
@@ -141,7 +222,12 @@ export async function createDeviceWithPin(
     accion: "DISPOSITIVO_CREADO",
     entidad: "dispositivos",
     entidadId: created.id,
-    detalle: { nombre: created.nombre, sucursalId: sucursal.id },
+    detalle: {
+      nombre: created.nombre,
+      sucursalId: resolvedSucursalId,
+      tipo: deviceType,
+      empleadoId: assignedEmpleadoId,
+    },
   });
 
   return created;

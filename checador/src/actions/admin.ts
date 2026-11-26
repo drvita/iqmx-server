@@ -24,6 +24,7 @@ import {
   toggleEmployeeActive,
   updateEmployeeWithVectors,
 } from "@/services/admin/employees";
+import { resolveCheckInIncident } from "@/services/admin/incidents";
 import {
   createBranch,
   createSchedule,
@@ -41,7 +42,7 @@ export interface ActionResponse<T = unknown> {
   data?: T;
 }
 
-const createEmployeeSchema = z.object({
+const employeeBaseSchema = {
   nombreCompleto: z.string().trim().min(2).max(150),
   codigoInterno: z.string().trim().max(50).optional(),
   puesto: z.string().trim().max(100).optional(),
@@ -49,6 +50,18 @@ const createEmployeeSchema = z.object({
   sucursalId: z.string().uuid().nullable().optional(),
   horarioId: z.string().uuid().nullable().optional(),
   consentimientoBiometrico: z.boolean(),
+};
+
+const createEmployeeSchema = z.object({
+  ...employeeBaseSchema,
+  vectors: z
+    .array(z.array(z.number()).length(512))
+    .min(1, "Captura al menos 1 fotografía frontal del colaborador.")
+    .max(3),
+});
+
+const updateEmployeeSchema = z.object({
+  ...employeeBaseSchema,
   vectors: z.array(z.array(z.number()).length(512)).max(3).optional(),
 });
 
@@ -59,7 +72,11 @@ export async function createEmployeeAction(
     const session = await requireSession(ADMIN_WRITE_ROLES);
     const parsed = createEmployeeSchema.safeParse(raw);
     if (!parsed.success) {
-      return { ok: false, error: "Datos del empleado inválidos." };
+      return {
+        ok: false,
+        error:
+          parsed.error.issues[0]?.message ?? "Datos del empleado inválidos.",
+      };
     }
     const created = await createEmployeeWithVectors(
       session.orgId,
@@ -162,10 +179,42 @@ export async function createScheduleAction(
   }
 }
 
-const createDeviceSchema = z.object({
-  sucursalId: z.string().uuid(),
-  nombre: z.string().trim().min(2).max(100),
-});
+const createDeviceSchema = z
+  .object({
+    sucursalId: z.string().uuid().nullable().optional(),
+    nombre: z.string().trim().max(100).optional().default(""),
+    tipo: z
+      .enum(["kiosco_sucursal", "dispositivo_personal_movil"])
+      .optional()
+      .default("kiosco_sucursal"),
+    empleadoId: z.string().uuid().nullable().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.tipo === "dispositivo_personal_movil") {
+      if (!data.empleadoId) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Selecciona al colaborador para el dispositivo móvil.",
+          path: ["empleadoId"],
+        });
+      }
+      return;
+    }
+    if (!data.sucursalId) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Selecciona una sucursal para la terminal.",
+        path: ["sucursalId"],
+      });
+    }
+    if (!data.nombre || data.nombre.trim().length < 2) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "El nombre de la terminal debe tener al menos 2 caracteres.",
+        path: ["nombre"],
+      });
+    }
+  });
 
 export async function createDeviceAction(
   raw: z.infer<typeof createDeviceSchema>
@@ -322,14 +371,18 @@ export async function createOrgUserAction(
 
 export async function updateEmployeeAction(
   empleadoId: string,
-  raw: z.infer<typeof createEmployeeSchema>
+  raw: z.infer<typeof updateEmployeeSchema>
 ): Promise<ActionResponse> {
   try {
     const session = await requireSession(ADMIN_WRITE_ROLES);
     const id = z.string().uuid().parse(empleadoId);
-    const parsed = createEmployeeSchema.safeParse(raw);
+    const parsed = updateEmployeeSchema.safeParse(raw);
     if (!parsed.success) {
-      return { ok: false, error: "Datos del empleado inválidos." };
+      return {
+        ok: false,
+        error:
+          parsed.error.issues[0]?.message ?? "Datos del empleado inválidos.",
+      };
     }
     const updated = await updateEmployeeWithVectors(
       session.orgId,
@@ -594,6 +647,44 @@ export async function changeOwnPasswordAction(
         err instanceof Error
           ? err.message
           : "No fue posible cambiar la contraseña.",
+    };
+  }
+}
+
+const resolveIncidentSchema = z.object({
+  checadaId: z.string().uuid(),
+  estado: z.enum(["justificada", "resuelta"]),
+  motivo: z.string().trim().min(5).max(500),
+});
+
+export async function resolveIncidentAction(
+  raw: z.infer<typeof resolveIncidentSchema>
+): Promise<ActionResponse> {
+  try {
+    const session = await requireSession(ADMIN_WRITE_ROLES);
+    const parsed = resolveIncidentSchema.safeParse(raw);
+    if (!parsed.success) {
+      return {
+        ok: false,
+        error:
+          parsed.error.issues[0]?.message ??
+          "Ingresa un estado y motivo válido (mínimo 5 caracteres).",
+      };
+    }
+    const updated = await resolveCheckInIncident(
+      session.orgId,
+      session.userId,
+      parsed.data
+    );
+    revalidatePath("/dashboard");
+    return { ok: true, data: updated };
+  } catch (err) {
+    return {
+      ok: false,
+      error:
+        err instanceof Error
+          ? err.message
+          : "No fue posible resolver la incidencia.",
     };
   }
 }

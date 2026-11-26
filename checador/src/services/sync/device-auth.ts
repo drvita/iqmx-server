@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { getDb, schema } from "@/lib/db";
 import { getRedis } from "@/lib/redis";
 import { deviceBlacklistKey } from "@/services/admin/devices";
+import type { DeviceType } from "@/services/sync/gps-incidence";
 
 export function hashDeviceToken(token: string): string {
   return crypto.createHash("sha256").update(token).digest("hex");
@@ -16,8 +17,10 @@ export type DeviceAuthResult =
       device: {
         id: string;
         orgId: string;
-        sucursalId: string;
+        sucursalId: string | null;
         nombre: string;
+        tipo: DeviceType;
+        empleadoId: string | null;
       };
       org: {
         id: string;
@@ -78,6 +81,8 @@ export async function authenticateDeviceToken(
       deviceOrgId: schema.dispositivos.orgId,
       sucursalId: schema.dispositivos.sucursalId,
       deviceNombre: schema.dispositivos.nombre,
+      deviceTipo: schema.dispositivos.tipo,
+      deviceEmpleadoId: schema.dispositivos.empleadoId,
       deviceActivo: schema.dispositivos.activo,
       orgId: schema.organizaciones.id,
       orgNombre: schema.organizaciones.nombre,
@@ -120,6 +125,10 @@ export async function authenticateDeviceToken(
       orgId: row.deviceOrgId,
       sucursalId: row.sucursalId,
       nombre: row.deviceNombre,
+      tipo: (row.deviceTipo === "dispositivo_personal_movil"
+        ? "dispositivo_personal_movil"
+        : "kiosco_sucursal") as DeviceType,
+      empleadoId: row.deviceEmpleadoId ?? null,
     },
     org: {
       id: row.orgId,

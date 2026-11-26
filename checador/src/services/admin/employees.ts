@@ -20,32 +20,59 @@ function toPgVectorLiteral(vec: readonly number[]): string {
 
 export async function listEmployees(orgId: string) {
   const db = getDb();
-  const rows = await db
-    .select({
-      id: schema.empleados.id,
-      codigoInterno: schema.empleados.codigoInterno,
-      nombreCompleto: schema.empleados.nombreCompleto,
-      puesto: schema.empleados.puesto,
-      departamento: schema.empleados.departamento,
-      sucursalId: schema.empleados.sucursalId,
-      horarioId: schema.empleados.horarioId,
-      consentimientoBiometrico: schema.empleados.consentimientoBiometrico,
-      activo: schema.empleados.activo,
-      syncVersion: schema.empleados.syncVersion,
-      createdAt: schema.empleados.createdAt,
-      vectoresCount: sql<number>`(
-        SELECT count(*)::int
-        FROM checador.empleado_vectores ev
-        WHERE ev.empleado_id = ${schema.empleados.id}
-          AND ev.org_id = ${orgId}
-          AND ev.activo = true
-      )`,
-    })
-    .from(schema.empleados)
-    .where(eq(schema.empleados.orgId, orgId))
-    .orderBy(desc(schema.empleados.createdAt));
+  const [rows, vectorCounts, docCounts] = await Promise.all([
+    db
+      .select({
+        id: schema.empleados.id,
+        codigoInterno: schema.empleados.codigoInterno,
+        nombreCompleto: schema.empleados.nombreCompleto,
+        puesto: schema.empleados.puesto,
+        departamento: schema.empleados.departamento,
+        sucursalId: schema.empleados.sucursalId,
+        horarioId: schema.empleados.horarioId,
+        consentimientoBiometrico: schema.empleados.consentimientoBiometrico,
+        activo: schema.empleados.activo,
+        syncVersion: schema.empleados.syncVersion,
+        createdAt: schema.empleados.createdAt,
+      })
+      .from(schema.empleados)
+      .where(eq(schema.empleados.orgId, orgId))
+      .orderBy(desc(schema.empleados.createdAt)),
+    db
+      .select({
+        empleadoId: schema.empleadoVectores.empleadoId,
+        total: count(),
+      })
+      .from(schema.empleadoVectores)
+      .where(
+        and(
+          eq(schema.empleadoVectores.orgId, orgId),
+          eq(schema.empleadoVectores.activo, true)
+        )
+      )
+      .groupBy(schema.empleadoVectores.empleadoId),
+    db
+      .select({
+        empleadoId: schema.empleadoDocumentos.empleadoId,
+        total: count(),
+      })
+      .from(schema.empleadoDocumentos)
+      .where(eq(schema.empleadoDocumentos.orgId, orgId))
+      .groupBy(schema.empleadoDocumentos.empleadoId),
+  ]);
 
-  return rows;
+  const vectorMap = new Map(
+    vectorCounts.map((v) => [v.empleadoId, Number(v.total)])
+  );
+  const docMap = new Map(
+    docCounts.map((d) => [d.empleadoId, Number(d.total)])
+  );
+
+  return rows.map((row) => ({
+    ...row,
+    vectoresCount: vectorMap.get(row.id) ?? 0,
+    documentosCount: docMap.get(row.id) ?? 0,
+  }));
 }
 
 export async function findDuplicateFaceInOrg(
@@ -103,6 +130,11 @@ export async function createEmployeeWithVectors(
   const db = getDb();
   const vectors = input.vectors ?? [];
 
+  if (vectors.length < 1) {
+    throw new Error(
+      "Debes capturar al menos 1 fotografía frontal para registrar al colaborador."
+    );
+  }
   if (vectors.length > 0 && !input.consentimientoBiometrico) {
     throw new Error(
       "CONSENT_REQUIRED: Se requiere consentimiento biométrico LFPDPPP antes de guardar vectores."
@@ -239,6 +271,11 @@ export async function updateEmployeeWithVectors(
   const db = getDb();
   const vectors = input.vectors ?? [];
 
+  if (vectors.length < 1) {
+    throw new Error(
+      "Debes capturar al menos 1 fotografía frontal para registrar al colaborador."
+    );
+  }
   if (vectors.length > 0 && !input.consentimientoBiometrico) {
     throw new Error(
       "Se requiere consentimiento biométrico LFPDPPP antes de guardar vectores."
