@@ -39,6 +39,7 @@ export default async function ConfiguracionPage() {
           rfc: overview.org.rfc,
           registroPatronalImss: overview.org.registroPatronalImss,
           periodicidadReporte: overview.org.periodicidadReporte,
+          acuseSemanalEnabled: overview.org.acuseSemanalEnabled,
           hasAuditPin: Boolean(overview.org.pinAuditoriaHash),
         }}
         canEdit={isOrgAdmin}

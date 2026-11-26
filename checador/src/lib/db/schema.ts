@@ -71,6 +71,9 @@ export const organizaciones = checadorSchema.table(
     periodicidadReporte: varchar("periodicidad_reporte", { length: 20 })
       .notNull()
       .default("semanal"),
+    acuseSemanalEnabled: boolean("acuse_semanal_enabled")
+      .notNull()
+      .default(false),
     logoUrl: text("logo_url"),
     colorPrimario: varchar("color_primario", { length: 7 })
       .notNull()
@@ -441,4 +444,83 @@ export const empleadoDocumentos = checadorSchema.table(
       .defaultNow(),
   },
   (table) => [index("idx_emp_docs_org_emp").on(table.orgId, table.empleadoId)]
+);
+
+export const acusesSemanales = checadorSchema.table(
+  "acuses_semanales",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizaciones.id, { onDelete: "cascade" }),
+    empleadoId: uuid("empleado_id")
+      .notNull()
+      .references(() => empleados.id, { onDelete: "cascade" }),
+    dispositivoId: uuid("dispositivo_id").references(() => dispositivos.id, {
+      onDelete: "set null",
+    }),
+    periodoClave: varchar("periodo_clave", { length: 30 }).notNull(),
+    periodoInicio: timestamp("periodo_inicio", {
+      withTimezone: true,
+    }).notNull(),
+    periodoFin: timestamp("periodo_fin", { withTimezone: true }).notNull(),
+    horasOrdinarias: numeric("horas_ordinarias", {
+      precision: 6,
+      scale: 2,
+    })
+      .notNull()
+      .default("0.00"),
+    horasExtrasDobles: numeric("horas_extras_dobles", {
+      precision: 6,
+      scale: 2,
+    })
+      .notNull()
+      .default("0.00"),
+    horasExtrasTriples: numeric("horas_extras_triples", {
+      precision: 6,
+      scale: 2,
+    })
+      .notNull()
+      .default("0.00"),
+    totalHoras: numeric("total_horas", {
+      precision: 6,
+      scale: 2,
+    })
+      .notNull()
+      .default("0.00"),
+    estado: varchar("estado", { length: 20 }).notNull(),
+    origen: varchar("origen", { length: 30 })
+      .notNull()
+      .default("kiosco_touch"),
+    selloIntegridadSha256: varchar("sello_integridad_sha256", {
+      length: 64,
+    }).notNull(),
+    resueltoPor: uuid("resuelto_por").references(() => usuarios.id, {
+      onDelete: "set null",
+    }),
+    resueltoAt: timestamp("resuelto_at", { withTimezone: true }),
+    notaResolucion: text("nota_resolucion"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique("uq_acuses_org_emp_periodo").on(
+      table.orgId,
+      table.empleadoId,
+      table.periodoClave
+    ),
+    index("idx_acuses_org_estado").on(table.orgId, table.estado),
+    check(
+      "chk_acuses_estado",
+      sql`${table.estado} IN ('aceptado', 'rechazado')`
+    ),
+    check(
+      "chk_acuses_origen",
+      sql`${table.origen} IN ('kiosco_touch', 'movil_personal')`
+    ),
+  ]
 );

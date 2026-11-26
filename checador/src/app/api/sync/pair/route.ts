@@ -176,9 +176,14 @@ export async function POST(req: Request) {
         codigoInterno: schema.empleados.codigoInterno,
         puesto: schema.empleados.puesto,
         horarioId: schema.empleados.horarioId,
+        diasLaborales: schema.horarios.diasLaborales,
         activo: schema.empleados.activo,
       })
       .from(schema.empleados)
+      .leftJoin(
+        schema.horarios,
+        eq(schema.empleados.horarioId, schema.horarios.id)
+      )
       .where(
         and(
           eq(schema.empleados.orgId, org.id),
@@ -248,6 +253,8 @@ export async function POST(req: Request) {
       cloudEvidencesEnabled: org.cloudEvidencesEnabled,
       horasSemanalesMax: Number(org.horasSemanalesMax),
       pinAuditoriaHash: org.pinAuditoriaHash ?? null,
+      acuseSemanalEnabled: org.acuseSemanalEnabled,
+      periodicidadReporte: org.periodicidadReporte,
     },
     employees,
     vectors,

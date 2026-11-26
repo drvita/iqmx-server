@@ -36,6 +36,8 @@ export async function GET(req: Request) {
       cloudEvidencesEnabled: schema.organizaciones.cloudEvidencesEnabled,
       horasSemanalesMax: schema.organizaciones.horasSemanalesMax,
       pinAuditoriaHash: schema.organizaciones.pinAuditoriaHash,
+      acuseSemanalEnabled: schema.organizaciones.acuseSemanalEnabled,
+      periodicidadReporte: schema.organizaciones.periodicidadReporte,
     })
     .from(schema.organizaciones)
     .where(eq(schema.organizaciones.id, orgId))
@@ -56,9 +58,14 @@ export async function GET(req: Request) {
       codigoInterno: schema.empleados.codigoInterno,
       puesto: schema.empleados.puesto,
       horarioId: schema.empleados.horarioId,
+      diasLaborales: schema.horarios.diasLaborales,
       activo: schema.empleados.activo,
     })
     .from(schema.empleados)
+    .leftJoin(
+      schema.horarios,
+      eq(schema.empleados.horarioId, schema.horarios.id)
+    )
     .where(and(...empConditions));
 
   const { activeEmployees, deletedIds, isAssignedActive } =

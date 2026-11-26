@@ -21,6 +21,7 @@ interface ConfiguracionClientProps {
     rfc: string | null;
     registroPatronalImss: string | null;
     periodicidadReporte: string;
+    acuseSemanalEnabled: boolean;
     hasAuditPin: boolean;
   };
   canEdit: boolean;
@@ -60,6 +61,9 @@ export function ConfiguracionClient({
       org.periodicidadReporte === "mensual"
       ? org.periodicidadReporte
       : "semanal"
+  );
+  const [acuseSemanalEnabled, setAcuseSemanalEnabled] = useState(
+    Boolean(org.acuseSemanalEnabled)
   );
   const [pinAuditoria, setPinAuditoria] = useState("");
   const [pinConfigured, setPinConfigured] = useState(org.hasAuditPin);
@@ -135,6 +139,7 @@ export function ConfiguracionClient({
       rfc: rfc || null,
       registroPatronalImss: registroPatronalImss || null,
       periodicidadReporte,
+      acuseSemanalEnabled,
       ...(cleanPin ? { pinAuditoria: cleanPin } : {}),
     });
     setBusy(false);
@@ -218,7 +223,7 @@ export function ConfiguracionClient({
       <div className="space-y-3 text-xs">
         <div className="grid grid-cols-2 gap-3">
           <label className="space-y-1">
-            <span className="text-slate-600">Color Primario</span>
+            <span className="font-medium text-slate-700">Color Primario</span>
             <input
               type="color"
               disabled={!canEdit}
@@ -228,7 +233,7 @@ export function ConfiguracionClient({
             />
           </label>
           <label className="space-y-1">
-            <span className="text-slate-600">Color Secundario</span>
+            <span className="font-medium text-slate-700">Color Secundario</span>
             <input
               type="color"
               disabled={!canEdit}
@@ -238,9 +243,15 @@ export function ConfiguracionClient({
             />
           </label>
         </div>
+        <p className="text-[11px] text-slate-500">
+          Identifica visualmente las terminales de tu empresa para evitar
+          confusiones en sucursales compartidas.
+        </p>
 
         <label className="block space-y-1">
-          <span className="text-slate-600">Mensaje de Bienvenida en Quiosco</span>
+          <span className="font-medium text-slate-700">
+            Mensaje de Bienvenida en Quiosco
+          </span>
           <input
             type="text"
             required
@@ -249,6 +260,10 @@ export function ConfiguracionClient({
             onChange={(e) => setMensajeBienvenida(e.target.value)}
             className="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900 disabled:bg-slate-50"
           />
+          <span className="block text-[11px] text-slate-500">
+            Saludo visible en la pantalla de inicio del quiosco para orientar al
+            personal al registrar su entrada o salida.
+          </span>
         </label>
 
         <div className="space-y-1.5 rounded-xl border border-slate-200 bg-slate-50 p-3.5 text-xs">
@@ -352,7 +367,7 @@ export function ConfiguracionClient({
         </div>
 
         <label className="block space-y-1">
-          <span className="text-slate-600">
+          <span className="font-medium text-slate-700">
             Periodicidad Predeterminada de Reporte
           </span>
           <select
@@ -374,12 +389,56 @@ export function ConfiguracionClient({
             <option value="quincenal">Quincenal</option>
             <option value="mensual">Mensual</option>
           </select>
+          <span className="block text-[11px] text-slate-500">
+            Define el ciclo por defecto para exportaciones de prenómina y el
+            corte de resumen de asistencia del colaborador.
+          </span>
         </label>
 
+        <div className="rounded-xl border border-slate-200 bg-slate-50 p-3.5">
+          <div className="flex items-start justify-between gap-4">
+            <div className="space-y-1">
+              <span className="block font-semibold text-slate-800">
+                Acuse de Conformidad de Asistencia en Terminales
+              </span>
+              <p className="text-[11px] leading-relaxed text-slate-600">
+                Habilita el botón <strong>Mi Semana</strong> en quioscos y
+                dispositivos personales y solicita confirmación táctil al
+                finalizar el último día del turno.{" "}
+                <strong>Fundamento LFT (Arts. 784 y 804 Fracc. III):</strong>{" "}
+                fortalece la prueba documental patronal ante inspecciones o
+                reclamos de horas extras.
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={acuseSemanalEnabled}
+              disabled={!canEdit}
+              onClick={() => setAcuseSemanalEnabled((prev) => !prev)}
+              className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 ${
+                acuseSemanalEnabled ? "bg-[#4f46e5]" : "bg-slate-300"
+              }`}
+            >
+              <span
+                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition ${
+                  acuseSemanalEnabled ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+        </div>
+
         <div className="space-y-3 border-t border-slate-100 pt-3">
-          <p className="text-[11px] font-semibold text-slate-600">
-            Datos para cabecera de reportes oficiales STPS (opcionales)
-          </p>
+          <div className="space-y-0.5">
+            <p className="text-[11px] font-semibold text-slate-700">
+              Datos Fiscales para Reportes Oficiales STPS (opcionales)
+            </p>
+            <p className="text-[11px] text-slate-500">
+              Requeridos en la carátula del PDF oficial ante auditorías de la
+              STPS e IMSS (<strong>Art. 132 Fracc. XXXIV y Art. 804 LFT</strong>).
+            </p>
+          </div>
           <label className="block space-y-1">
             <span className="text-slate-600">Razón Social</span>
             <input

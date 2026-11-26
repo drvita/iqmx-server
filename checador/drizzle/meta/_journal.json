@@ -57,6 +57,13 @@
       "when": 1795722910398,
       "tag": "0007_illegal_blacklash",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1795725262046,
+      "tag": "0008_equal_terrax",
+      "breakpoints": true
     }
   ]
 }

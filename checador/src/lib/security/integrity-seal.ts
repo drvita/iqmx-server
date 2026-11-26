@@ -64,3 +64,60 @@ export function computeDocumentIntegrityHash(canonicalContent: string): string {
     .update(canonicalContent, "utf8")
     .digest("hex");
 }
+
+export interface AcknowledgmentIntegrityPayload {
+  orgId: string;
+  empleadoId: string;
+  periodoClave: string;
+  horasOrdinarias: string;
+  horasExtrasDobles: string;
+  horasExtrasTriples: string;
+  totalHoras: string;
+  estado: "aceptado" | "rechazado";
+  origen: "kiosco_touch" | "movil_personal";
+  timestampIso: string;
+}
+
+function buildCanonicalAcknowledgmentString(
+  input: AcknowledgmentIntegrityPayload
+): string {
+  return [
+    input.orgId,
+    input.empleadoId,
+    input.periodoClave,
+    input.horasOrdinarias,
+    input.horasExtrasDobles,
+    input.horasExtrasTriples,
+    input.totalHoras,
+    input.estado,
+    input.origen,
+    input.timestampIso,
+  ].join("|");
+}
+
+/**
+ * Genera el sello criptográfico SHA-256 (64 chars hex) para un acuse de conformidad laboral.
+ */
+export function computeAcknowledgmentIntegrityHash(
+  input: AcknowledgmentIntegrityPayload
+): string {
+  return crypto
+    .createHash("sha256")
+    .update(buildCanonicalAcknowledgmentString(input), "utf8")
+    .digest("hex");
+}
+
+/**
+ * Verifica de forma segura en tiempo constante que un acuse de conformidad no haya sido alterado.
+ */
+export function verifyAcknowledgmentIntegrityHash(
+  input: AcknowledgmentIntegrityPayload,
+  expectedHash: string
+): boolean {
+  if (!/^[a-f0-9]{64}$/i.test(expectedHash)) return false;
+  const actual = computeAcknowledgmentIntegrityHash(input);
+  return crypto.timingSafeEqual(
+    Buffer.from(actual, "hex"),
+    Buffer.from(expectedHash.toLowerCase(), "hex")
+  );
+}

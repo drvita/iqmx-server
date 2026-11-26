@@ -4,11 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowRight,
+  CalendarCheck2,
   Camera,
   CheckCircle2,
   Clock,
   Coffee,
   Database,
+  Delete,
   History,
   Lock,
   LogIn,
@@ -98,6 +100,55 @@ interface FeedbackBanner {
   detail: string;
 }
 
+interface AcknowledgmentSummaryResponse {
+  employee: {
+    id: string;
+    nombreCompleto: string;
+    codigoInterno: string | null;
+    puesto: string | null;
+  };
+  period: {
+    tipo: string;
+    periodoClave: string;
+    startDateKey: string;
+    endDateKey: string;
+    label: string;
+  };
+  summary: {
+    ordinaryHours: number;
+    doubleOvertimeHours: number;
+    tripleOvertimeHours: number;
+    totalHours: number;
+    tardies: number;
+    daysComplete: number;
+    tipoJornada: string;
+    maxHours: number;
+  };
+  isLastWorkday: boolean;
+  acknowledgment: {
+    id: string;
+    estado: "aceptado" | "rechazado";
+    origen: string;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
+}
+
+function isClientLastWorkday(
+  diasLaborales: number[] | null | undefined,
+  date: Date = new Date()
+): boolean {
+  const jsDay = date.getDay();
+  const isoDay = jsDay === 0 ? 7 : jsDay;
+  const validDays = (diasLaborales ?? []).filter(
+    (d) => Number.isInteger(d) && d >= 1 && d <= 7
+  );
+  if (validDays.length > 0) {
+    return isoDay === Math.max(...validDays);
+  }
+  return isoDay === 5 || isoDay === 6;
+}
+
 export function KioskApp() {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -133,6 +184,19 @@ export function KioskApp() {
   const [auditUnlocked, setAuditUnlocked] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
   const [auditRecords, setAuditRecords] = useState<LocalAttendanceRecord[]>([]);
+
+  // Modal de Acuse Semanal ("Mi Semana")
+  const [ackOpen, setAckOpen] = useState(false);
+  const [ackAutoTriggered, setAckAutoTriggered] = useState(false);
+  const [ackAutoCloseSec, setAckAutoCloseSec] = useState<number | null>(null);
+  const [ackCodeInput, setAckCodeInput] = useState("");
+  const [ackLoading, setAckLoading] = useState(false);
+  const [ackSubmitting, setAckSubmitting] = useState(false);
+  const [ackError, setAckError] = useState<string | null>(null);
+  const [ackData, setAckData] = useState<AcknowledgmentSummaryResponse | null>(
+    null
+  );
+  const [ackNotice, setAckNotice] = useState<string | null>(null);
 
   const logoBlob = config?.logoBlob ?? null;
   const logoObjectUrl = useMemo(() => {
@@ -393,6 +457,7 @@ export function KioskApp() {
             mensajeBienvenida: string;
             cloudEvidencesEnabled: boolean;
             horasSemanalesMax: number;
+            acuseSemanalEnabled?: boolean;
             pinAuditoriaHash?: string | null;
           } | null;
           employees?: LocalEmployee[];
@@ -474,6 +539,9 @@ export function KioskApp() {
                     cloudEvidencesEnabled:
                       empData.organization.cloudEvidencesEnabled,
                     horasSemanalesMax: empData.organization.horasSemanalesMax,
+                    acuseSemanalEnabled: Boolean(
+                      empData.organization.acuseSemanalEnabled
+                    ),
                     auditPinHash:
                       empData.organization.pinAuditoriaHash ??
                       currentCfg.auditPinHash ??
@@ -728,6 +796,10 @@ export function KioskApp() {
             mensajeBienvenida: data.organization!.mensajeBienvenida,
             cloudEvidencesEnabled: data.organization!.cloudEvidencesEnabled,
             horasSemanalesMax: data.organization!.horasSemanalesMax,
+            acuseSemanalEnabled: Boolean(
+              (data.organization as { acuseSemanalEnabled?: boolean })
+                .acuseSemanalEnabled
+            ),
             auditPinHash: data.organization!.pinAuditoriaHash ?? null,
             lastValidTimestampMs: nowMs,
             lastSyncAt: new Date(nowMs).toISOString(),
@@ -977,7 +1049,49 @@ export function KioskApp() {
           ? "Asistencia guardada con aviso en la hora del equipo."
           : "Asistencia guardada correctamente.",
       });
-      void flushPendingAttendances();
+
+      const matchedLocalEmp = employees.find(
+        (e) => e.id === evalRes.matchedEmployee?.id
+      );
+      if (
+        tipo === "salida" &&
+        config.acuseSemanalEnabled &&
+        online &&
+        isClientLastWorkday(matchedLocalEmp?.diasLaborales)
+      ) {
+        await flushPendingAttendances();
+        try {
+          const ackRes = await fetch(
+            `/api/sync/acknowledgment?empleadoId=${encodeURIComponent(
+              evalRes.matchedEmployee.id
+            )}`,
+            {
+              headers: {
+                Authorization: `Bearer ${config.deviceToken}`,
+              },
+            }
+          );
+          if (ackRes.ok) {
+            const payload =
+              (await ackRes.json()) as AcknowledgmentSummaryResponse & {
+                ok: boolean;
+              };
+            if (payload.ok && !payload.acknowledgment) {
+              setAckData(payload);
+              setAckError(null);
+              setAckNotice(null);
+              setAckCodeInput("");
+              setAckAutoTriggered(true);
+              setAckAutoCloseSec(12);
+              setAckOpen(true);
+            }
+          }
+        } catch {
+          // No interrumpir flujo de checada si falla la consulta de acuse
+        }
+      } else {
+        void flushPendingAttendances();
+      }
     } catch (err) {
       setFeedback({
         tone: "error",
@@ -1051,6 +1165,122 @@ export function KioskApp() {
     setAuditUnlocked(false);
     setFeedback(null);
     await loadLocalState();
+  };
+
+  useEffect(() => {
+    if (!ackOpen || ackAutoCloseSec === null) return;
+    const timer = window.setTimeout(() => {
+      if (ackAutoCloseSec <= 1) {
+        setAckOpen(false);
+        setAckAutoTriggered(false);
+        setAckAutoCloseSec(null);
+      } else {
+        setAckAutoCloseSec(ackAutoCloseSec - 1);
+      }
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [ackOpen, ackAutoCloseSec]);
+
+  const fetchAcknowledgmentSummary = async (params: {
+    empleadoId?: string;
+    codigoInterno?: string;
+  }) => {
+    if (!config) return;
+    if (!online) {
+      setAckError(
+        "Se requiere conexión a internet para consultar el resumen acumulado."
+      );
+      return;
+    }
+    setAckLoading(true);
+    setAckError(null);
+    setAckNotice(null);
+    try {
+      const qs = params.empleadoId
+        ? `empleadoId=${encodeURIComponent(params.empleadoId)}`
+        : `codigoInterno=${encodeURIComponent(params.codigoInterno ?? "")}`;
+      const res = await fetch(`/api/sync/acknowledgment?${qs}`, {
+        headers: {
+          Authorization: `Bearer ${config.deviceToken}`,
+        },
+      });
+      const json = (await res.json()) as AcknowledgmentSummaryResponse & {
+        ok: boolean;
+        error?: string;
+      };
+      if (!res.ok || !json.ok) {
+        setAckError(
+          json.error ?? "No se pudo obtener el resumen del colaborador."
+        );
+        return;
+      }
+      setAckData(json);
+    } catch {
+      setAckError("Error de conexión al consultar tu semana.");
+    } finally {
+      setAckLoading(false);
+    }
+  };
+
+  const openMyWeekModal = () => {
+    if (!config) return;
+    setAckAutoTriggered(false);
+    setAckAutoCloseSec(null);
+    setAckCodeInput("");
+    setAckError(null);
+    setAckNotice(null);
+    setAckData(null);
+    setAckOpen(true);
+
+    if (
+      config.deviceTipo === "dispositivo_personal_movil" &&
+      config.empleadoId
+    ) {
+      void fetchAcknowledgmentSummary({ empleadoId: config.empleadoId });
+    }
+  };
+
+  const handleSubmitAcknowledgment = async (
+    estado: "aceptado" | "rechazado"
+  ) => {
+    if (!config || !ackData || ackSubmitting) return;
+    setAckAutoCloseSec(null);
+    setAckSubmitting(true);
+    setAckError(null);
+    try {
+      const res = await fetch("/api/sync/acknowledgment", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${config.deviceToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          empleadoId: ackData.employee.id,
+          estado,
+        }),
+      });
+      const json = (await res.json()) as {
+        ok: boolean;
+        acknowledgment?: AcknowledgmentSummaryResponse["acknowledgment"];
+        error?: string;
+      };
+      if (!res.ok || !json.ok || !json.acknowledgment) {
+        setAckError(json.error ?? "No se pudo guardar tu respuesta.");
+        return;
+      }
+      setAckData((prev) =>
+        prev ? { ...prev, acknowledgment: json.acknowledgment! } : prev
+      );
+      setAckNotice(
+        estado === "aceptado"
+          ? "Tu conformidad semanal quedó registrada correctamente."
+          : "Tu reporte fue notificado a Recursos Humanos. Acércate con tu supervisor o RH para conciliar tu asistencia."
+      );
+    } catch {
+      setAckError("Error de conexión al registrar el acuse.");
+    } finally {
+      setAckSubmitting(false);
+    }
   };
 
   if (booting) {
@@ -1280,6 +1510,18 @@ export function KioskApp() {
               </span>
             </div>
           </div>
+
+          {config.acuseSemanalEnabled && (
+            <button
+              type="button"
+              onClick={openMyWeekModal}
+              title="Consultar mi semana y acuse"
+              className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-2.5 text-xs font-semibold text-[#1e1b4b] transition hover:bg-indigo-100 sm:h-10 sm:px-3"
+            >
+              <CalendarCheck2 className="h-4 w-4 text-[#4f46e5]" />
+              <span className="hidden sm:inline">Mi Semana</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -1675,6 +1917,262 @@ export function KioskApp() {
                     </p>
                   )}
                 </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Modal Táctil de Resumen Semanal y Acuse de Conformidad */}
+      {ackOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setAckAutoCloseSec(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#070235]/70 p-4 backdrop-blur-xs"
+        >
+          <div
+            onClick={(e) => {
+              e.stopPropagation();
+              setAckAutoCloseSec(null);
+            }}
+            className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="flex items-center gap-2">
+                <CalendarCheck2 className="h-5 w-5 text-[#4f46e5]" />
+                <div>
+                  <h2 className="text-base font-bold text-slate-900">
+                    Resumen y Acuse de Asistencia
+                  </h2>
+                  {ackAutoTriggered && ackAutoCloseSec !== null && (
+                    <p className="text-[11px] font-medium text-amber-700">
+                      Se cerrará automáticamente en {ackAutoCloseSec}s si no
+                      requieres responder ahora.
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setAckOpen(false);
+                  setAckAutoTriggered(false);
+                  setAckAutoCloseSec(null);
+                }}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {!ackData ? (
+              <div className="mt-4 space-y-4">
+                {ackLoading ? (
+                  <p className="py-8 text-center text-sm font-medium text-slate-600">
+                    Consultando tu acumulado de asistencia...
+                  </p>
+                ) : (
+                  <>
+                    <p className="text-xs text-slate-600">
+                      Ingresa tu <strong>número de nómina</strong> usando el
+                      teclado en pantalla para consultar tus horas trabajadas y
+                      confirmar tu acuse del periodo.
+                    </p>
+
+                    <div className="rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-center">
+                      <input
+                        type="text"
+                        value={ackCodeInput}
+                        onChange={(e) =>
+                          setAckCodeInput(e.target.value.toUpperCase())
+                        }
+                        placeholder="Número de nómina"
+                        className="w-full bg-transparent text-center font-mono text-xl font-bold tracking-wider text-slate-900 focus:outline-none"
+                      />
+                    </div>
+
+                    {/* Teclado numérico táctil para quioscos sin teclado físico */}
+                    <div className="grid grid-cols-3 gap-2">
+                      {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map(
+                        (digit) => (
+                          <button
+                            key={digit}
+                            type="button"
+                            onClick={() =>
+                              setAckCodeInput((prev) =>
+                                prev.length < 20 ? `${prev}${digit}` : prev
+                              )
+                            }
+                            className="flex h-12 items-center justify-center rounded-xl border border-slate-200 bg-white text-lg font-bold text-slate-800 shadow-2xs active:scale-95 active:bg-slate-100"
+                          >
+                            {digit}
+                          </button>
+                        )
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => setAckCodeInput("")}
+                        className="flex h-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-xs font-semibold text-slate-700 active:scale-95"
+                      >
+                        Limpiar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAckCodeInput((prev) =>
+                            prev.length < 20 ? `${prev}0` : prev
+                          )
+                        }
+                        className="flex h-12 items-center justify-center rounded-xl border border-slate-200 bg-white text-lg font-bold text-slate-800 shadow-2xs active:scale-95 active:bg-slate-100"
+                      >
+                        0
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setAckCodeInput((prev) => prev.slice(0, -1))
+                        }
+                        aria-label="Borrar último dígito"
+                        className="flex h-12 items-center justify-center rounded-xl border border-slate-200 bg-slate-100 text-slate-700 active:scale-95"
+                      >
+                        <Delete className="h-5 w-5" />
+                      </button>
+                    </div>
+
+                    {ackError && (
+                      <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                        {ackError}
+                      </p>
+                    )}
+
+                    <button
+                      type="button"
+                      disabled={!ackCodeInput.trim() || ackLoading}
+                      onClick={() =>
+                        void fetchAcknowledgmentSummary({
+                          codigoInterno: ackCodeInput.trim(),
+                        })
+                      }
+                      className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-[#4f46e5] px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50"
+                    >
+                      Consultar mi semana
+                    </button>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="mt-4 space-y-4">
+                <div className="rounded-xl border border-indigo-100 bg-indigo-50/70 p-3.5">
+                  <p className="text-sm font-bold text-[#070235]">
+                    {ackData.employee.nombreCompleto}
+                  </p>
+                  <p className="text-xs text-slate-600">
+                    {ackData.employee.codigoInterno
+                      ? `Nómina: ${ackData.employee.codigoInterno} · `
+                      : ""}
+                    Periodo: <strong>{ackData.period.label}</strong>
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
+                    <span className="block text-[11px] font-medium text-slate-500">
+                      Ordinarias
+                    </span>
+                    <span className="tnum mt-0.5 block text-lg font-extrabold text-slate-900">
+                      {ackData.summary.ordinaryHours.toFixed(1)} h
+                    </span>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
+                    <span className="block text-[11px] font-medium text-slate-500">
+                      Extras Dobles
+                    </span>
+                    <span className="tnum mt-0.5 block text-lg font-extrabold text-amber-700">
+                      {ackData.summary.doubleOvertimeHours.toFixed(1)} h
+                    </span>
+                  </div>
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-center">
+                    <span className="block text-[11px] font-medium text-slate-500">
+                      Extras Triples
+                    </span>
+                    <span className="tnum mt-0.5 block text-lg font-extrabold text-red-700">
+                      {ackData.summary.tripleOvertimeHours.toFixed(1)} h
+                    </span>
+                  </div>
+                  <div className="rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-center">
+                    <span className="block text-[11px] font-medium text-indigo-700">
+                      Total Periodo
+                    </span>
+                    <span className="tnum mt-0.5 block text-lg font-extrabold text-[#1e1b4b]">
+                      {ackData.summary.totalHours.toFixed(1)} h
+                    </span>
+                  </div>
+                </div>
+
+                {ackNotice && (
+                  <div
+                    className={`rounded-xl border p-3.5 text-xs font-medium ${
+                      ackData.acknowledgment?.estado === "aceptado"
+                        ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+                        : "border-amber-200 bg-amber-50 text-amber-900"
+                    }`}
+                  >
+                    {ackNotice}
+                  </div>
+                )}
+
+                {ackError && (
+                  <p className="rounded-xl bg-red-50 px-3 py-2 text-xs font-medium text-red-700">
+                    {ackError}
+                  </p>
+                )}
+
+                {ackData.acknowledgment?.estado === "aceptado" ? (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-center">
+                    <CheckCircle2 className="mx-auto h-7 w-7 text-[#059669]" />
+                    <p className="mt-1.5 text-sm font-bold text-emerald-900">
+                      Asistencia aceptada de conformidad
+                    </p>
+                    <p className="mt-0.5 text-xs text-emerald-800">
+                      Registrado el{" "}
+                      {new Date(
+                        ackData.acknowledgment.updatedAt
+                      ).toLocaleString("es-MX")}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2.5 pt-1">
+                    <p className="text-xs text-slate-600">
+                      ¿Estás de acuerdo con las horas registradas en este
+                      periodo?
+                    </p>
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        disabled={ackSubmitting}
+                        onClick={() =>
+                          void handleSubmitAcknowledgment("aceptado")
+                        }
+                        className="flex min-h-[54px] items-center justify-center gap-2 rounded-xl bg-[#059669] px-4 py-3 text-sm font-extrabold text-white shadow-sm hover:bg-emerald-700 active:scale-[0.99] disabled:opacity-50"
+                      >
+                        <CheckCircle2 className="h-5 w-5" />
+                        Aceptar de conformidad
+                      </button>
+                      <button
+                        type="button"
+                        disabled={ackSubmitting}
+                        onClick={() =>
+                          void handleSubmitAcknowledgment("rechazado")
+                        }
+                        className="flex min-h-[54px] items-center justify-center gap-2 rounded-xl border-2 border-amber-500 bg-amber-50 px-4 py-3 text-sm font-extrabold text-amber-900 hover:bg-amber-100 active:scale-[0.99] disabled:opacity-50"
+                      >
+                        <AlertTriangle className="h-5 w-5 text-amber-700" />
+                        Rechazar / Discrepancia
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

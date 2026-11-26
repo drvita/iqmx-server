@@ -7,6 +7,34 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 > **Zona horaria de referencia:** Ciudad de México (CST / UTC-6).
 
+## [1.29.0] - 2026-11-26
+
+### Añadido
+
+- **Sprint A — Cumplimiento Normativo LFT 2027 y Reportes Oficiales STPS (`checador/`)**:
+  - **Desglose de Horas Extras LFT (Arts. 66–68)**: Motor determinista en [`attendance-compliance.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/services/reports/attendance-compliance.ts) que acumula horas por semana natural, clasificando las primeras 9 horas extras como dobles (200%) y los excedentes como triples (300%).
+  - **Soporte para Tipos de Jornadas (Arts. 60 y 61 LFT)**: Selector en turnos de `/horarios` (`diurna`, `mixta`, `nocturna`) con soporte de cruce de medianoche y límites configurables por organización en `/configuracion` (defaults legales 48h, 45h y 42h). Migraciones Drizzle [`0005_mighty_redwing.sql`](file:///Users/laclavees12345/code/iqissmexico/main/checador/drizzle/0005_mighty_redwing.sql) y [`0006_tiresome_wind_dancer.sql`](file:///Users/laclavees12345/code/iqissmexico/main/checador/drizzle/0006_tiresome_wind_dancer.sql).
+  - **Sellado Criptográfico SHA-256 de Asistencias**: Generación del hash inmutable `sello_integridad_sha256` en [`integrity-seal.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/lib/security/integrity-seal.ts) al registrar nuevas checadas en [`/api/sync/attendance`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/api/sync/attendance/route.ts). Migración Drizzle [`0007_illegal_blacklash.sql`](file:///Users/laclavees12345/code/iqissmexico/main/checador/drizzle/0007_illegal_blacklash.sql).
+  - **Generador de Reporte Oficial PDF STPS**: Servicio [`stps-pdf.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/services/reports/stps-pdf.ts) (`pdf-lib`) integrado en el modal de exportación de `/dashboard` y [`/api/admin/reports/attendance`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/api/admin/reports/attendance/route.ts) con Razón Social, RFC, Registro Patronal IMSS, desglose de horas ordinarias/dobles/triples, bitácora cronológica con sellos SHA-256 abreviados y hash del documento.
+  - **Modal de Reportes con Temporalidad Flexible**: Selector interactivo de periodos (`semanal`, `catorcenal`, `quincenal`, `mensual`, `personalizado`) con checkboxes para Resumen de Prenómina y Detalle GPS, más columna `Alerta Jornada` (`1`/`0`) en CSV.
+  - **Separación de Límites de Membresía SaaS**: Kioscos físicos validados contra `maxDispositivos` y dispositivos móviles personales contra `maxEmpleados` activos. Revocación automática del dispositivo móvil e invalidación en Redis al dar de baja al colaborador.
+- **Sprint B — Acuse Semanal de Asistencia y Recuperación Web (`checador/`)**:
+  - **Acuse de Conformidad de Asistencia (Arts. 784 y 804 Fracc. III LFT)**:
+    - Campo `acuse_semanal_enabled` (deshabilitado por defecto) en `organizaciones` y tabla `acuses_semanales` en [`schema.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/lib/db/schema.ts) con migración Drizzle [`0008_equal_terrax.sql`](file:///Users/laclavees12345/code/iqissmexico/main/checador/drizzle/0008_equal_terrax.sql).
+    - Servicio [`weekly-acknowledgment.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/services/reports/weekly-acknowledgment.ts) y endpoints [`/api/sync/acknowledgment`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/api/sync/acknowledgment/route.ts) (`GET`/`POST`) con sellado criptográfico SHA-256 (`computeAcknowledgmentIntegrityHash`).
+    - Flujo táctil en quiosco PWA [`KioskApp.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/components/kiosk/KioskApp.tsx) sin asumir teclado físico: botón **Mi Semana** en cabecera con teclado numérico en pantalla (número de nómina), auto-disparo de acuse al registrar `salida` en el último día laboral del turno (con auto-cierre de 12 s para no demorar filas) y botones táctiles gigantes `Aceptar de conformidad` y `Rechazar / Discrepancia` sin captura de texto.
+    - Banner de alertas de discrepancias y conciliación administrativa (`resolveAcknowledgmentAction`) en [`/dashboard`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/components/admin/DashboardAttendanceClient.tsx) para `ORG_ADMIN` y `RH_ASSISTANT`.
+  - **Recuperación de Contraseña Web en `/login`**:
+    - Servicio [`password-reset.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/services/auth/password-reset.ts) con tokens efímeros de 15 minutos en Redis y envío mediante [`mailer.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/lib/mail/mailer.ts) (Mailtrap con fallback seguro en consola).
+    - Enlace "¿Olvidaste tu contraseña?" en [`LoginClient.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/components/auth/LoginClient.tsx), endpoints [`/api/auth/forgot-password`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/api/auth/forgot-password/route.ts) y [`/api/auth/reset-password`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/api/auth/reset-password/route.ts), y pantalla [`/reset-password`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/(auth)/reset-password/page.tsx).
+
+### Mejorado
+
+- **Claridad Legal y Argumentación en Configuración (`checador/`)**:
+  - Incorporación de textos explicativos y fundamentación legal en todas las tarjetas de [`ConfiguracionClient.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/components/admin/ConfiguracionClient.tsx): Art. 132 Fracc. XXXIV y Art. 804 LFT (reportes y datos patronales STPS), Arts. 60, 61 y 69 LFT (topes de jornada diurna, mixta y nocturna), Arts. 784 y 804 Fracc. III LFT (acuse de conformidad) y normatividad LFPDPPP (PIN de auditoría y evidencias locales).
+
+---
+
 ## [1.28.0] - 2026-11-25
 
 ### Añadido

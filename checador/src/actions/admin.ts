@@ -25,6 +25,7 @@ import {
   updateEmployeeWithVectors,
 } from "@/services/admin/employees";
 import { resolveCheckInIncident } from "@/services/admin/incidents";
+import { resolveAcknowledgmentDiscrepancy } from "@/services/reports/weekly-acknowledgment";
 import {
   createBranch,
   createSchedule,
@@ -318,6 +319,7 @@ const updateBrandingSchema = z.object({
   periodicidadReporte: z
     .enum(["semanal", "catorcenal", "quincenal", "mensual"])
     .optional(),
+  acuseSemanalEnabled: z.boolean().optional(),
   pinAuditoria: z
     .string()
     .trim()
@@ -343,6 +345,33 @@ export async function updateBrandingAction(
     return {
       ok: false,
       error: err instanceof Error ? err.message : "Error al actualizar configuración.",
+    };
+  }
+}
+
+export async function resolveAcknowledgmentAction(raw: {
+  acuseId: string;
+  nota?: string | null;
+}): Promise<ActionResponse> {
+  try {
+    const session = await requireSession(ADMIN_WRITE_ROLES);
+    const acuseId = z.string().uuid().parse(raw.acuseId);
+    const nota = raw.nota ? z.string().trim().max(500).parse(raw.nota) : null;
+    await resolveAcknowledgmentDiscrepancy({
+      orgId: session.orgId,
+      acuseId,
+      actorUserId: session.userId,
+      nota,
+    });
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error:
+        err instanceof Error
+          ? err.message
+          : "No se pudo conciliar la discrepancia.",
     };
   }
 }

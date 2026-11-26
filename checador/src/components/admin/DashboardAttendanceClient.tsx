@@ -18,7 +18,10 @@ import {
   ShieldAlert,
   X,
 } from "lucide-react";
-import { resolveIncidentAction } from "@/actions/admin";
+import {
+  resolveAcknowledgmentAction,
+  resolveIncidentAction,
+} from "@/actions/admin";
 import {
   resolveReportDateRange,
   type ReportPeriodType,
@@ -56,6 +59,19 @@ export interface PaginatedCheckIns {
   items: RecentCheckInRow[];
 }
 
+export interface WeeklyAcknowledgmentRow {
+  id: string;
+  empleadoId: string;
+  empleadoNombre: string;
+  codigoInterno: string | null;
+  periodoClave: string;
+  totalHoras: number;
+  estado: "aceptado" | "rechazado";
+  origen: string;
+  resueltoAtIso: string | null;
+  updatedAtIso: string;
+}
+
 interface Props {
   initialWeekStart: string;
   initialSyncedAt: string;
@@ -72,6 +88,9 @@ interface Props {
   defaultReportPeriod: "semanal" | "catorcenal" | "quincenal" | "mensual";
   branches: { id: string; nombre: string }[];
   zonaHoraria: string;
+  acuseSemanalEnabled?: boolean;
+  canResolveAcknowledgments?: boolean;
+  initialAcknowledgments?: WeeklyAcknowledgmentRow[];
 }
 
 const TIPO_LABELS: Record<string, string> = {
@@ -101,6 +120,9 @@ export default function DashboardAttendanceClient({
   defaultReportPeriod,
   branches,
   zonaHoraria,
+  acuseSemanalEnabled = false,
+  canResolveAcknowledgments = false,
+  initialAcknowledgments = [],
 }: Props) {
   const [weekStart, setWeekStart] = useState(initialWeekStart);
   const [syncedAt, setSyncedAt] = useState(initialSyncedAt);
@@ -144,6 +166,31 @@ export default function DashboardAttendanceClient({
   const [resolveMotivo, setResolveMotivo] = useState("");
   const [resolveBusy, setResolveBusy] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
+  const [acknowledgments, setAcknowledgments] = useState<
+    WeeklyAcknowledgmentRow[]
+  >(initialAcknowledgments);
+  const [resolvingAckId, setResolvingAckId] = useState<string | null>(null);
+
+  const pendingAckDiscrepancies = acknowledgments.filter(
+    (a) => a.estado === "rechazado" && !a.resueltoAtIso
+  );
+  const ackByEmpleadoId = new Map(
+    acknowledgments.map((a) => [a.empleadoId, a])
+  );
+
+  const handleResolveAck = async (acuseId: string) => {
+    setResolvingAckId(acuseId);
+    const res = await resolveAcknowledgmentAction({ acuseId });
+    setResolvingAckId(null);
+    if (res.ok) {
+      const nowIso = new Date().toISOString();
+      setAcknowledgments((prev) =>
+        prev.map((a) =>
+          a.id === acuseId ? { ...a, resueltoAtIso: nowIso } : a
+        )
+      );
+    }
+  };
 
   const alertRows = compliance.filter((row) => row.alertaJornada === 1);
   const exceededCount = compliance.filter(
@@ -460,6 +507,49 @@ export default function DashboardAttendanceClient({
           </div>
         )}
 
+        {pendingAckDiscrepancies.length > 0 && (
+          <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50/90 p-3.5 text-xs text-amber-950">
+            <div className="flex items-center gap-2 font-bold">
+              <AlertTriangle className="h-4 w-4 shrink-0 text-amber-700" />
+              <span>
+                {pendingAckDiscrepancies.length} discrepancia(s) de acuse
+                semanal reportada(s) por colaboradores
+              </span>
+            </div>
+            <div className="mt-2.5 space-y-2">
+              {pendingAckDiscrepancies.map((ack) => (
+                <div
+                  key={ack.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-white px-3 py-2"
+                >
+                  <div>
+                    <p className="font-semibold text-slate-900">
+                      {ack.empleadoNombre}
+                      {ack.codigoInterno ? ` (${ack.codigoInterno})` : ""}
+                    </p>
+                    <p className="text-[11px] text-slate-600">
+                      Periodo {ack.periodoClave} · {ack.totalHoras.toFixed(2)} h
+                      registradas · Rechazado en terminal
+                    </p>
+                  </div>
+                  {canResolveAcknowledgments && (
+                    <button
+                      type="button"
+                      disabled={resolvingAckId === ack.id}
+                      onClick={() => void handleResolveAck(ack.id)}
+                      className="rounded-lg bg-amber-600 px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+                    >
+                      {resolvingAckId === ack.id
+                        ? "Conciliando..."
+                        : "Marcar conciliado"}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="mt-4 overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
@@ -533,21 +623,48 @@ export default function DashboardAttendanceClient({
                       {row.tardies}
                     </td>
                     <td className="py-2.5 pl-3">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
-                          row.weeklyStatus === "excedido"
-                            ? "bg-red-50 text-red-700"
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${
+                            row.weeklyStatus === "excedido"
+                              ? "bg-red-50 text-red-700"
+                              : row.weeklyStatus === "alerta_preventiva"
+                                ? "bg-amber-50 text-amber-800"
+                                : "bg-emerald-50 text-[#059669]"
+                          }`}
+                        >
+                          {row.weeklyStatus === "excedido"
+                            ? "Jornada excedida"
                             : row.weeklyStatus === "alerta_preventiva"
-                              ? "bg-amber-50 text-amber-800"
-                              : "bg-emerald-50 text-[#059669]"
-                        }`}
-                      >
-                        {row.weeklyStatus === "excedido"
-                          ? "Jornada excedida"
-                          : row.weeklyStatus === "alerta_preventiva"
-                            ? "Próximo al límite"
-                            : "En rango"}
-                      </span>
+                              ? "Próximo al límite"
+                              : "En rango"}
+                        </span>
+                        {acuseSemanalEnabled &&
+                          (() => {
+                            const ack = ackByEmpleadoId.get(row.empleadoId);
+                            if (!ack) return null;
+                            if (ack.estado === "aceptado") {
+                              return (
+                                <span className="inline-flex rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] font-semibold text-[#4f46e5]">
+                                  Acuse aceptado
+                                </span>
+                              );
+                            }
+                            return (
+                              <span
+                                className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${
+                                  ack.resueltoAtIso
+                                    ? "bg-slate-100 text-slate-700"
+                                    : "bg-amber-100 text-amber-900"
+                                }`}
+                              >
+                                {ack.resueltoAtIso
+                                  ? "Discrepancia conciliada"
+                                  : "Discrepancia reportada"}
+                              </span>
+                            );
+                          })()}
+                      </div>
                     </td>
                   </tr>
                 ))}

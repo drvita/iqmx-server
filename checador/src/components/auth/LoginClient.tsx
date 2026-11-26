@@ -25,6 +25,44 @@ export function LoginClient() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [forgotMode, setForgotMode] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState("");
+  const [forgotBusy, setForgotBusy] = useState(false);
+  const [forgotMsg, setForgotMsg] = useState<string | null>(null);
+  const [forgotErr, setForgotErr] = useState<string | null>(null);
+
+  const handleForgotSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotBusy(true);
+    setForgotMsg(null);
+    setForgotErr(null);
+    try {
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: forgotEmail }),
+      });
+      const data = (await res.json()) as {
+        ok: boolean;
+        message?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.ok) {
+        setForgotErr(
+          data.error ?? "No se pudo procesar la solicitud de recuperación."
+        );
+        return;
+      }
+      setForgotMsg(
+        data.message ??
+          "Si el correo está registrado, recibirás un enlace válido por 15 minutos."
+      );
+    } catch {
+      setForgotErr("Error de conexión con el servidor.");
+    } finally {
+      setForgotBusy(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -240,6 +278,79 @@ export function LoginClient() {
                 </div>
               </div>
 
+              {forgotMode ? (
+                <form onSubmit={handleForgotSubmit} className="mt-6 space-y-4">
+                  <div className="rounded-lg border border-indigo-100 bg-indigo-50/70 p-3 text-xs text-[#1e1b4b]">
+                    Ingresa el correo electrónico de tu cuenta. Te enviaremos un
+                    enlace válido por <strong>15 minutos</strong> para definir
+                    una nueva contraseña.
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="forgot-email"
+                      className="mb-1.5 block text-[13px] font-medium text-[#0b1c30]"
+                    >
+                      Correo electrónico institucional
+                    </label>
+                    <div className="relative">
+                      <Mail className="pointer-events-none absolute top-3 left-3.5 h-4 w-4 text-[#787680]" />
+                      <input
+                        id="forgot-email"
+                        type="email"
+                        required
+                        autoComplete="email"
+                        value={forgotEmail}
+                        onChange={(e) => setForgotEmail(e.target.value)}
+                        placeholder="asistente@tuempresa.com"
+                        className="w-full rounded-md border border-[#c8c5d0] bg-white py-2.5 pr-3.5 pl-10 text-sm text-[#0b1c30] transition placeholder:text-[#787680] focus:border-[#4b41e1] focus:ring-2 focus:ring-[#4b41e1]/20 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {forgotErr && (
+                    <div
+                      role="alert"
+                      className="rounded-md border border-[#ba1a1a]/25 bg-[#ffdad6] px-3 py-2 text-xs font-medium text-[#93000a]"
+                    >
+                      {forgotErr}
+                    </div>
+                  )}
+                  {forgotMsg && (
+                    <div
+                      role="status"
+                      className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-900"
+                    >
+                      {forgotMsg}
+                    </div>
+                  )}
+
+                  <div className="space-y-2 pt-1">
+                    <button
+                      type="submit"
+                      disabled={forgotBusy}
+                      className="flex w-full items-center justify-center gap-2 rounded-md bg-[#4b41e1] px-4 py-3 text-sm font-semibold tracking-wide text-white shadow-sm transition hover:bg-[#645efb] disabled:opacity-50"
+                    >
+                      <span>
+                        {forgotBusy
+                          ? "Enviando enlace..."
+                          : "Enviar enlace de recuperación"}
+                      </span>
+                      <ArrowRight className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForgotMode(false);
+                        setForgotErr(null);
+                        setForgotMsg(null);
+                      }}
+                      className="w-full py-2 text-center text-xs font-semibold text-[#47464f] hover:text-[#0b1c30]"
+                    >
+                      Volver a iniciar sesión
+                    </button>
+                  </div>
+                </form>
+              ) : (
               <form onSubmit={handleSubmit} className="mt-6 space-y-4">
                 <div>
                   <label
@@ -265,12 +376,25 @@ export function LoginClient() {
                 </div>
 
                 <div>
-                  <label
-                    htmlFor="password"
-                    className="mb-1.5 block text-[13px] font-medium text-[#0b1c30]"
-                  >
-                    Contraseña
-                  </label>
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
+                    <label
+                      htmlFor="password"
+                      className="block text-[13px] font-medium text-[#0b1c30]"
+                    >
+                      Contraseña
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setForgotEmail(email);
+                        setForgotMode(true);
+                        setError(null);
+                      }}
+                      className="text-xs font-semibold text-[#4b41e1] hover:underline"
+                    >
+                      ¿Olvidaste tu contraseña?
+                    </button>
+                  </div>
                   <div className="relative">
                     <Lock className="pointer-events-none absolute top-3 left-3.5 h-4 w-4 text-[#787680]" />
                     <input
@@ -325,6 +449,7 @@ export function LoginClient() {
                   </button>
                 </div>
               </form>
+              )}
 
               <div className="mt-6 space-y-3 border-t border-[#c8c5d0]/60 pt-5">
                 <a

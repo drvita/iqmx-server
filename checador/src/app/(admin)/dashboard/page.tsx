@@ -14,6 +14,7 @@ import {
   type EmployeeScheduleInfo,
   type JornadaType,
 } from "@/services/reports/attendance-compliance";
+import { resolveCurrentAcknowledgmentPeriod } from "@/services/reports/weekly-acknowledgment";
 
 export const dynamic = "force-dynamic";
 
@@ -42,9 +43,22 @@ export default async function DashboardPage() {
   );
   const initialWeekStart = weekStartDate.toISOString().slice(0, 10);
 
+  const currentAckPeriod = resolveCurrentAcknowledgmentPeriod(
+    org.periodicidadReporte,
+    now,
+    org.zonaHoraria
+  );
+
   const db = getDb();
-  const [empRows, schedRows, weekCheckIns, recentCountRes, recentRows, branchRows] =
-    await Promise.all([
+  const [
+    empRows,
+    schedRows,
+    weekCheckIns,
+    recentCountRes,
+    recentRows,
+    branchRows,
+    ackRows,
+  ] = await Promise.all([
     db
       .select({
         id: schema.empleados.id,
@@ -140,6 +154,33 @@ export default async function DashboardPage() {
         and(
           eq(schema.sucursales.orgId, session.orgId),
           eq(schema.sucursales.activo, true)
+        )
+      ),
+    db
+      .select({
+        id: schema.acusesSemanales.id,
+        empleadoId: schema.acusesSemanales.empleadoId,
+        empleadoNombre: schema.empleados.nombreCompleto,
+        codigoInterno: schema.empleados.codigoInterno,
+        periodoClave: schema.acusesSemanales.periodoClave,
+        totalHoras: schema.acusesSemanales.totalHoras,
+        estado: schema.acusesSemanales.estado,
+        origen: schema.acusesSemanales.origen,
+        resueltoAt: schema.acusesSemanales.resueltoAt,
+        updatedAt: schema.acusesSemanales.updatedAt,
+      })
+      .from(schema.acusesSemanales)
+      .innerJoin(
+        schema.empleados,
+        eq(schema.acusesSemanales.empleadoId, schema.empleados.id)
+      )
+      .where(
+        and(
+          eq(schema.acusesSemanales.orgId, session.orgId),
+          eq(
+            schema.acusesSemanales.periodoClave,
+            currentAckPeriod.periodoClave
+          )
         )
       ),
   ]);
@@ -355,6 +396,22 @@ export default async function DashboardPage() {
         }
         branches={branchRows}
         zonaHoraria={org.zonaHoraria}
+        acuseSemanalEnabled={org.acuseSemanalEnabled}
+        canResolveAcknowledgments={
+          session.rol === "ORG_ADMIN" || session.rol === "RH_ASSISTANT"
+        }
+        initialAcknowledgments={ackRows.map((a) => ({
+          id: a.id,
+          empleadoId: a.empleadoId,
+          empleadoNombre: a.empleadoNombre,
+          codigoInterno: a.codigoInterno,
+          periodoClave: a.periodoClave,
+          totalHoras: Number(a.totalHoras),
+          estado: a.estado === "rechazado" ? "rechazado" : "aceptado",
+          origen: a.origen,
+          resueltoAtIso: a.resueltoAt ? a.resueltoAt.toISOString() : null,
+          updatedAtIso: a.updatedAt.toISOString(),
+        }))}
       />
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-xs">

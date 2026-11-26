@@ -29,6 +29,9 @@ export type DeviceAuthResult =
         cloudEvidencesEnabled: boolean;
         horasSemanalesMax: number;
         pinAuditoriaHash: string | null;
+        acuseSemanalEnabled: boolean;
+        periodicidadReporte: string;
+        zonaHoraria: string;
       };
     }
   | {
@@ -90,6 +93,9 @@ export async function authenticateDeviceToken(
       cloudEvidencesEnabled: schema.organizaciones.cloudEvidencesEnabled,
       horasSemanalesMax: schema.organizaciones.horasSemanalesMax,
       pinAuditoriaHash: schema.organizaciones.pinAuditoriaHash,
+      acuseSemanalEnabled: schema.organizaciones.acuseSemanalEnabled,
+      periodicidadReporte: schema.organizaciones.periodicidadReporte,
+      zonaHoraria: schema.organizaciones.zonaHoraria,
     })
     .from(schema.dispositivos)
     .innerJoin(
@@ -137,6 +143,9 @@ export async function authenticateDeviceToken(
       cloudEvidencesEnabled: row.cloudEvidencesEnabled,
       horasSemanalesMax: Number(row.horasSemanalesMax),
       pinAuditoriaHash: row.pinAuditoriaHash ?? null,
+      acuseSemanalEnabled: row.acuseSemanalEnabled,
+      periodicidadReporte: row.periodicidadReporte,
+      zonaHoraria: row.zonaHoraria,
     },
   };
 }

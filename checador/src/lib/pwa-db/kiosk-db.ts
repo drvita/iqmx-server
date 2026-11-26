@@ -44,6 +44,7 @@ export interface KioskDeviceConfig {
   mensajeBienvenida: string;
   cloudEvidencesEnabled: boolean;
   horasSemanalesMax: number;
+  acuseSemanalEnabled?: boolean;
   auditPinHash: string | null;
   lastValidTimestampMs: number;
   lastSyncAt: string;
@@ -55,6 +56,7 @@ export interface LocalEmployee {
   codigoInterno: string | null;
   puesto: string | null;
   horarioId: string | null;
+  diasLaborales?: number[] | null;
   activo: boolean;
 }
 

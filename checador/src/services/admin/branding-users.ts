@@ -83,6 +83,7 @@ export async function updateBranding(
     rfc?: string | null;
     registroPatronalImss?: string | null;
     periodicidadReporte?: DefaultReportPeriod;
+    acuseSemanalEnabled?: boolean;
     pinAuditoria?: string;
   }
 ) {
@@ -115,6 +116,9 @@ export async function updateBranding(
   }
   if (input.periodicidadReporte) {
     updateSet.periodicidadReporte = input.periodicidadReporte;
+  }
+  if (typeof input.acuseSemanalEnabled === "boolean") {
+    updateSet.acuseSemanalEnabled = input.acuseSemanalEnabled;
   }
   if (input.pinAuditoria && /^\d{6}$/.test(input.pinAuditoria.trim())) {
     updateSet.pinAuditoriaHash = hashAuditPinServer(orgId, input.pinAuditoria);
