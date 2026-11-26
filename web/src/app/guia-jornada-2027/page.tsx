@@ -112,7 +112,7 @@ export default function GuiaJornada2027Page() {
               </div>
 
               <p className="text-xs text-indigo-200/90">
-                Información vigente con corte al <strong>19 de noviembre de 2026</strong> · Material informativo, no sustituye asesoría legal ni contable.
+                Información vigente con corte al <strong>26 de noviembre de 2026</strong> · Material informativo, no sustituye asesoría legal ni contable.
               </p>
             </div>
 
@@ -372,32 +372,32 @@ export default function GuiaJornada2027Page() {
                 Checador Facial: registro electrónico confiable en cualquier tablet
               </h2>
               <p className="text-base text-slate-600 leading-relaxed">
-                Nuestro producto estándar está diseñado para pequeñas y medianas empresas en México que necesitan empezar rápido, sin hardware costoso y con el tope de jornada configurado a <strong>46 horas semanales</strong>.
+                Nuestro producto estándar está diseñado para pequeñas y medianas empresas en México que necesitan empezar rápido, sin hardware costoso y con el motor de cumplimiento configurado para jornadas <strong>diurna, mixta y nocturna</strong> (hasta <strong>46 horas semanales</strong> en 2027).
               </p>
 
               <ul className="space-y-3 text-sm text-slate-700">
                 <li className="flex items-start gap-2.5">
                   <CheckCircleIcon className="h-5 w-5 text-[#059669] shrink-0 mt-0.5" />
                   <span>
-                    <strong>Exportación CSV inmediata para la autoridad:</strong> descarga en segundos los reportes semanales de jornada y movimientos registrados.
+                    <strong>PDF Oficial STPS + CSV con sellado SHA-256:</strong> descarga reportes listos para inspección con Razón Social, RFC, Registro Patronal IMSS, desglose de horas ordinarias, extras dobles (200%) y triples (300%) y sello criptográfico inalterable.
                   </span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <CheckCircleIcon className="h-5 w-5 text-[#059669] shrink-0 mt-0.5" />
                   <span>
-                    <strong>Reconocimiento facial con prueba de vida:</strong> valida presencia real frente a la cámara y bloquea fotos o pantallas.
+                    <strong>Acuse semanal de conformidad (Arts. 784 y 804 LFT):</strong> confirmación táctil del colaborador en quiosco o móvil personal al cierre de su periodo laboral para respaldar cada jornada.
                   </span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <CheckCircleIcon className="h-5 w-5 text-[#059669] shrink-0 mt-0.5" />
                   <span>
-                    <strong>Opera incluso sin internet:</strong> guarda asistencias localmente y sincroniza automáticamente al restablecerse la conexión.
+                    <strong>Quiosco en sucursal y Dispositivo Personal Móvil 1:1:</strong> opera con prueba de vida facial, registro sin internet en planta y GPS puntual no bloqueante para personal en ruta.
                   </span>
                 </li>
                 <li className="flex items-start gap-2.5">
                   <CheckCircleIcon className="h-5 w-5 text-[#059669] shrink-0 mt-0.5" />
                   <span>
-                    <strong>Cumplimiento LFPDPPP:</strong> consentimiento del colaborador en el alta y procesamiento sin almacenamiento innecesario de fotos crudas.
+                    <strong>Cumplimiento LFPDPPP:</strong> consentimiento del colaborador en el alta, minimización biométrica en móviles 1:1 y bitácora inmutable de incidencias.
                   </span>
                 </li>
               </ul>
@@ -453,7 +453,7 @@ export default function GuiaJornada2027Page() {
                   <span className="text-xs font-bold text-emerald-900">
                     Entrada registrada — Carlos Mendoza
                   </span>
-                  <span className="text-[11px] font-semibold text-[#059669]">CSV exportable</span>
+                  <span className="text-[11px] font-semibold text-[#059669]">PDF STPS + Sello SHA-256</span>
                 </div>
               </div>
             </div>
@@ -473,7 +473,7 @@ export default function GuiaJornada2027Page() {
                 ¿Tu operación requiere reglas o infraestructura personalizada?
               </h2>
               <p className="mt-2 text-base text-slate-600">
-                IQISSMexico también desarrolla adaptaciones específicas para empresas que necesitan ir más allá de la versión genérica: geolocalización, equipos adaptados como checador físico (PC, tableta o móvil), instalación en tus propios servidores o una instancia aparte.
+                IQISSMexico también desarrolla adaptaciones específicas para empresas que necesitan ir más allá de la versión estándar: geocercas estrictas por polígono de ruta, equipos adaptados como checador físico (PC, tableta o móvil), instalación en tus propios servidores o una instancia aparte conectada a tu nómina.
               </p>
             </div>
             <a
@@ -505,12 +505,12 @@ export default function GuiaJornada2027Page() {
       <section className="py-12 bg-white">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-xs text-slate-500 space-y-3 leading-relaxed">
           <p className="font-bold text-slate-700 uppercase tracking-wider">
-            Fuentes consultadas y alcance (Exclusivo México · Corte: 19 de noviembre de 2026)
+            Fuentes consultadas y alcance (Exclusivo México · Corte: 26 de noviembre de 2026)
           </p>
           <ul className="list-disc pl-5 space-y-1">
             <li>Diario Oficial de la Federación (03/03/2026): Reforma al Artículo 123, Apartado A constitucional en materia de reducción de la jornada laboral.</li>
             <li>Diario Oficial de la Federación (01/05/2026): Decreto de armonización a la Ley Federal del Trabajo (Arts. 132 fracc. XXXIV, 994 fracc. IV Bis y disposiciones transitorias).</li>
-            <li>Ley Federal del Trabajo vigente (Arts. 784 y 804 sobre carga probatoria y conservación de controles de asistencia).</li>
+            <li>Ley Federal del Trabajo vigente (Arts. 60, 61, 66–68 sobre tipos de jornada y tiempo extraordinario doble/triple; Arts. 784 y 804 sobre carga probatoria y conservación de controles de asistencia).</li>
             <li>INEGI: Valor oficial de la UMA 2026 ($117.31 MXN diarios) y Censos Económicos (estructura de MiPyMEs en México).</li>
           </ul>
           <p className="pt-2 border-t border-slate-200 text-slate-500">

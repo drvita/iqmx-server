@@ -7,12 +7,36 @@ const DUPLICATE_SIMILARITY_THRESHOLD = 0.78;
 export interface CreateEmployeeInput {
   nombreCompleto: string;
   codigoInterno?: string;
+  numeroEmpleado?: string;
   puesto?: string;
   departamento?: string;
   sucursalId?: string | null;
   horarioId?: string | null;
   consentimientoBiometrico: boolean;
   vectors?: number[][];
+}
+
+function mapEmployeeUniqueViolation(err: unknown): never {
+  if (err && typeof err === "object" && "code" in err && err.code === "23505") {
+    const constraint =
+      "constraint" in err && typeof err.constraint === "string"
+        ? err.constraint
+        : "";
+    if (constraint.includes("numero_empleado")) {
+      throw new Error(
+        "Ya existe otro colaborador con ese número de empleado en tu organización."
+      );
+    }
+    if (constraint.includes("codigo")) {
+      throw new Error(
+        "Ya existe otro colaborador con ese número de nómina en tu organización."
+      );
+    }
+    throw new Error(
+      "Ya existe otro colaborador con ese identificador en tu organización."
+    );
+  }
+  throw err;
 }
 
 function toPgVectorLiteral(vec: readonly number[]): string {
@@ -26,6 +50,7 @@ export async function listEmployees(orgId: string) {
       .select({
         id: schema.empleados.id,
         codigoInterno: schema.empleados.codigoInterno,
+        numeroEmpleado: schema.empleados.numeroEmpleado,
         nombreCompleto: schema.empleados.nombreCompleto,
         puesto: schema.empleados.puesto,
         departamento: schema.empleados.departamento,
@@ -173,50 +198,53 @@ export async function createEmployeeWithVectors(
     }
   }
 
-  const created = await db.transaction(async (tx) => {
-    const [emp] = await tx
-      .insert(schema.empleados)
-      .values({
-        orgId,
-        sucursalId: input.sucursalId || null,
-        horarioId: input.horarioId || null,
-        codigoInterno: input.codigoInterno?.trim() || null,
-        nombreCompleto: input.nombreCompleto.trim(),
-        puesto: input.puesto?.trim() || null,
-        departamento: input.departamento?.trim() || null,
-        consentimientoBiometrico: input.consentimientoBiometrico,
-        consentimientoAt: input.consentimientoBiometrico ? new Date() : null,
-        syncVersion: 1,
-      })
-      .returning();
-
-    if (!emp) throw new Error("No se pudo crear el empleado.");
-
-    if (vectors.length > 0) {
-      await tx.insert(schema.empleadoVectores).values(
-        vectors.map((vec) => ({
+  const created = await db
+    .transaction(async (tx) => {
+      const [emp] = await tx
+        .insert(schema.empleados)
+        .values({
           orgId,
-          empleadoId: emp.id,
-          modeloVersion: "buffalo_s_v1",
-          embedding: vec,
-        }))
-      );
-    }
+          sucursalId: input.sucursalId || null,
+          horarioId: input.horarioId || null,
+          codigoInterno: input.codigoInterno?.trim() || null,
+          numeroEmpleado: input.numeroEmpleado?.trim() || null,
+          nombreCompleto: input.nombreCompleto.trim(),
+          puesto: input.puesto?.trim() || null,
+          departamento: input.departamento?.trim() || null,
+          consentimientoBiometrico: input.consentimientoBiometrico,
+          consentimientoAt: input.consentimientoBiometrico ? new Date() : null,
+          syncVersion: 1,
+        })
+        .returning();
 
-    await tx.insert(schema.auditLogs).values({
-      orgId,
-      usuarioId: actorUserId,
-      accion: "EMPLEADO_CREADO",
-      entidad: "empleados",
-      entidadId: emp.id,
-      detalle: {
-        nombreCompleto: emp.nombreCompleto,
-        vectoresGuardados: vectors.length,
-      },
-    });
+      if (!emp) throw new Error("No se pudo crear el empleado.");
 
-    return emp;
-  });
+      if (vectors.length > 0) {
+        await tx.insert(schema.empleadoVectores).values(
+          vectors.map((vec) => ({
+            orgId,
+            empleadoId: emp.id,
+            modeloVersion: "buffalo_s_v1",
+            embedding: vec,
+          }))
+        );
+      }
+
+      await tx.insert(schema.auditLogs).values({
+        orgId,
+        usuarioId: actorUserId,
+        accion: "EMPLEADO_CREADO",
+        entidad: "empleados",
+        entidadId: emp.id,
+        detalle: {
+          nombreCompleto: emp.nombreCompleto,
+          vectoresGuardados: vectors.length,
+        },
+      });
+
+      return emp;
+    })
+    .catch(mapEmployeeUniqueViolation);
 
   return created;
 }
@@ -258,6 +286,7 @@ export async function toggleEmployeeActive(
 export interface UpdateEmployeeInput {
   nombreCompleto: string;
   codigoInterno?: string;
+  numeroEmpleado?: string;
   puesto?: string;
   departamento?: string;
   sucursalId?: string | null;
@@ -275,11 +304,6 @@ export async function updateEmployeeWithVectors(
   const db = getDb();
   const vectors = input.vectors ?? [];
 
-  if (vectors.length < 1) {
-    throw new Error(
-      "Debes capturar al menos 1 fotografía frontal para registrar al colaborador."
-    );
-  }
   if (vectors.length > 0 && !input.consentimientoBiometrico) {
     throw new Error(
       "Se requiere consentimiento biométrico LFPDPPP antes de guardar vectores."
@@ -308,15 +332,17 @@ export async function updateEmployeeWithVectors(
     }
   }
 
-  const updated = await db.transaction(async (tx) => {
-    const now = new Date();
-    const [emp] = await tx
-      .update(schema.empleados)
-      .set({
-        sucursalId: input.sucursalId || null,
-        horarioId: input.horarioId || null,
-        codigoInterno: input.codigoInterno?.trim() || null,
-        nombreCompleto: input.nombreCompleto.trim(),
+  const updated = await db
+    .transaction(async (tx) => {
+      const now = new Date();
+      const [emp] = await tx
+        .update(schema.empleados)
+        .set({
+          sucursalId: input.sucursalId || null,
+          horarioId: input.horarioId || null,
+          codigoInterno: input.codigoInterno?.trim() || null,
+          numeroEmpleado: input.numeroEmpleado?.trim() || null,
+          nombreCompleto: input.nombreCompleto.trim(),
         puesto: input.puesto?.trim() || null,
         departamento: input.departamento?.trim() || null,
         consentimientoBiometrico: input.consentimientoBiometrico,
@@ -364,7 +390,7 @@ export async function updateEmployeeWithVectors(
     });
 
     return emp;
-  });
+  }).catch(mapEmployeeUniqueViolation);
 
   return updated;
 }

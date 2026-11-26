@@ -1,0 +1,2 @@
+ALTER TABLE "checador"."empleados" ADD COLUMN "numero_empleado" varchar(8);--> statement-breakpoint
+CREATE UNIQUE INDEX "uq_empleados_org_numero_empleado" ON "checador"."empleados" USING btree ("org_id","numero_empleado") WHERE "checador"."empleados"."numero_empleado" IS NOT NULL;

@@ -14,15 +14,15 @@
     <rect x="0" y="0" width="195" height="330" rx="14" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5" filter="url(#shadowSquare)" />
     <rect x="20" y="24" width="48" height="48" rx="12" fill="#eff6ff" />
     <path d="M44 38c-4.4 0-8 3.6-8 8 0 6 8 14 8 14s8-8 8-14c0-4.4-3.6-8-8-8zm0 11c-1.7 0-3-1.3-3-3s1.3-3 3-3 3 1.3 3 3-1.3 3-3 3z" fill="#2563eb" />
-    <text x="20" y="104" fill="#0f172a" font-size="16" font-weight="800">Geolocalización</text>
-    <text x="20" y="124" fill="#0f172a" font-size="16" font-weight="800">y Geocercas</text>
-    <text x="20" y="156" fill="#64748b" font-size="12" font-weight="600">Personal en ruta o campo:</text>
-    <text x="20" y="180" fill="#334155" font-size="12">• Vendedores y técnicos</text>
-    <text x="20" y="200" fill="#334155" font-size="12">• Choferes y entregas</text>
-    <text x="20" y="220" fill="#334155" font-size="12">• Obra y proyectos</text>
-    <text x="20" y="240" fill="#334155" font-size="12">• Validación GPS por zona</text>
+    <text x="20" y="104" fill="#0f172a" font-size="16" font-weight="800">Geocercas y</text>
+    <text x="20" y="124" fill="#0f172a" font-size="16" font-weight="800">Reglas de Ruta</text>
+    <text x="20" y="156" fill="#64748b" font-size="12" font-weight="600">Más allá del GPS 1:1 incluido:</text>
+    <text x="20" y="180" fill="#334155" font-size="12">• Bloqueo estricto por zona</text>
+    <text x="20" y="200" fill="#334155" font-size="12">• Polígonos de obra o ruta</text>
+    <text x="20" y="220" fill="#334155" font-size="12">• Despacho logístico propio</text>
+    <text x="20" y="240" fill="#334155" font-size="12">• Validación en geocercas</text>
     <rect x="15" y="280" width="165" height="26" rx="6" fill="#e0e7ff" />
-    <text x="97" y="297" fill="#4338ca" font-size="10" font-weight="700" text-anchor="middle">REGISTRO MÓVIL</text>
+    <text x="97" y="297" fill="#4338ca" font-size="10" font-weight="700" text-anchor="middle">GEOCERCAS ESTRICTAS</text>
   </g>
 
   <!-- Box 2: Dispositivos Adaptados como Checador Físico -->

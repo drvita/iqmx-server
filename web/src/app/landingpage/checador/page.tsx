@@ -37,37 +37,37 @@ const BENEFITS = [
   {
     title: 'Reconocimiento Facial con Prueba de Vida',
     description:
-      'Verifica que la persona esté presente frente a la cámara en tiempo real, evitando registros con fotografías o videos.',
+      'Verifica en menos de 1 segundo que la persona esté presente frente a la cámara, bloqueando fotos o pantallas en quiosco y móvil.',
     icon: SparklesIcon,
   },
   {
-    title: 'Funciona Incluso Sin Internet',
+    title: 'Quiosco Sin Internet y Móvil 1:1 con GPS',
     description:
-      'Tus colaboradores pueden checar su entrada, comida y salida aunque falle la red; los registros se envían automáticamente al volver la conexión.',
+      'Opera en sucursal aun sin red y habilita teléfonos personales 1:1 para personal en ruta con GPS puntual no bloqueante al checar.',
     icon: WifiIcon,
   },
   {
-    title: 'Reportes de Jornada Laboral',
+    title: 'Motor de Cumplimiento LFT 2027',
     description:
-      'Calcula automáticamente horas trabajadas, retardos, tiempos de comida y cumplimiento semanal (de 48h a 40h) listos para nómina.',
+      'Calcula automáticamente jornadas diurna (48h→46h), mixta (45h) y nocturna (42h), además de horas extras dobles (200%) y triples (300%).',
     icon: ClockIcon,
   },
   {
-    title: 'Vinculación Rápida por Código QR',
+    title: 'PDF Oficial STPS y Sellado SHA-256',
     description:
-      'Convierte cualquier tablet o teléfono en una terminal de asistencia en segundos escaneando un código QR o ingresando un PIN.',
+      'Exporta reportes PDF listos para inspección laboral y CSV de prenómina con Razón Social, RFC, Registro IMSS y sello criptográfico inalterable.',
     icon: QrCodeIcon,
   },
   {
-    title: 'Privacidad Protegida (LFPDPPP)',
+    title: 'Acuse Semanal y Privacidad (LFPDPPP)',
     description:
-      'No almacena fotografías innecesarias en la nube, registra el consentimiento del colaborador y protege la terminal con PIN de auditoría.',
+      'Confirmación táctil del colaborador sobre sus horas (Arts. 784 y 804 LFT), minimización biométrica en móviles 1:1 y control con PIN de auditoría.',
     icon: ShieldCheckIcon,
   },
   {
-    title: 'Sucursales y Asistentes',
+    title: 'Sucursales, Incidencias y Respaldo',
     description:
-      'Organiza tus sedes, asigna horarios por turno y delega el seguimiento diario a tus asistentes de Recursos Humanos.',
+      'Organiza sedes, resuelve incidencias GPS o de turno con bitácora inmutable, resguarda documentos opcionales y recupera accesos vía web.',
     icon: BuildingOffice2Icon,
   },
 ];
@@ -75,19 +75,19 @@ const BENEFITS = [
 const FAQS = [
   {
     q: '¿Necesito comprar un reloj checador especial?',
-    a: 'No. Puedes usar cualquier tablet, computadora con cámara o teléfono Android/iOS conectado en tu sucursal como terminal quiosco.',
+    a: 'No. Puedes usar cualquier tablet, computadora con cámara o teléfono Android/iOS como terminal quiosco en sucursal, o vincular dispositivos personales 1:1 para personal en ruta.',
   },
   {
-    q: '¿Qué pasa si se va el internet en el negocio?',
-    a: 'La terminal sigue registrando asistencias normalmente y guarda los eventos de forma segura hasta que regresa la conexión para sincronizarse con tu panel.',
+    q: '¿Qué pasa si se va el internet o el colaborador está en campo?',
+    a: 'En sucursal, la terminal guarda las asistencias localmente y sincroniza al volver la red. Para personal foráneo, el móvil 1:1 registra la asistencia con GPS puntual sin rastreo continuo.',
   },
   {
-    q: '¿Cómo empiezo la prueba gratuita de 1 mes?',
-    a: 'Solo ingresa a tu Portal de Clientes, activa Checador Facial en un clic y recibe tu acceso inmediato sin necesidad de tarjeta de crédito.',
+    q: '¿Cómo ayuda con la Reforma Laboral 2027 y las inspecciones?',
+    a: 'Calcula jornadas diurna, mixta y nocturna, clasifica horas extras dobles y triples, firma cada checada con sello SHA-256, emite PDF oficial STPS y permite acuse semanal de conformidad.',
   },
   {
-    q: '¿Puedo cambiar el logotipo y colores del quiosco?',
-    a: 'Sí. Desde el panel administrativo puedes subir el logotipo de tu empresa, elegir tus colores y personalizar el mensaje de bienvenida.',
+    q: '¿Puedo personalizar el quiosco y administrar varios asistentes?',
+    a: 'Sí. Personaliza tu logotipo, colores y mensaje de bienvenida, delega incidencias a asistentes de RH con bitácora y usa recuperación de contraseña por correo.',
   },
 ];
 
@@ -95,8 +95,9 @@ const WEEKLY_COMPLIANCE_ROWS = [
   {
     nombre: 'Carlos Mendoza',
     codigo: 'EMP-014',
-    puesto: 'Operador CNC',
-    horas: '46.50 h / 48 h',
+    puesto: 'Operador CNC · Diurna',
+    horas: '45.50 h / 46 h',
+    extras: '0.0 h 2x',
     dias: '5',
     inProgress: true,
     retardos: '0',
@@ -106,8 +107,9 @@ const WEEKLY_COMPLIANCE_ROWS = [
   {
     nombre: 'Ana Laura Soto',
     codigo: 'EMP-008',
-    puesto: 'Supervisora de Calidad',
-    horas: '47.20 h / 48 h',
+    puesto: 'Supervisora · Mixta',
+    horas: '44.20 h / 45 h',
+    extras: '2.0 h 2x',
     dias: '5',
     inProgress: false,
     retardos: '1',
@@ -117,8 +119,9 @@ const WEEKLY_COMPLIANCE_ROWS = [
   {
     nombre: 'Miguel Ángel Ruiz',
     codigo: 'EMP-021',
-    puesto: 'Montacarguista',
-    horas: '39.80 h / 48 h',
+    puesto: 'Ruta Foránea · Móvil 1:1',
+    horas: '39.80 h / 46 h',
+    extras: '0.0 h 2x',
     dias: '4',
     inProgress: true,
     retardos: '0',
@@ -128,13 +131,14 @@ const WEEKLY_COMPLIANCE_ROWS = [
   {
     nombre: 'Roberto Garza',
     codigo: 'EMP-003',
-    puesto: 'Jefe de Mantenimiento',
-    horas: '45.00 h / 48 h',
+    puesto: 'Mantenimiento · Nocturna',
+    horas: '41.50 h / 42 h',
+    extras: '1.5 h 2x',
     dias: '5',
     inProgress: false,
     retardos: '0',
-    estado: 'En rango',
-    estadoClass: 'bg-emerald-50 text-[#059669]',
+    estado: 'Acuse aceptado',
+    estadoClass: 'bg-indigo-50 text-[#4f46e5]',
   },
 ];
 
@@ -285,9 +289,8 @@ export default function ChecadorLandingPage() {
               </h1>
 
               <p className="text-base sm:text-lg text-indigo-100 max-w-xl leading-relaxed">
-                Convierte cualquier tablet en un <strong>Checador Facial</strong> inteligente.
-                Registra entradas, comidas y salidas en segundos, opera incluso sin internet
-                y obtén reportes claros de jornada laboral.
+                Convierte cualquier tablet en un <strong>Checador Facial</strong> inteligente o habilita dispositivos móviles 1:1 para tu personal en ruta.
+                Opera sin internet en sucursal, calcula horas extras LFT y genera <strong>reportes PDF oficiales STPS con sellado SHA-256</strong> y acuse semanal táctil.
               </p>
 
               <div className="flex flex-col sm:flex-row gap-3 pt-2">
@@ -508,7 +511,7 @@ export default function ChecadorLandingPage() {
                 Reforma Laboral en México 2027: prepárate antes del 1° de enero
               </h2>
               <p className="text-sm text-slate-600 leading-relaxed">
-                Con la reforma publicada en el DOF en 2026, la jornada semanal baja a <strong>46 horas</strong> y se vuelve obligatorio llevar un <strong>registro electrónico de jornada</strong> (Art. 132-XXXIV LFT), con multas desde <strong>$29,327 hasta $586,550 MXN</strong> (250 a 5,000 UMA, sujeto a lineamientos finales de la STPS). Checador Facial ya emite <strong>reportes semanales en CSV</strong> listos para entregar a la autoridad.
+                Con la reforma publicada en el DOF en 2026, la jornada semanal baja a <strong>46 horas</strong> y se vuelve obligatorio llevar un <strong>registro electrónico de jornada</strong> (Art. 132-XXXIV LFT), con multas desde <strong>$29,327 hasta $586,550 MXN</strong> (250 a 5,000 UMA, sujeto a lineamientos finales de la STPS). Checador Facial ya emite <strong>PDF Oficial STPS y CSV de prenómina con sellado SHA-256</strong>, desglose de horas extras dobles/triples y acuse semanal de conformidad.
               </p>
             </div>
             <div className="lg:col-span-4 flex flex-col sm:flex-row lg:flex-col gap-2.5">
@@ -741,7 +744,7 @@ export default function ChecadorLandingPage() {
                 </h3>
               </div>
               <p className="text-xs text-gray-500 max-w-md">
-                Consulta asistencias, retardos, turnos en curso, intentos rechazados por prueba de vida y exporta tus reportes semanales en CSV.
+                Consulta asistencias, incidencias GPS con mapa, horas extras dobles/triples, acuses semanales y exporta reportes en PDF oficial STPS con sello SHA-256 o CSV.
               </p>
             </div>
 
@@ -857,7 +860,7 @@ export default function ChecadorLandingPage() {
                         <ClockIcon className="h-3.5 w-3.5" />
                       </span>
                     </div>
-                    <p className="mt-2 text-xl font-bold text-slate-900 tabular-nums">48.0 h</p>
+                    <p className="mt-2 text-xl font-bold text-slate-900 tabular-nums">46.0 h</p>
                   </div>
                 </div>
 
@@ -918,7 +921,7 @@ export default function ChecadorLandingPage() {
                         Cumplimiento Semanal de Jornada
                       </h5>
                       <p className="text-[11px] text-slate-500">
-                        Límite configurado: 48 horas semanales · Turnos sin salida se marcan como requiere corrección
+                        Límite configurado: 46 h (Diurna) · Sello SHA-256 activo · Acuse semanal habilitado
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
@@ -927,9 +930,13 @@ export default function ChecadorLandingPage() {
                         <span className="font-semibold text-slate-900 tabular-nums">16/11/2026</span>
                         <CalendarIcon className="h-3.5 w-3.5 text-slate-500" />
                       </div>
+                      <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#1e1b4b] px-3 py-1.5 text-[11px] font-semibold text-white">
+                        <ArrowDownTrayIcon className="h-3.5 w-3.5" />
+                        PDF STPS
+                      </span>
                       <span className="inline-flex items-center gap-1.5 rounded-lg bg-[#4f46e5] px-3 py-1.5 text-[11px] font-semibold text-white">
                         <ArrowDownTrayIcon className="h-3.5 w-3.5" />
-                        Exportar CSV
+                        CSV Prenómina
                       </span>
                     </div>
                   </div>
@@ -939,10 +946,10 @@ export default function ChecadorLandingPage() {
                       <thead>
                         <tr className="border-b border-slate-200 text-slate-500">
                           <th className="py-2 pr-3 font-semibold">Colaborador</th>
-                          <th className="px-3 py-2 font-semibold">Puesto</th>
+                          <th className="px-3 py-2 font-semibold">Puesto / Jornada</th>
                           <th className="px-3 py-2 font-semibold">Horas Trabajadas</th>
-                          <th className="px-3 py-2 font-semibold">Días Completos</th>
-                          <th className="px-3 py-2 font-semibold">Retardos</th>
+                          <th className="px-3 py-2 font-semibold">Extras</th>
+                          <th className="px-3 py-2 font-semibold">Días</th>
                           <th className="py-2 pl-3 font-semibold">Estado</th>
                         </tr>
                       </thead>
@@ -958,15 +965,15 @@ export default function ChecadorLandingPage() {
                               {row.horas}
                             </td>
                             <td className="px-3 py-2.5 text-slate-700 tabular-nums">
+                              {row.extras}
+                            </td>
+                            <td className="px-3 py-2.5 text-slate-700 tabular-nums">
                               <span>{row.dias}</span>
                               {row.inProgress && (
                                 <span className="ml-2 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-semibold text-[#4f46e5]">
                                   En curso hoy
                                 </span>
                               )}
-                            </td>
-                            <td className="px-3 py-2.5 text-slate-700 tabular-nums">
-                              {row.retardos}
                             </td>
                             <td className="py-2.5 pl-3">
                               <span
@@ -1484,7 +1491,7 @@ export default function ChecadorLandingPage() {
                 ¿Tu empresa requiere una solución a la medida?
               </h2>
               <p className="text-sm text-indigo-100 leading-relaxed">
-                Si nuestra versión estándar no encaja con tus reglas operativas, en IQISSMexico también diseñamos implementaciones personalizadas: registro móvil con geolocalización y geocercas, adaptación de PC, tableta o móvil como checador físico, despliegue en tus servidores propios (on-premise) o una instancia dedicada.
+                Si nuestra versión estándar no encaja con tus reglas operativas, en IQISSMexico también diseñamos implementaciones personalizadas: geocercas estrictas por polígono de ruta, adaptación de PC, tableta o móvil como checador físico, despliegue en tus servidores propios (on-premise), integración directa con tu sistema de nómina o una instancia dedicada.
               </p>
             </div>
             <a

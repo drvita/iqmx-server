@@ -105,6 +105,7 @@ interface AcknowledgmentSummaryResponse {
     id: string;
     nombreCompleto: string;
     codigoInterno: string | null;
+    numeroEmpleado?: string | null;
     puesto: string | null;
   };
   period: {
@@ -125,6 +126,8 @@ interface AcknowledgmentSummaryResponse {
     maxHours: number;
   };
   isLastWorkday: boolean;
+  canSubmitAcknowledgment?: boolean;
+  acknowledgmentBlockedReason?: string | null;
   acknowledgment: {
     id: string;
     estado: "aceptado" | "rechazado";
@@ -1183,7 +1186,7 @@ export function KioskApp() {
 
   const fetchAcknowledgmentSummary = async (params: {
     empleadoId?: string;
-    codigoInterno?: string;
+    numeroEmpleado?: string;
   }) => {
     if (!config) return;
     if (!online) {
@@ -1198,7 +1201,7 @@ export function KioskApp() {
     try {
       const qs = params.empleadoId
         ? `empleadoId=${encodeURIComponent(params.empleadoId)}`
-        : `codigoInterno=${encodeURIComponent(params.codigoInterno ?? "")}`;
+        : `numeroEmpleado=${encodeURIComponent(params.numeroEmpleado ?? "")}`;
       const res = await fetch(`/api/sync/acknowledgment?${qs}`, {
         headers: {
           Authorization: `Bearer ${config.deviceToken}`,
@@ -1975,19 +1978,23 @@ export function KioskApp() {
                 ) : (
                   <>
                     <p className="text-xs text-slate-600">
-                      Ingresa tu <strong>número de nómina</strong> usando el
+                      Ingresa tu <strong>número de empleado</strong> usando el
                       teclado en pantalla para consultar tus horas trabajadas y
-                      confirmar tu acuse del periodo.
+                      confirmar tu acuse cuando corresponda.
                     </p>
 
                     <div className="rounded-xl border border-slate-300 bg-slate-50 px-4 py-3 text-center">
                       <input
                         type="text"
+                        inputMode="numeric"
+                        maxLength={8}
                         value={ackCodeInput}
                         onChange={(e) =>
-                          setAckCodeInput(e.target.value.toUpperCase())
+                          setAckCodeInput(
+                            e.target.value.replace(/\D/g, "").slice(0, 8)
+                          )
                         }
-                        placeholder="Número de nómina"
+                        placeholder="Número de empleado"
                         className="w-full bg-transparent text-center font-mono text-xl font-bold tracking-wider text-slate-900 focus:outline-none"
                       />
                     </div>
@@ -2001,7 +2008,7 @@ export function KioskApp() {
                             type="button"
                             onClick={() =>
                               setAckCodeInput((prev) =>
-                                prev.length < 20 ? `${prev}${digit}` : prev
+                                prev.length < 8 ? `${prev}${digit}` : prev
                               )
                             }
                             className="flex h-12 items-center justify-center rounded-xl border border-slate-200 bg-white text-lg font-bold text-slate-800 shadow-2xs active:scale-95 active:bg-slate-100"
@@ -2021,7 +2028,7 @@ export function KioskApp() {
                         type="button"
                         onClick={() =>
                           setAckCodeInput((prev) =>
-                            prev.length < 20 ? `${prev}0` : prev
+                            prev.length < 8 ? `${prev}0` : prev
                           )
                         }
                         className="flex h-12 items-center justify-center rounded-xl border border-slate-200 bg-white text-lg font-bold text-slate-800 shadow-2xs active:scale-95 active:bg-slate-100"
@@ -2051,7 +2058,7 @@ export function KioskApp() {
                       disabled={!ackCodeInput.trim() || ackLoading}
                       onClick={() =>
                         void fetchAcknowledgmentSummary({
-                          codigoInterno: ackCodeInput.trim(),
+                          numeroEmpleado: ackCodeInput.trim(),
                         })
                       }
                       className="flex min-h-[48px] w-full items-center justify-center rounded-xl bg-[#4f46e5] px-4 py-3 text-sm font-bold text-white shadow-sm hover:bg-indigo-700 disabled:opacity-50"
@@ -2068,9 +2075,11 @@ export function KioskApp() {
                     {ackData.employee.nombreCompleto}
                   </p>
                   <p className="text-xs text-slate-600">
-                    {ackData.employee.codigoInterno
-                      ? `Nómina: ${ackData.employee.codigoInterno} · `
-                      : ""}
+                    {ackData.employee.numeroEmpleado
+                      ? `No. Empleado: ${ackData.employee.numeroEmpleado} · `
+                      : ackData.employee.codigoInterno
+                        ? `Nómina: ${ackData.employee.codigoInterno} · `
+                        : ""}
                     Periodo: <strong>{ackData.period.label}</strong>
                   </p>
                 </div>
@@ -2140,6 +2149,11 @@ export function KioskApp() {
                         ackData.acknowledgment.updatedAt
                       ).toLocaleString("es-MX")}
                     </p>
+                  </div>
+                ) : ackData.canSubmitAcknowledgment === false ? (
+                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs leading-relaxed text-slate-700">
+                    {ackData.acknowledgmentBlockedReason ??
+                      "Consulta informativa en curso. Podrás confirmar o reportar discrepancias únicamente durante tu último día laboral del periodo."}
                   </div>
                 ) : (
                   <div className="space-y-2.5 pt-1">

@@ -7,6 +7,35 @@ y este proyecto se adhiere a [Semantic Versioning](https://semver.org/lang/es/).
 
 > **Zona horaria de referencia:** Ciudad de México (CST / UTC-6).
 
+## [1.30.0] - 2026-11-26
+
+### Añadido
+
+- **Número de Empleado Dedicado para Quiosco Físico (`checador/`)**:
+  - Nuevo campo `numero_empleado` (`varchar(8)`, opcional y gestionado por el administrador) e índice único parcial `uq_empleados_org_numero_empleado` en [`schema.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/lib/db/schema.ts) con migración Drizzle [`0009_damp_mongoose.sql`](file:///Users/laclavees12345/code/iqissmexico/main/checador/drizzle/0009_damp_mongoose.sql).
+  - Conservación íntegra de `codigo_interno` para el número de nómina alfanumérico sin alterar integraciones con sistemas externos de nómina ni reportes de asistencia.
+  - Validación en [`admin.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/actions/admin.ts) y [`employees.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/services/admin/employees.ts) para aceptar exclusivamente dígitos numéricos (máximo 8 caracteres), con manejo explícito de errores de unicidad.
+  - En [`EmployeesClient.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/components/admin/EmployeesClient.tsx), separación clara entre el campo "Núm. de empleado" (con tooltip interactivo explicando que identifica al colaborador en el quiosco físico para consultar su semana) y "Núm. de nómina (opcional)", visualizando ambos identificadores en el directorio.
+  - Búsqueda en [`/api/sync/acknowledgment`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/app/api/sync/acknowledgment/route.ts) ligada exclusivamente al número de empleado numérico, garantizando que solo los colaboradores con número habilitado por el administrador puedan consultar su semana.
+
+### Mejorado
+
+- **Ventana Estricta del Acuse Semanal (`checador/`)**:
+  - Función pura `isAcknowledgmentWindowOpen` en [`weekly-acknowledgment.ts`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/services/reports/weekly-acknowledgment.ts): en días previos al cierre del periodo (ej. lunes a jueves), el colaborador puede consultar de manera informativa su progreso de horas ordinarias y extras, pero los botones de "Aceptar de conformidad" y "Rechazar / Discrepancia" permanecen inhabilitados.
+  - La confirmación y registro del acuse (tanto en backend como en frontend) se habilita únicamente durante el último día laboral del colaborador en el periodo.
+  - En [`KioskApp.tsx`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/components/kiosk/KioskApp.tsx), teclado numérico táctil adaptado a 8 dígitos para "Número de empleado" y aviso informativo cuando la consulta se realiza en días previos al cierre.
+- **Actualización Comercial y Reforma 2027 (`web/`)**:
+  - Landing comercial [`/landingpage/checador`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/landingpage/checador/page.tsx): actualización completa de beneficios, textos y mockup del panel para reflejar el soporte a jornadas Diurna (46h), Mixta y Nocturna, horas extras dobles (200%) y triples (300%), PDF Oficial STPS con sellado SHA-256, Acuse Semanal táctil y Dispositivo Personal Móvil 1:1 con GPS puntual.
+  - Guía interactiva [`/guia-jornada-2027`](file:///Users/laclavees12345/code/iqissmexico/main/web/src/app/guia-jornada-2027/page.tsx) y script [`build-guia-2027-pdf.mjs`](file:///Users/laclavees12345/code/iqissmexico/main/web/scripts/build-guia-2027-pdf.mjs): corte actualizado al 26 de noviembre de 2026, mención a los Arts. 60, 61 y 66–68 de la LFT, y regeneración del documento descargable [`reforma-laboral-2027-checador-facial.pdf`](file:///Users/laclavees12345/code/iqissmexico/main/web/public/downloads/reforma-laboral-2027-checador-facial.pdf).
+  - Actualización de los diagramas vectoriales [`papel-vs-registro-electronico.svg`](file:///Users/laclavees12345/code/iqissmexico/main/web/public/images/checador/deck/papel-vs-registro-electronico.svg) y [`soluciones-a-la-medida.svg`](file:///Users/laclavees12345/code/iqissmexico/main/web/public/images/checador/deck/soluciones-a-la-medida.svg) destacando reportes oficiales STPS y geocercas avanzadas.
+
+### Corregido
+
+- **Persistencia de Vectores Faciales al Editar Colaborador (`checador/`)**:
+  - Corrección en [`updateEmployeeWithVectors`](file:///Users/laclavees12345/code/iqissmexico/main/checador/src/services/admin/employees.ts) que forzaba erróneamente la captura de al menos una fotografía al actualizar un colaborador; ahora se conservan intactos los vectores biométricos existentes cuando no se proporcionan nuevas capturas.
+
+---
+
 ## [1.29.0] - 2026-11-26
 
 ### Añadido

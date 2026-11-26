@@ -42,8 +42,8 @@
     <text x="24" y="150" fill="#065f46" font-size="14" font-weight="700">✓ Control de jornada semanal de 46 h</text>
     <text x="24" y="170" fill="#475569" font-size="12">Alertas visuales cuando un colaborador se acerca al límite.</text>
 
-    <text x="24" y="208" fill="#065f46" font-size="14" font-weight="700">✓ Exportación CSV inmediata para autoridad</text>
-    <text x="24" y="228" fill="#475569" font-size="12">Respaldo digital listo para entregar o auditar en minutos.</text>
+    <text x="24" y="208" fill="#065f46" font-size="14" font-weight="700">✓ Reportes PDF STPS + CSV con sello SHA-256</text>
+    <text x="24" y="228" fill="#475569" font-size="12">Respaldo digital inalterable, horas 2x/3x y acuse semanal.</text>
 
     <rect x="24" y="256" width="362" height="44" rx="10" fill="#ecfdf5" stroke="#a7f3d0" stroke-width="1" />
     <text x="205" y="282" fill="#065f46" font-size="12.5" font-weight="800" text-anchor="middle">Mejor preparado con evidencia ante inspecciones</text>

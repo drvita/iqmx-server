@@ -174,6 +174,7 @@ export async function POST(req: Request) {
         id: schema.empleados.id,
         nombreCompleto: schema.empleados.nombreCompleto,
         codigoInterno: schema.empleados.codigoInterno,
+        numeroEmpleado: schema.empleados.numeroEmpleado,
         puesto: schema.empleados.puesto,
         horarioId: schema.empleados.horarioId,
         diasLaborales: schema.horarios.diasLaborales,
@@ -240,6 +241,7 @@ export async function POST(req: Request) {
           id: assignedEmployee.id,
           nombreCompleto: assignedEmployee.nombreCompleto,
           codigoInterno: assignedEmployee.codigoInterno,
+          numeroEmpleado: assignedEmployee.numeroEmpleado,
           puesto: assignedEmployee.puesto,
         }
       : null,

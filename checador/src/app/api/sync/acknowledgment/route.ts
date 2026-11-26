@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb, schema } from "@/lib/db";
 import { requireSyncDevice } from "@/services/sync/device-auth";
@@ -33,14 +33,28 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const queryEmpId = url.searchParams.get("empleadoId")?.trim() || null;
-  const queryCodigo = url.searchParams.get("codigoInterno")?.trim() || null;
+  const queryNumeroEmpleado =
+    url.searchParams.get("numeroEmpleado")?.trim() ||
+    url.searchParams.get("codigoInterno")?.trim() ||
+    null;
 
   const isPersonalMobile = auth.device.tipo === "dispositivo_personal_movil";
   let targetEmployeeId: string | null = isPersonalMobile
     ? auth.device.empleadoId
     : queryEmpId;
 
-  if (!targetEmployeeId && !isPersonalMobile && queryCodigo) {
+  if (!targetEmployeeId && !isPersonalMobile && queryNumeroEmpleado) {
+    if (!/^[0-9]{1,8}$/.test(queryNumeroEmpleado)) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "El número de empleado debe contener únicamente de 1 a 8 dígitos.",
+        },
+        { status: 400 }
+      );
+    }
+
     const db = getDb();
     const [found] = await db
       .select({ id: schema.empleados.id })
@@ -49,7 +63,7 @@ export async function GET(req: Request) {
         and(
           eq(schema.empleados.orgId, auth.org.id),
           eq(schema.empleados.activo, true),
-          sql`LOWER(TRIM(${schema.empleados.codigoInterno})) = LOWER(${queryCodigo})`
+          eq(schema.empleados.numeroEmpleado, queryNumeroEmpleado)
         )
       )
       .limit(1);
@@ -59,7 +73,7 @@ export async function GET(req: Request) {
         {
           ok: false,
           error:
-            "No encontramos un colaborador activo con ese número de nómina.",
+            "No encontramos un colaborador activo con ese número de empleado habilitado.",
         },
         { status: 404 }
       );
@@ -72,7 +86,7 @@ export async function GET(req: Request) {
       {
         ok: false,
         error:
-          "Debes indicar un colaborador o número de nómina para consultar el resumen.",
+          "Debes indicar un colaborador o número de empleado para consultar el resumen.",
       },
       { status: 400 }
     );

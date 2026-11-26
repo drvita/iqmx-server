@@ -228,6 +228,7 @@ export const empleados = checadorSchema.table(
       onDelete: "set null",
     }),
     codigoInterno: varchar("codigo_interno", { length: 50 }),
+    numeroEmpleado: varchar("numero_empleado", { length: 8 }),
     nombreCompleto: varchar("nombre_completo", { length: 150 }).notNull(),
     puesto: varchar("puesto", { length: 100 }),
     departamento: varchar("departamento", { length: 100 }),
@@ -248,6 +249,9 @@ export const empleados = checadorSchema.table(
   },
   (table) => [
     unique("uq_empleados_org_codigo").on(table.orgId, table.codigoInterno),
+    uniqueIndex("uq_empleados_org_numero_empleado")
+      .on(table.orgId, table.numeroEmpleado)
+      .where(sql`${table.numeroEmpleado} IS NOT NULL`),
     index("idx_empleados_org_sync").on(table.orgId, table.updatedAt),
   ]
 );

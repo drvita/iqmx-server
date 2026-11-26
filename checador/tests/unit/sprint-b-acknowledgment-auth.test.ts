@@ -3,7 +3,10 @@ import {
   computeAcknowledgmentIntegrityHash,
   verifyAcknowledgmentIntegrityHash,
 } from "@/lib/security/integrity-seal";
-import { isLastScheduledWorkday } from "@/services/reports/weekly-acknowledgment";
+import {
+  isAcknowledgmentWindowOpen,
+  isLastScheduledWorkday,
+} from "@/services/reports/weekly-acknowledgment";
 import {
   isValidResetTokenFormat,
   passwordResetKey,
@@ -43,6 +46,51 @@ describe("Sprint B — Acuse de Conformidad y Recuperación de Contraseña", () 
     expect(isLastScheduledWorkday([], thursday, "America/Mexico_City")).toBe(
       false
     );
+  });
+
+  it("bloquea el envío del acuse en días previos al cierre y lo habilita en el último día laboral", () => {
+    const tuesday = new Date("2026-11-24T14:00:00-06:00");
+    const friday = new Date("2026-11-27T10:00:00-06:00");
+
+    // Periodo semanal (L-V): martes bloqueado, viernes habilitado todo el día
+    const tuesdayWeekly = isAcknowledgmentWindowOpen({
+      diasLaborales: [1, 2, 3, 4, 5],
+      periodTipo: "semanal",
+      endDateKey: "2026-11-29",
+      now: tuesday,
+      timeZone: "America/Mexico_City",
+    });
+    expect(tuesdayWeekly.canSubmit).toBe(false);
+    expect(tuesdayWeekly.reason).toBeTruthy();
+
+    const fridayWeekly = isAcknowledgmentWindowOpen({
+      diasLaborales: [1, 2, 3, 4, 5],
+      periodTipo: "semanal",
+      endDateKey: "2026-11-29",
+      now: friday,
+      timeZone: "America/Mexico_City",
+    });
+    expect(fridayWeekly.canSubmit).toBe(true);
+    expect(fridayWeekly.reason).toBeNull();
+
+    // Periodo quincenal: primera semana bloqueada incluso en viernes; semana de cierre habilitada
+    const firstWeekFriday = isAcknowledgmentWindowOpen({
+      diasLaborales: [1, 2, 3, 4, 5],
+      periodTipo: "quincenal",
+      endDateKey: "2026-11-30",
+      now: new Date("2026-11-20T15:00:00-06:00"),
+      timeZone: "America/Mexico_City",
+    });
+    expect(firstWeekFriday.canSubmit).toBe(false);
+
+    const closingWeekFriday = isAcknowledgmentWindowOpen({
+      diasLaborales: [1, 2, 3, 4, 5],
+      periodTipo: "quincenal",
+      endDateKey: "2026-11-30",
+      now: friday,
+      timeZone: "America/Mexico_City",
+    });
+    expect(closingWeekFriday.canSubmit).toBe(true);
   });
 
   it("genera y verifica el sello SHA-256 del acuse semanal de forma determinista", () => {

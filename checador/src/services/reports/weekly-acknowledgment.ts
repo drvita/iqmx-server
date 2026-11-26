@@ -46,6 +46,54 @@ export function isLastScheduledWorkday(
   return isoDay === 5 || isoDay === 6;
 }
 
+export function isAcknowledgmentWindowOpen(params: {
+  diasLaborales: number[] | null | undefined;
+  periodTipo: ReportPeriodType;
+  endDateKey: string;
+  now?: Date;
+  timeZone?: string;
+}): { canSubmit: boolean; reason: string | null } {
+  const {
+    diasLaborales,
+    periodTipo,
+    endDateKey,
+    now = new Date(),
+    timeZone = "America/Mexico_City",
+  } = params;
+
+  const isLastDay = isLastScheduledWorkday(diasLaborales, now, timeZone);
+
+  if (periodTipo === "semanal") {
+    if (isLastDay) {
+      return { canSubmit: true, reason: null };
+    }
+    return {
+      canSubmit: false,
+      reason:
+        "Consulta informativa en curso. Podrás confirmar o reportar discrepancias únicamente durante tu último día laboral del periodo.",
+    };
+  }
+
+  const todayKey = formatDateKeyInTz(now, timeZone);
+  const [ty = "1970", tm = "01", td = "01"] = todayKey.split("-");
+  const [ey = "1970", em = "01", ed = "01"] = endDateKey.split("-");
+  const todayUtc = Date.UTC(Number(ty), Number(tm) - 1, Number(td));
+  const endUtc = Date.UTC(Number(ey), Number(em) - 1, Number(ed));
+  const daysUntilEnd = Math.round((endUtc - todayUtc) / (24 * 60 * 60 * 1000));
+
+  const canSubmit =
+    todayKey === endDateKey ||
+    (daysUntilEnd >= 0 && daysUntilEnd <= 6 && isLastDay);
+
+  return canSubmit
+    ? { canSubmit: true, reason: null }
+    : {
+        canSubmit: false,
+        reason:
+          "Consulta informativa en curso. Podrás confirmar o reportar discrepancias únicamente durante tu último día laboral del periodo.",
+      };
+}
+
 export function resolveCurrentAcknowledgmentPeriod(
   periodicidad: string | null | undefined,
   now: Date = new Date(),
@@ -75,6 +123,7 @@ export interface EmployeeAcknowledgmentSummaryResult {
     id: string;
     nombreCompleto: string;
     codigoInterno: string | null;
+    numeroEmpleado: string | null;
     puesto: string | null;
   };
   period: {
@@ -95,6 +144,8 @@ export interface EmployeeAcknowledgmentSummaryResult {
     maxHours: number;
   };
   isLastWorkday: boolean;
+  canSubmitAcknowledgment: boolean;
+  acknowledgmentBlockedReason: string | null;
   acknowledgment: {
     id: string;
     estado: AcknowledgmentStatus;
@@ -136,6 +187,7 @@ export async function getEmployeeCurrentAcknowledgmentSummary(
     .select({
       id: schema.empleados.id,
       codigoInterno: schema.empleados.codigoInterno,
+      numeroEmpleado: schema.empleados.numeroEmpleado,
       nombreCompleto: schema.empleados.nombreCompleto,
       puesto: schema.empleados.puesto,
       horarioId: schema.empleados.horarioId,
@@ -265,12 +317,20 @@ export async function getEmployeeCurrentAcknowledgmentSummary(
     now,
     org.zonaHoraria
   );
+  const windowStatus = isAcknowledgmentWindowOpen({
+    diasLaborales: scheduleRow?.diasLaborales,
+    periodTipo: period.period,
+    endDateKey: period.endDateKey,
+    now,
+    timeZone: org.zonaHoraria,
+  });
 
   return {
     employee: {
       id: emp.id,
       nombreCompleto: emp.nombreCompleto,
       codigoInterno: emp.codigoInterno,
+      numeroEmpleado: emp.numeroEmpleado,
       puesto: emp.puesto,
     },
     period: {
@@ -291,6 +351,8 @@ export async function getEmployeeCurrentAcknowledgmentSummary(
       maxHours: compliance?.maxHours ?? Number(org.horasSemanalesMax),
     },
     isLastWorkday,
+    canSubmitAcknowledgment: windowStatus.canSubmit,
+    acknowledgmentBlockedReason: windowStatus.reason,
     acknowledgment: existingAck
       ? {
           id: existingAck.id,
@@ -345,6 +407,13 @@ export async function recordEmployeeAcknowledgment(params: {
   );
   if (!current) {
     throw new Error("Colaborador activo no encontrado.");
+  }
+
+  if (!current.canSubmitAcknowledgment) {
+    throw new Error(
+      current.acknowledgmentBlockedReason ??
+        "El acuse solo puede confirmarse en tu último día laboral del periodo."
+    );
   }
 
   if (current.acknowledgment?.estado === "aceptado") {

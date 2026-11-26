@@ -131,6 +131,7 @@ export interface SyncEmployeeRow {
   id: string;
   nombreCompleto: string;
   codigoInterno: string | null;
+  numeroEmpleado?: string | null;
   puesto: string | null;
   horarioId: string | null;
   activo: boolean;

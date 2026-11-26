@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Camera,
   FileText,
+  HelpCircle,
   Pencil,
   ScanFace,
   Trash2,
@@ -27,6 +28,7 @@ import {
 interface EmployeeRow {
   id: string;
   codigoInterno: string | null;
+  numeroEmpleado: string | null;
   nombreCompleto: string;
   puesto: string | null;
   departamento: string | null;
@@ -74,6 +76,7 @@ export function EmployeesClient({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [nombreCompleto, setNombreCompleto] = useState("");
   const [codigoInterno, setCodigoInterno] = useState("");
+  const [numeroEmpleado, setNumeroEmpleado] = useState("");
   const [puesto, setPuesto] = useState("");
   const [sucursalId, setSucursalId] = useState(branches[0]?.id ?? "");
   const [horarioId, setHorarioId] = useState(schedules[0]?.id ?? "");
@@ -330,6 +333,7 @@ export function EmployeesClient({
     setEditingId(null);
     setNombreCompleto("");
     setCodigoInterno("");
+    setNumeroEmpleado("");
     setPuesto("");
     setSucursalId(branches[0]?.id ?? "");
     setHorarioId(schedules[0]?.id ?? "");
@@ -342,6 +346,7 @@ export function EmployeesClient({
     setEditingId(emp.id);
     setNombreCompleto(emp.nombreCompleto);
     setCodigoInterno(emp.codigoInterno ?? "");
+    setNumeroEmpleado(emp.numeroEmpleado ?? "");
     setPuesto(emp.puesto ?? "");
     setSucursalId(emp.sucursalId ?? branches[0]?.id ?? "");
     setHorarioId(emp.horarioId ?? schedules[0]?.id ?? "");
@@ -368,6 +373,7 @@ export function EmployeesClient({
       const payload = {
         nombreCompleto,
         codigoInterno: codigoInterno || undefined,
+        numeroEmpleado: numeroEmpleado || undefined,
         puesto: puesto || undefined,
         sucursalId: sucursalId || null,
         horarioId: horarioId || null,
@@ -509,21 +515,82 @@ export function EmployeesClient({
             placeholder="Nombre completo *"
             className="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900 focus:border-[#4f46e5] focus:outline-none"
           />
-          <div className="grid grid-cols-2 gap-2">
-            <input
-              type="text"
-              value={codigoInterno}
-              onChange={(e) => setCodigoInterno(e.target.value)}
-              placeholder="Núm. nómina"
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900 focus:border-[#4f46e5] focus:outline-none"
-            />
-            <input
-              type="text"
-              value={puesto}
-              onChange={(e) => setPuesto(e.target.value)}
-              placeholder="Puesto"
-              className="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900 focus:border-[#4f46e5] focus:outline-none"
-            />
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="relative">
+              <div className="mb-1 flex items-center justify-between gap-1">
+                <label
+                  htmlFor="emp-numero-empleado"
+                  className="text-[11px] font-medium text-slate-700"
+                >
+                  Núm. de empleado
+                </label>
+                <span className="group relative inline-flex items-center">
+                  <button
+                    type="button"
+                    aria-label="¿Para qué sirve el número de empleado?"
+                    title="Este número identifica al colaborador en el sistema y le permite consultar su semana en el quiosco físico. Déjalo vacío si no deseas habilitarle esa consulta."
+                    className="rounded-full text-slate-400 hover:text-[#4f46e5] focus:text-[#4f46e5] focus:outline-none"
+                  >
+                    <HelpCircle className="h-3.5 w-3.5" />
+                  </button>
+                  <span
+                    role="tooltip"
+                    className="pointer-events-none absolute right-0 bottom-full z-20 mb-1.5 hidden w-60 rounded-lg bg-slate-900 px-2.5 py-2 text-[11px] leading-snug text-white shadow-lg group-hover:block group-focus-within:block"
+                  >
+                    Este número identifica al colaborador en el sistema y le
+                    permite consultar su semana en el quiosco físico. Déjalo
+                    vacío si no deseas habilitarle esa consulta.
+                  </span>
+                </span>
+              </div>
+              <input
+                id="emp-numero-empleado"
+                type="text"
+                inputMode="numeric"
+                maxLength={8}
+                pattern="[0-9]*"
+                value={numeroEmpleado}
+                onChange={(e) =>
+                  setNumeroEmpleado(e.target.value.replace(/\D/g, "").slice(0, 8))
+                }
+                placeholder="Solo dígitos (máx. 8)"
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900 focus:border-[#4f46e5] focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="emp-codigo-nomina"
+                className="mb-1 block text-[11px] font-medium text-slate-700"
+              >
+                Núm. de nómina (opcional)
+              </label>
+              <input
+                id="emp-codigo-nomina"
+                type="text"
+                value={codigoInterno}
+                onChange={(e) => setCodigoInterno(e.target.value)}
+                placeholder="Alfanumérico"
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900 focus:border-[#4f46e5] focus:outline-none"
+              />
+            </div>
+
+            <div>
+              <label
+                htmlFor="emp-puesto"
+                className="mb-1 block text-[11px] font-medium text-slate-700"
+              >
+                Puesto
+              </label>
+              <input
+                id="emp-puesto"
+                type="text"
+                value={puesto}
+                onChange={(e) => setPuesto(e.target.value)}
+                placeholder="Puesto"
+                className="w-full rounded-xl border border-slate-300 px-3 py-2 text-slate-900 focus:border-[#4f46e5] focus:outline-none"
+              />
+            </div>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <select
@@ -730,6 +797,9 @@ export function EmployeesClient({
                       {emp.nombreCompleto}
                     </p>
                     <p className="text-[11px] text-slate-500">
+                      {emp.numeroEmpleado
+                        ? `No. Emp: ${emp.numeroEmpleado} · `
+                        : ""}
                       {emp.codigoInterno ?? "Sin nómina"} ·{" "}
                       {emp.puesto ?? "Sin puesto"}
                     </p>

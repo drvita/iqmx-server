@@ -46,6 +46,15 @@ export interface ActionResponse<T = unknown> {
 const employeeBaseSchema = {
   nombreCompleto: z.string().trim().min(2).max(150),
   codigoInterno: z.string().trim().max(50).optional(),
+  numeroEmpleado: z
+    .string()
+    .trim()
+    .regex(
+      /^[0-9]{1,8}$/,
+      "El número de empleado debe contener solo de 1 a 8 dígitos."
+    )
+    .optional()
+    .or(z.literal("")),
   puesto: z.string().trim().max(100).optional(),
   departamento: z.string().trim().max(100).optional(),
   sucursalId: z.string().uuid().nullable().optional(),

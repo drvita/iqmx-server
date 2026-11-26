@@ -54,6 +54,7 @@ export interface LocalEmployee {
   id: string;
   nombreCompleto: string;
   codigoInterno: string | null;
+  numeroEmpleado?: string | null;
   puesto: string | null;
   horarioId: string | null;
   diasLaborales?: number[] | null;

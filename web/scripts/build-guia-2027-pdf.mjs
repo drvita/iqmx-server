@@ -331,7 +331,7 @@ const html = `<!DOCTYPE html>
     </div>
 
     <div class="footer-note">
-      <span>Información vigente para México · Corte: 19 de noviembre de 2026</span>
+      <span>Información vigente para México · Corte: 26 de noviembre de 2026</span>
       <span>Material informativo preparado por IQISSMexico · No sustituye asesoría legal ni contable</span>
     </div>
   </section>
@@ -490,20 +490,20 @@ const html = `<!DOCTYPE html>
     <div style="display:grid; grid-template-columns: 1.05fr 0.95fr; gap: 26px; align-items:center; flex:1;">
       <div style="display:flex; flex-direction:column; gap:12px;">
         <div class="card" style="padding:14px 18px;">
-          <div style="font-size:14px; font-weight:800; color:#059669;">1 · Reconocimiento Facial + Prueba de Vida</div>
-          <div style="font-size:12.5px; color:#475569; margin-top:4px;">Verifica en tiempo real que sea la persona presente frente a la cámara. Bloquea intentos con fotografías o pantallas.</div>
+          <div style="font-size:14px; font-weight:800; color:#059669;">1 · PDF Oficial STPS + CSV con Sellado SHA-256</div>
+          <div style="font-size:12.5px; color:#475569; margin-top:4px;">Genera reportes listos para inspección con Razón Social, RFC, Registro Patronal IMSS, horas extras dobles/triples y sello criptográfico inalterable.</div>
         </div>
         <div class="card" style="padding:14px 18px;">
-          <div style="font-size:14px; font-weight:800; color:#4f46e5;">2 · Exportación CSV Inmediata para la Autoridad</div>
-          <div style="font-size:12.5px; color:#475569; margin-top:4px;">El panel genera reportes semanales (configurados a <strong>46.0 horas</strong> para 2027) listos para descargar en CSV ante cualquier revisión o nómina.</div>
+          <div style="font-size:14px; font-weight:800; color:#4f46e5;">2 · Jornadas LFT y Acuse Semanal (Arts. 60, 61, 784 y 804)</div>
+          <div style="font-size:12.5px; color:#475569; margin-top:4px;">Soporte para jornada diurna (46 h), mixta y nocturna con confirmación táctil de asistencia del colaborador al cierre del periodo.</div>
         </div>
         <div class="card" style="padding:14px 18px;">
-          <div style="font-size:14px; font-weight:800; color:#1e1b4b;">3 · Opera Incluso Sin Internet + Respaldo Local</div>
-          <div style="font-size:12.5px; color:#475569; margin-top:4px;">Si falla la red en planta o sucursal, la terminal sigue registrando entradas, comidas y salidas, sincronizando al volver la conexión.</div>
+          <div style="font-size:14px; font-weight:800; color:#1e1b4b;">3 · Quiosco Sin Internet y Móvil Personal 1:1 con GPS</div>
+          <div style="font-size:12.5px; color:#475569; margin-top:4px;">Opera en sucursal aun sin conexión o en teléfono personal para personal en ruta con GPS puntual no bloqueante y prueba de vida facial.</div>
         </div>
         <div class="card" style="padding:14px 18px;">
-          <div style="font-size:14px; font-weight:800; color:#0f172a;">4 · Privacidad Biométrica (LFPDPPP)</div>
-          <div style="font-size:12.5px; color:#475569; margin-top:4px;">Registra el consentimiento en el alta del colaborador y opera mediante vectores matemáticos locales sin almacenar fotos crudas innecesarias.</div>
+          <div style="font-size:14px; font-weight:800; color:#0f172a;">4 · Privacidad Biométrica (LFPDPPP) y Bitácora</div>
+          <div style="font-size:12.5px; color:#475569; margin-top:4px;">Consentimiento en el alta, minimización biométrica en móviles 1:1 y gestión de incidencias con bitácora de auditoría inmutable.</div>
         </div>
       </div>
 
@@ -530,7 +530,7 @@ const html = `<!DOCTYPE html>
         <div style="margin-top:12px; background:#ecfdf5; border:1px solid #a7f3d0; border-radius:10px; padding:10px 14px; display:flex; align-items:center; justify-content:space-between;">
           <div>
             <div style="font-size:12.5px; font-weight:800; color:#065f46;">Entrada registrada — Carlos Mendoza</div>
-            <div style="font-size:11px; color:#047857;">Asistencia guardada · Límite semanal 46.0 h activo</div>
+            <div style="font-size:11px; color:#047857;">PDF STPS + Sello SHA-256 · Límite 46.0 h</div>
           </div>
           <span style="background:#059669; color:#ffffff; font-size:10px; font-weight:800; padding:4px 8px; border-radius:999px;">VÁLIDO</span>
         </div>
@@ -612,7 +612,7 @@ const html = `<!DOCTYPE html>
     </div>
 
     <div class="footer-note">
-      <span>Fuentes: DOF (03/03/2026 y 01/05/2026), LFT Arts. 132-XXXIV, 784, 804 y 994-IV Bis, INEGI (UMA 2026 $117.31 y Censos Económicos).</span>
+      <span>Fuentes: DOF (03/03/2026 y 01/05/2026), LFT Arts. 60, 61, 66–68, 132-XXXIV, 784, 804 y 994-IV Bis, INEGI (UMA 2026 $117.31).</span>
       <span>Aplica en México · Material informativo, no sustituye asesoría legal</span>
     </div>
   </section>
