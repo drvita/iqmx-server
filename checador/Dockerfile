@@ -14,6 +14,9 @@ COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_OPTIONS="--max-old-space-size=2048"
 
+# Instalación incremental de respaldo (si la imagen base ya tiene todo, toma solo 2-3s; si falta un paquete nuevo, lo instala)
+RUN npm install --prefer-offline --no-audit
+
 # Descargar los 3 modelos ONNX (~17 MB) y copiar binarios WASM a public/
 RUN npm run models:download
 
